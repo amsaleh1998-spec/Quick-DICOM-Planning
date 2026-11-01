@@ -129,6 +129,7 @@
               <label>Default Ø <input id="def-d" type="number" step="0.1" min="2" max="8" /> mm</label>
               <label>L <input id="def-l" type="number" step="0.5" min="4" max="20" /> mm</label>
             </div>
+            <label class="check small" title="New implants get an apex 1 mm narrower than the platform (can be changed per implant)"><input id="def-tapered" type="checkbox" checked /> New implants tapered (apex 1 mm narrower)</label>
             <ul id="implant-list"></ul>
             <div id="implant-edit" class="hidden">
               <div class="row">
@@ -224,6 +225,74 @@
               <button data-preset="bottom">Bottom</button>
             </div>
             <div class="muted small">Drag = rotate · wheel = zoom · Alt/Shift drag = pan · double-click = reset. The crop box also clips the 3D view.</div>
+          </section>
+
+          <section id="panel-seg" class="panel">
+            <h3>Segmentation</h3>
+            <ol class="help steps">
+              <li>Set the 3D thresholds so the structures are separated.</li>
+              <li>Add a segment, then click the structure in the 3D view (or in any slice).</li>
+              <li>Still touching? Draw a <b>cut</b> through the contact.</li>
+            </ol>
+            <div class="row seg-presets">
+              <button data-seg-preset="0" class="primary" title="New segment: click the maxilla in the 3D view or a slice">+ Maxilla</button>
+              <button data-seg-preset="1" class="primary" title="New segment: click the mandible in the 3D view or a slice">+ Mandible</button>
+              <button data-seg-preset="2" title="New segment for a tooth (usually with a higher threshold)">+ Tooth</button>
+              <button data-seg-preset="3" title="New segment for an existing implant (very high threshold)">+ Implant</button>
+              <button data-seg-preset="4" title="New segment with any name">+ Other</button>
+            </div>
+            <ul id="seg-list" class="obj-list"></ul>
+            <div id="seg-edit" class="hidden edit-box">
+              <div class="row">
+                <label class="grow">Name <input id="seg-name" type="text" maxlength="40" /></label>
+                <input id="seg-color" type="color" title="Segment colour" />
+              </div>
+              <div class="row">
+                <button id="btn-seg-grow" title="Click the structure in the 3D view or in any slice to add it to this segment">Click to add</button>
+                <button id="btn-seg-regrow" title="Grow this segment again with the current 3D thresholds">Use current threshold</button>
+              </div>
+              <div id="seg-info" class="muted small"></div>
+              <div class="row">
+                <button id="btn-seg-undo" title="Take back the last click (e.g. when it leaked into a neighbour)">Undo click</button>
+                <button id="btn-seg-clear" title="Remove everything from this segment (keeps it in the list)">Clear</button>
+                <button id="btn-seg-delete" class="danger">Delete</button>
+              </div>
+            </div>
+            <label class="check small"><input id="seg-show-unseg" type="checkbox" checked /> 3D: show bone that is not segmented</label>
+            <label class="check small"><input id="seg-show-2d" type="checkbox" checked /> Show segments in the slices</label>
+            <h4>Separation cuts</h4>
+            <div class="row">
+              <button id="btn-cut" title="Draw a separating line in the panoramic (a curved sheet following the arch) or in any slice (extruded through the volume)">Draw cut</button>
+              <label class="small">Reach
+                <select id="cut-depth" title="How far the cut reaches from the slice it was drawn on">
+                  <option value="">whole volume</option>
+                  <option value="2">± 2 mm</option>
+                  <option value="5">± 5 mm</option>
+                  <option value="10">± 10 mm</option>
+                  <option value="20">± 20 mm</option>
+                </select>
+              </label>
+            </div>
+            <ul id="cut-list" class="obj-list"></ul>
+
+            <h3>Nerve canal</h3>
+            <div class="row">
+              <button id="btn-nerve-right" title="Trace the right inferior alveolar nerve">Trace right nerve</button>
+              <button id="btn-nerve-left" title="Trace the left inferior alveolar nerve">Trace left nerve</button>
+            </div>
+            <ul id="nerve-list" class="obj-list"></ul>
+            <div id="nerve-edit" class="hidden edit-box">
+              <div class="row">
+                <label>Diameter <input id="nerve-d" type="number" step="0.1" min="1" max="6" /> mm</label>
+              </div>
+              <div id="nerve-info" class="muted small"></div>
+              <div class="row">
+                <button id="btn-nerve-trace" title="Click along the canal to add points">Add points</button>
+                <button id="btn-nerve-undo" title="Remove the last point added">Undo point</button>
+                <button id="btn-nerve-delete" class="danger">Delete</button>
+              </div>
+            </div>
+            <div class="muted small">Click the centre of the canal on the cross-sections (scroll along the curve) and/or in the panoramic, in any order – the points are joined into a smooth tube shown in every view and in 3D. Implants report their distance to it.</div>
           </section>
         </aside>
 
