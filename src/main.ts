@@ -177,9 +177,12 @@ $('btn-clear-curve').onclick = () => app.clearCurve();
 const slab = $<HTMLInputElement>('slab');
 const spacing = $<HTMLInputElement>('spacing');
 slab.oninput = () => {
-  app.panoSlab = Number(slab.value);
+  if (app.panoMode === 'slab') app.panoSlab = Number(slab.value);
+  else app.panoSlice = Number(slab.value);
   app.changed();
 };
+const panoModeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#pano-mode button'));
+panoModeButtons.forEach((b) => (b.onclick = () => app.setPanoMode(b.dataset.pm as 'slab' | 'slice')));
 spacing.oninput = () => {
   app.crossSpacing = Number(spacing.value);
   app.changed();
@@ -366,8 +369,14 @@ function refreshUi() {
   $('btn-ruler').classList.toggle('active', app.ruler);
   $('btn-clear-measure').toggleAttribute('disabled', !app.measurements.length);
   rdButtons.forEach((b) => b.classList.toggle('active', b.dataset.rd === app.rightDrag));
-  slab.value = String(app.panoSlab);
-  $('slab-val').textContent = `${app.panoSlab} mm`;
+  panoModeButtons.forEach((b) => b.classList.toggle('active', b.dataset.pm === app.panoMode));
+  const isSlab = app.panoMode === 'slab';
+  slab.min = isSlab ? '2' : '0';
+  slab.max = isSlab ? '30' : '5';
+  slab.step = isSlab ? '1' : '0.5';
+  slab.value = String(app.panoThickness());
+  $('slab-label').textContent = isSlab ? 'Slab thickness' : 'Slice thickness';
+  $('slab-val').textContent = `${app.panoThickness()} mm`;
   spacing.value = String(app.crossSpacing);
   $('spacing-val').textContent = `${app.crossSpacing} mm`;
   if (document.activeElement !== defD) defD.value = String(app.defaultDiameter);

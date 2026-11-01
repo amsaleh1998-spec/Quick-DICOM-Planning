@@ -418,3 +418,55 @@ select {
 #status-msg.error {
   color: var(--danger);
 }
+
+.slider span.lbl {
+  float: none;
+  color: inherit;
+}
+.dim-badge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 184, 28, 0.95);
+  color: #161006;
+  font: 600 12px system-ui, sans-serif;
+  padding: 3px 7px;
+  border-radius: 5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  cursor: text;
+  z-index: 3;
+  white-space: nowrap;
+  user-select: none;
+}
+.dim-badge:hover {
+  background: #ffd36e;
+}
+.dim-badge input {
+  width: 58px;
+  font: 600 12px system-ui, sans-serif;
+  padding: 1px 3px;
+  border: 1px solid #8a6510;
+  border-radius: 3px;
+  background: #fff8e6;
+  color: #161006;
+}
+.view-seg {
+  position: absolute;
+  top: 4px;
+  left: 90px;
+  display: flex;
+  border: 1px solid rgba(60, 76, 104, 0.9);
+  border-radius: 5px;
+  overflow: hidden;
+  z-index: 2;
+}
+.view-seg button {
+  border: 0;
+  border-radius: 0;
+  padding: 2px 9px;
+  font-size: 11px;
+  background: rgba(20, 28, 42, 0.8);
+}
+.view-seg button.active {
+  background: var(--accent);
+  color: #06121e;
+}
