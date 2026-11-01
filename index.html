@@ -4,6 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quick DICOM Planning</title>
+    <script>
+      // Phones open the simplified mobile version, unless the full version was chosen
+      // (index.html?ui=desktop remembers that, ?ui=mobile forgets it). Mirrors src/uiMode.ts.
+      (function () {
+        var q = null;
+        var pref = null;
+        try {
+          q = new URLSearchParams(location.search).get('ui');
+        } catch (e) {}
+        try {
+          if (q === 'desktop') localStorage.setItem('qdp.ui', 'desktop');
+          if (q === 'mobile') localStorage.removeItem('qdp.ui');
+          pref = localStorage.getItem('qdp.ui');
+        } catch (e) {}
+        var phone = /Android.+Mobile|iPhone|iPod|Windows Phone|Mobi/i.test(navigator.userAgent);
+        try {
+          phone = phone || (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 600);
+        } catch (e) {}
+        if (q === 'mobile' || (phone && pref !== 'desktop' && q !== 'desktop')) location.replace('mobile.html' + location.hash);
+      })();
+    </script>
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
@@ -36,6 +57,7 @@
             <button data-input="trackpad" title="Trackpad: two-finger swipe scrolls, pinch zooms, ⌘+swipe pans, ⇧+swipe brightness/contrast">Trackpad</button>
           </div>
           <button id="btn-trackpad-guide" title="How to use the app with a Mac trackpad">Trackpad guide</button>
+          <a id="btn-mobile" class="btn-link hidden" href="mobile.html?ui=mobile" title="Simplified version for phones">Mobile version</a>
         </div>
         <div class="group">
           <span class="muted small">Right-drag</span>

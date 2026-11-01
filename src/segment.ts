@@ -20,7 +20,12 @@ import { Volume } from './volume';
 export const SHELL = 0x80;
 export const MAX_SEGMENTS = 127;
 /** voxel budget of the label grid (same as the 3D texture) */
-const GRID_BUDGET = 48_000_000;
+let GRID_BUDGET = 48_000_000;
+
+/** Voxel budget of the label grid (lower on phones). */
+export function setLabelGridBudget(n: number) {
+  GRID_BUDGET = n;
+}
 const GRID_MAX_DIM = 2048;
 
 export type RGB = [number, number, number];

@@ -1,0 +1,445 @@
+@import './style.css';
+
+/* ---- phone layout ---- */
+html,
+body {
+  height: 100%;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  font-size: 15px;
+}
+
+#m-app {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--bg);
+}
+
+#m-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 6px) calc(env(safe-area-inset-right) + 10px) 6px calc(env(safe-area-inset-left) + 12px);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.m-brand {
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.m-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m-btn,
+.m-icon {
+  min-height: 40px;
+  border-radius: 9px;
+  font-size: 15px;
+}
+.m-btn {
+  padding: 6px 14px;
+}
+.m-icon {
+  width: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#m-stage {
+  position: relative;
+  min-height: 0;
+  background: #000;
+  touch-action: none;
+}
+#m-views {
+  position: absolute;
+  inset: 0;
+}
+#m-views > .view {
+  position: absolute;
+  inset: 0;
+}
+#m-views .max-btn {
+  display: none;
+}
+
+/* empty state */
+#m-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: radial-gradient(circle at 50% 30%, #13233a 0%, var(--bg) 70%);
+  touch-action: auto;
+}
+.m-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.m-card h1 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--text);
+}
+.m-card p {
+  margin: 0 0 6px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.m-primary,
+.m-secondary {
+  min-height: 50px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.m-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06121e;
+}
+.m-primary:hover {
+  background: #6cc0ff;
+}
+.m-note {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.m-link {
+  color: var(--accent);
+  font-size: 14px;
+  text-decoration: none;
+  align-self: center;
+  padding: 8px;
+}
+
+/* bottom tab bar */
+#m-tabs {
+  display: flex;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  padding: 4px calc(env(safe-area-inset-right) + 4px) calc(env(safe-area-inset-bottom) + 4px) calc(env(safe-area-inset-left) + 4px);
+  gap: 2px;
+}
+#m-tabs button {
+  flex: 1;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+#m-tabs button.active {
+  background: rgba(79, 179, 255, 0.16);
+  color: var(--accent);
+}
+
+/* hint + toast */
+#m-hint,
+#m-toast {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  margin: 0 auto;
+  max-width: 460px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  z-index: 5;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+#m-hint {
+  bottom: 14px;
+  background: rgba(19, 26, 38, 0.92);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+#m-toast {
+  top: 12px;
+  background: rgba(29, 79, 122, 0.95);
+  color: #fff;
+}
+#m-toast.error {
+  background: rgba(140, 36, 36, 0.95);
+}
+
+/* bottom sheets */
+#m-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 20;
+}
+.m-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 78dvh;
+  margin: 0 auto;
+  max-width: 560px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  padding: 0 calc(env(safe-area-inset-right) + 14px) calc(env(safe-area-inset-bottom) + 12px) calc(env(safe-area-inset-left) + 14px);
+  z-index: 21;
+  transform: translateY(105%);
+  transition: transform 0.22s ease;
+  display: flex;
+  flex-direction: column;
+  touch-action: pan-y;
+  visibility: hidden;
+}
+.m-sheet.open {
+  transform: none;
+  visibility: visible;
+}
+.m-grab {
+  width: 44px;
+  height: 5px;
+  border-radius: 3px;
+  background: #3a4a66;
+  margin: 8px auto 10px;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.m-sheet-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px;
+}
+.m-sheet h2 {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.m-sheet-body > :first-child,
+.m-sheet-body > :first-child h2 {
+  margin-top: 2px;
+}
+.m-row-btn {
+  min-height: 52px;
+  margin: 4px 0;
+  border-radius: 12px;
+  font-size: 16px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.m-link-row {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  text-decoration: none;
+}
+.m-cancel {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.m-slider {
+  display: block;
+  color: var(--muted);
+  font-size: 14px;
+  margin: 10px 0 4px;
+}
+.m-slider span {
+  float: right;
+  color: var(--text);
+}
+.m-slider input[type='range'] {
+  display: block;
+  width: 100%;
+  height: 32px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+.m-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.m-chip {
+  min-height: 38px;
+  padding: 4px 14px;
+  border-radius: 19px;
+  font-size: 14px;
+}
+.m-seg {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.m-seg button {
+  flex: 1;
+  min-height: 42px;
+  border: 0;
+  border-radius: 0;
+  font-size: 14px;
+}
+
+.m-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.m-list li {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  grid-template-areas: 'sw name ctl' 'sw sub ctl' 'sw warn ctl';
+  column-gap: 10px;
+  align-items: center;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  min-height: 52px;
+}
+.m-list li.m-tap:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+.m-list li.sel .m-name {
+  color: #ffb81c;
+}
+.m-swatch {
+  grid-area: sw;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+.m-swatch.m-imp {
+  background: rgb(64, 214, 128);
+  border-radius: 7px;
+}
+.m-name {
+  grid-area: name;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m-sub {
+  grid-area: sub;
+  color: var(--muted);
+  font-size: 13px;
+}
+.m-warn {
+  grid-area: warn;
+  color: #ff8a5c;
+  font-size: 13px;
+}
+.m-chev {
+  grid-area: ctl;
+  color: var(--muted);
+  font-size: 22px;
+  padding: 0 4px;
+}
+
+/* toggle switch */
+.m-switch {
+  grid-area: ctl;
+  position: relative;
+  width: 50px;
+  height: 30px;
+}
+.m-switch input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  z-index: 1;
+}
+.m-switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: 15px;
+  background: #2a3548;
+  transition: background 0.15s;
+}
+.m-switch span::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #dce3ee;
+  transition: transform 0.15s;
+}
+.m-switch input:checked + span {
+  background: var(--accent);
+}
+.m-switch input:checked + span::after {
+  transform: translateX(20px);
+}
+
+/* loading */
+#m-loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 30;
+}
+#m-loading .m-card {
+  gap: 12px;
+}
+.m-bar {
+  height: 6px;
+  background: #0e1420;
+  border-radius: 3px;
+  overflow: hidden;
+}
+#m-loading-bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+}
+
+/* the panoramic's slab/slice switch: keep it clear of the view title */
+#m-views .view-seg {
+  left: 8px;
+  top: 26px;
+}
+#m-views .view-seg button {
+  padding: 5px 12px;
+  font-size: 13px;
+}
