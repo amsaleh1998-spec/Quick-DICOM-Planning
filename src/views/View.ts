@@ -51,6 +51,8 @@ export abstract class View {
   /** Which kind of measurements this view shows/creates (null = no ruler). */
   protected measureKind: 'plane' | 'pano' | null = null;
   private rulerDrag: { m: Measurement; end: 'a' | 'b'; created: boolean } | null = null;
+  /** time the last ruler was completed (ignore the dblclick of a fast double click) */
+  private rulerDoneAt = 0;
   vs: ViewState;
 
   constructor(
@@ -170,8 +172,9 @@ export abstract class View {
       o.moveTo(a[0], a[1]);
       o.lineTo(b[0], b[1]);
       o.stroke();
+      const hot = m.id === this.app.hoverMeasurementId || m === this.app.pendingMeasurement?.m;
       o.strokeStyle = '#ffe14d';
-      o.lineWidth = 1.5;
+      o.lineWidth = hot ? 2.5 : 1.5;
       o.stroke();
       // end ticks
       const dx = b[0] - a[0];
@@ -185,37 +188,80 @@ export abstract class View {
         o.lineTo(q[0] + nx, q[1] + ny);
       }
       o.stroke();
+      // end handles (draggable)
+      o.fillStyle = '#ffe14d';
+      for (const q of m === this.app.pendingMeasurement?.m ? [a] : [a, b]) {
+        o.beginPath();
+        o.arc(q[0], q[1], hot ? 3.5 : 2.5, 0, Math.PI * 2);
+        o.fill();
+      }
       o.restore();
       drawLabel(o, `${d.toFixed(1)} mm`, (a[0] + b[0]) / 2 + nx * 1.6, (a[1] + b[1]) / 2 + ny * 1.6 + 4, '#ffe14d', 'center');
     }
   }
 
-  private startRuler(p: Pt): boolean {
-    // grab an existing end point?
+  /** Ruler end point near the screen point (for dragging). */
+  private hitMeasureEnd(p: Pt): { m: Measurement; end: 'a' | 'b' } | null {
     for (const v of this.visibleMeasurements()) {
+      if (v.m === this.app.pendingMeasurement?.m) continue;
       for (const end of ['a', 'b'] as const) {
         const q = v[end];
-        if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 8) {
-          this.rulerDrag = { m: v.m, end, created: false };
-          return true;
-        }
+        if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 8) return { m: v.m, end };
       }
     }
+    return null;
+  }
+
+  private hitMeasureLine(p: Pt): Measurement | null {
+    for (const v of this.visibleMeasurements()) {
+      if (v.m === this.app.pendingMeasurement?.m) continue;
+      if (distToSegment2(p[0], p[1], v.a[0], v.a[1], v.b[0], v.b[1]) < 6) return v.m;
+    }
+    return null;
+  }
+
+  /**
+   * Ruler tool click: the first click places the start point, the second click
+   * the end point (a click-drag-release also works). Then the tool switches off.
+   */
+  private rulerClick(p: Pt): boolean {
+    const app = this.app;
     const w = this.measureAt(p);
     if (!w) return false;
-    const m = this.app.addMeasurement(this.measureKind!, w);
+    const pend = app.pendingMeasurement;
+    if (pend && pend.view === this) {
+      pend.m.b = w;
+      this.finishMeasurement();
+      return false;
+    }
+    if (pend) app.cancelPendingMeasurement();
+    const hitEnd = this.hitMeasureEnd(p);
+    if (hitEnd) {
+      this.rulerDrag = { ...hitEnd, created: false };
+      return true;
+    }
+    const m = app.addMeasurement(this.measureKind!, w);
+    app.pendingMeasurement = { m, view: this };
     this.rulerDrag = { m, end: 'b', created: true };
+    app.changed();
     return true;
   }
 
+  private finishMeasurement() {
+    const app = this.app;
+    const pend = app.pendingMeasurement;
+    if (!pend) return;
+    app.pendingMeasurement = null;
+    if (this.measureDistance(pend.m.a, pend.m.b) < 0.2) app.deleteMeasurement(pend.m.id);
+    this.rulerDoneAt = performance.now();
+    app.setRuler(false);
+  }
+
   private deleteMeasurementAt(p: Pt): boolean {
-    for (const v of this.visibleMeasurements()) {
-      if (distToSegment2(p[0], p[1], v.a[0], v.a[1], v.b[0], v.b[1]) < 6) {
-        this.app.deleteMeasurement(v.m.id);
-        return true;
-      }
-    }
-    return false;
+    const m = this.hitMeasureLine(p);
+    if (!m) return false;
+    this.app.deleteMeasurement(m.id);
+    return true;
   }
 
   // ---- rendering ----------------------------------------------------------
@@ -302,8 +348,12 @@ export abstract class View {
       this.app.activeView = this;
       if (e.button === 2) this.drag = 'right';
       else if (e.button === 1 || (e.button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey)))) this.drag = 'pan';
-      else if (e.button === 0 && this.app.ruler && this.measureKind) this.drag = this.startRuler(p) ? 'ruler' : 'none';
-      else if (e.button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
+      else if (e.button === 0 && this.app.ruler && this.measureKind) this.drag = this.rulerClick(p) ? 'ruler' : 'none';
+      else if (e.button === 0 && this.measureKind && this.hitMeasureEnd(p)) {
+        // edit an existing ruler end without the tool
+        this.rulerDrag = { ...this.hitMeasureEnd(p)!, created: false };
+        this.drag = 'ruler';
+      } else if (e.button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
       if (this.drag !== 'none') {
         c.setPointerCapture(e.pointerId);
         e.preventDefault();
@@ -342,9 +392,28 @@ export abstract class View {
         case 'left':
           this.onLeftDrag(p, this.last, e);
           break;
-        default:
-          if (this.app.ruler && this.measureKind) this.el.style.cursor = 'crosshair';
+        default: {
+          const app = this.app;
+          const pend = app.pendingMeasurement;
+          if (pend && pend.view === this) {
+            // rubber band to the mouse until the second click
+            const w = this.measureAt(p);
+            if (w) pend.m.b = w;
+            this.el.style.cursor = 'crosshair';
+            app.requestRender();
+            break;
+          }
+          if (this.measureKind) {
+            const hover = this.hitMeasureLine(p)?.id ?? null;
+            if (hover !== app.hoverMeasurementId) {
+              app.hoverMeasurementId = hover;
+              app.requestRender();
+            }
+          }
+          if (app.ruler && this.measureKind) this.el.style.cursor = 'crosshair';
+          else if (this.measureKind && this.hitMeasureEnd(p)) this.el.style.cursor = 'move';
           else this.onHover(p, e);
+        }
       }
       this.last = p;
       this.app.activeView = this;
@@ -352,9 +421,12 @@ export abstract class View {
     });
     const end = (e: PointerEvent) => {
       if (this.drag === 'ruler' && this.rulerDrag) {
-        const { m, created } = this.rulerDrag;
-        if (created && this.measureDistance(m.a, m.b) < 0.2) this.app.deleteMeasurement(m.id);
+        const { created } = this.rulerDrag;
         this.rulerDrag = null;
+        const p = this.pos(e);
+        const moved = Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 4;
+        // click-drag-release measures in one gesture; a plain click waits for the second click
+        if (created && moved) this.finishMeasurement();
         this.app.changed();
       }
       if (this.drag === 'left') {
@@ -367,7 +439,13 @@ export abstract class View {
     };
     c.addEventListener('pointerup', end);
     c.addEventListener('pointercancel', end);
-    c.addEventListener('pointerleave', () => this.app.reportCursor(this, null));
+    c.addEventListener('pointerleave', () => {
+      this.app.reportCursor(this, null);
+      if (this.app.hoverMeasurementId !== null) {
+        this.app.hoverMeasurementId = null;
+        this.app.requestRender();
+      }
+    });
     c.addEventListener(
       'wheel',
       (e) => {
@@ -386,10 +464,10 @@ export abstract class View {
     );
     c.addEventListener('dblclick', (e) => {
       if (!this.app.vol) return;
-      if (this.app.ruler && this.measureKind) {
-        this.deleteMeasurementAt(this.pos(e));
-        return;
+      if (this.measureKind && !this.app.ruler && performance.now() - this.rulerDoneAt > 500) {
+        if (this.deleteMeasurementAt(this.pos(e))) return;
       }
+      if (this.app.ruler) return;
       this.onDoubleClick(this.pos(e), e);
     });
   }

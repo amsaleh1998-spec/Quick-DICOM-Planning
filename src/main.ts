@@ -326,6 +326,8 @@ window.addEventListener('keydown', (e) => {
     } else app.selectImplant(null, false);
   } else if (e.key === 'Enter' && app.drawing) {
     app.finishCurve();
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && app.hoverMeasurementId !== null) {
+    app.deleteMeasurement(app.hoverMeasurementId);
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && app.selectedId !== null && app.mode === 'plan') {
     app.deleteImplant(app.selectedId);
   } else if (e.key === 'f' || e.key === 'F') {

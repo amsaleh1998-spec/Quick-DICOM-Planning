@@ -42,9 +42,10 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.
 
 **Measurements**
-- *Ruler* (toolbar or **R**): drag on any slice – MPR, axial, cross-sections, tangential, or the panoramic (distances on the
-  developed panoramic surface). Drag an end to adjust, double-click a ruler to delete, *Clear* removes all. A ruler shows on
-  the slice it was drawn on.
+- *Ruler* (toolbar or **R**): click the first point, then the second point on any slice – MPR, axial, cross-sections,
+  tangential, or the panoramic (distances on the developed panoramic surface). The tool then switches off; ruler ends can
+  be dragged at any time to adjust them. Hover a ruler and press Delete (or double-click it) to remove it, *Clear* removes
+  all, Esc cancels a ruler in progress. A ruler shows on the slice it was drawn on.
 - Abutments: generic Ø4.8 mm multi-unit abutments (straight, 17°, 30°) with 1–5 mm gingival height and adjustable
   rotation; *Auto-align* picks angulation + rotation that bring the abutment closest to vertical. Abutment-to-abutment
   angles are listed next to the implant angles.
