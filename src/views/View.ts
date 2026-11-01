@@ -144,6 +144,10 @@ export abstract class View {
   protected onScrollH(dir: number, p: Pt, e: WheelEvent): void {
     this.onScroll(dir, p, e);
   }
+  /** Horizontal one-finger swipe step in the touch UI (dir > 0 = finger moved left). */
+  protected onTouchScrollH(dir: number, p: Pt): void {
+    this.onScrollH(dir, p, noWheel());
+  }
   /** Continuous trackpad swipe (px); return true when handled (e.g. 3D orbit). */
   protected onSwipe(_dx: number, _dy: number, _p: Pt, _e: WheelEvent): boolean {
     return false;
@@ -754,7 +758,7 @@ export abstract class View {
       this.accX -= dx;
       while (Math.abs(this.accX) >= STEP) {
         const dir = Math.sign(this.accX);
-        this.onScrollH(dir, p, noWheel());
+        this.onTouchScrollH(dir, p);
         this.accX -= dir * STEP;
       }
     } else {
