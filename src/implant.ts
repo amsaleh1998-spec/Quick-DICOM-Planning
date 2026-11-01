@@ -28,9 +28,39 @@ export interface Implant {
   center: Vec3;
   /** unit axis direction pointing from the platform (coronal) towards the apex */
   axis: Vec3;
+  /** diameter at the platform (coronal) */
   diameter: number;
+  /** diameter at the apex for tapered implants; null = same as `diameter` (cylindrical) */
+  apicalDiameter: number | null;
   length: number;
   abutment: Abutment | null;
+}
+
+export const MIN_APICAL_DIAMETER = 1.5;
+
+export function apicalDiameterOf(imp: Implant): number {
+  return imp.apicalDiameter ?? imp.diameter;
+}
+
+export function isTapered(imp: Implant): boolean {
+  return imp.apicalDiameter !== null && imp.apicalDiameter < imp.diameter;
+}
+
+/** Implant radius at axial coordinate h (0 = centre, + = towards the apex). */
+export function implantRadiusAt(imp: Implant, h: number): number {
+  const t = Math.min(1, Math.max(0, (h + imp.length / 2) / imp.length));
+  return (imp.diameter + (apicalDiameterOf(imp) - imp.diameter) * t) / 2;
+}
+
+/** Set the platform diameter; a tapered apex is kept no wider than the platform. */
+export function setCoronalDiameter(imp: Implant, d: number) {
+  imp.diameter = d;
+  if (imp.apicalDiameter !== null && imp.apicalDiameter > d) imp.apicalDiameter = d;
+}
+
+/** Set the apical diameter (makes the implant tapered); clamped to [1.5, platform]. */
+export function setApicalDiameter(imp: Implant, d: number) {
+  imp.apicalDiameter = Math.min(imp.diameter, Math.max(MIN_APICAL_DIAMETER, d));
 }
 
 /**
@@ -80,7 +110,7 @@ export function reserveImplantIds(maxId: number) {
 
 export function createImplant(center: Vec3, axis: Vec3, diameter = 4, length = 10): Implant {
   const id = nextId++;
-  return { id, name: `Implant ${id}`, center, axis, diameter, length, abutment: null };
+  return { id, name: `Implant ${id}`, center, axis, diameter, apicalDiameter: null, length, abutment: null };
 }
 
 /** Centre of the implant platform (coronal end). */
@@ -112,8 +142,9 @@ export function setImplantAxis(imp: Implant, axis: Vec3) {
  */
 export function implantParts(imp: Implant, abutmentDir: Vec3 | null): Cylinder[] {
   const r = imp.diameter / 2;
+  const ra = apicalDiameterOf(imp) / 2; // r0 = platform end, r1 = apex end
   const parts: Cylinder[] = [
-    { center: imp.center, axis: imp.axis, radius: r, r0: r, r1: r, half: imp.length / 2, kind: 'implant', implant: imp },
+    { center: imp.center, axis: imp.axis, radius: Math.max(r, ra), r0: r, r1: ra, half: imp.length / 2, kind: 'implant', implant: imp },
   ];
   const ab = imp.abutment;
   if (ab) {

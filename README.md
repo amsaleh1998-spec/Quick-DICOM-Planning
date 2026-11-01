@@ -39,6 +39,9 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   to change the length (the platform stays fixed). Dragging is damped (half speed) for fine control, and the value
   being changed is shown live on the implant for 5 seconds – click it to type an exact value. The selected implant has two rotation handles placed beyond its ends:
   **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform.
+- Tapered implants: tick *Tapered* and set the apex diameter (default 1 mm narrower than the platform), or drag the
+  apical half of the side outline; the coronal half still sets the platform diameter. The apex is never wider than the
+  platform.
 - Implants can be renamed (name field, or double-click a name in the implant list); names appear in the views,
   the angle table and saved projects.
 - While an implant is selected, the cross-sections follow it: moving, tilting or resizing it re-centres the middle
