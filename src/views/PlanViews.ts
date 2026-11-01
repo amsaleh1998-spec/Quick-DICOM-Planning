@@ -820,6 +820,11 @@ export class PanoView extends View {
     this.app.moveAlongCurve(dir);
   }
 
+  /** Touch: the cross-section markers follow the finger (swipe right = move right). */
+  protected onTouchScrollH(dir: number) {
+    this.app.moveAlongCurve(-dir);
+  }
+
   protected onScroll(dir: number, _p: Pt, e: WheelEvent) {
     if (e.altKey) {
       this.app.moveAlongCurve(dir);
