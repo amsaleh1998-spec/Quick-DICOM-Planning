@@ -11,7 +11,8 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   without a `.dcm` extension (e.g. `IM000001`) and "raw" files without the 128-byte preamble/DICM header are detected
   from their content; non-DICOM files in the folder (DICOMDIR, `._*`, `.DS_Store`, text, images …) are ignored. Slices are sorted by
   position and the volume is re-oriented to patient axes (LPS).
-- "Demo volume" generates a synthetic mandible (with a missing molar and a slightly tilted occlusal plane) to try the app.
+- "Demo volume" generates a synthetic phantom to try the app: a mandible (missing lower-left first molar, mandibular canals)
+  and a maxilla with a palate whose teeth touch the lower teeth in occlusion, on a slightly tilted occlusal plane.
 
 **MPR / Reorient**
 - Axial, coronal and sagittal views with a linked crosshair. Hold **Shift** to make the crosshair follow the mouse.
@@ -25,6 +26,31 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - GPU ray-casting with adjustable lower/upper thresholds: *Surface* (shaded iso-surface), *Translucent* and *MIP*.
 - Automatic bone threshold from the histogram, view presets (front/back/left/right/top/bottom), drag to orbit.
 - Implants and abutments are drawn in 3D; the crop box clips the rendering (e.g. to hide the opposing jaw).
+
+**Segmentation** (3D render panel → *Segmentation*; works in both layouts)
+- Adjust the 3D *lower/upper threshold* until the structures are separated, add a segment (*+ Maxilla*, *+ Mandible*,
+  *+ Tooth*, *+ Implant*, *+ Other*) and click the structure in the 3D view or in any slice. The connected voxels within the
+  threshold range are grown into a coloured 3D object (volume shown in cm³). Click more places to add disconnected parts;
+  *Undo click*, *Clear*, *Use current threshold* (re-grow with the current thresholds) and *Delete* are in the segment box.
+- Add as many segments as needed. Clicking inside an existing segment carves the new one out of it – e.g. raise the
+  threshold and click a tooth or an existing implant inside the jaw.
+- Each segment can be shown/hidden and recoloured; *3D: show bone that is not segmented* switches off everything else, so
+  e.g. only the maxilla remains. Segments are tinted (with outlines) in all slices, and the status bar names the segment
+  under the cursor. Surface, translucent and MIP rendering all respect the visibility.
+- **Separation cuts** for jaws/teeth that still touch: *Draw cut*, click points along the gap, double-click/Enter to finish.
+  Drawn in the **panoramic** the cut is a curved sheet that follows the arch (ideal between the jaws); drawn in any
+  **slice** it is the line extruded along the slice normal. *Reach* limits a cut to ± 2–20 mm around the slice it was
+  drawn on (for a local contact) or lets it run through the whole volume. Region growing cannot cross a cut, and every
+  segment is re-grown automatically when cuts change. The cut traces are drawn (orange) in all views.
+
+**Nerve canal (inferior alveolar nerve)**
+- *Trace right / left nerve*, then click the centre of the canal on the cross-sections (scroll along the curve), the
+  panoramic or any MPR slice, in any order – each point is inserted where it fits along the path. The points are joined
+  into a smooth tube (default Ø 2.5 mm, adjustable).
+- The nerve is shown in every view: its exact cross-section/outline in planar slices, a projected band in the
+  panoramic, and a yellow tube in 3D that stays visible (as a ghost) through the bone.
+- While tracing, drag a point to move it, double-click a point to delete it, *Undo point* takes back the last one.
+- Implants report their surface-to-surface distance to each nerve; closer than 2 mm is flagged (⚠ in the list).
 
 **Implant planning**
 - Axial view: draw the panoramic curve (click along the arch from patient right to left, double-click/Enter to finish).
@@ -56,7 +82,8 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 **Projects (pause and continue later)**
 - *Save project* (or **Ctrl+S**) writes one `.qdp.zip` file to your computer containing the CBCT voxels and the complete
   plan: orientation/rotation, crop box, window/level, panoramic curve and slice settings, implants and abutments,
-  measurements, zoom/pan of every view, the 3D camera and which view was maximized.
+  segments (clicks, thresholds, colours, visibility), separation cuts, traced nerves, measurements, zoom/pan of every
+  view, the 3D camera and which view was maximized. Segments are re-grown from their clicks when the project is opened.
 - *Open project* (or drag the file onto the page / *Open files*) restores everything exactly as it was.
 - The file is a normal ZIP: `project.json` (plan + view state) and `volume.raw` (int16, little endian, x fastest;
   dimensions/spacing in `project.json`).
@@ -80,7 +107,8 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 **Common mouse controls**: wheel = scroll / navigate · Ctrl+wheel or right-drag (down = in, up = out) = zoom;
 the toolbar switch makes right-drag adjust brightness/contrast instead · Shift+drag or middle-drag = pan ·
 Alt/middle-drag = pan (also Shift-drag outside the MPR) · F = fit all views ·
-M or the ⤢ button = maximize/restore a view · Esc = cancel / deselect · Del = delete selected implant.
+M or the ⤢ button = maximize/restore a view · Esc = cancel / deselect / leave the segmentation tool ·
+Enter = finish a cut · Del = delete selected implant.
 
 ## Development
 
@@ -111,7 +139,10 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/views/View.ts` | Base view (canvas, zoom/pan/W-L), planar view, implant rasterisation & dragging |
 | `src/views/MprView.ts` | Axial/coronal/sagittal MPR with Slicer-style rotation and crop box |
 | `src/views/PlanViews.ts` | Planning axial, panoramic, cross-section and tangential views |
-| `src/views/View3D.ts` | WebGL2 volume ray-caster with thresholds and ray-traced implants |
+| `src/views/View3D.ts` | WebGL2 volume ray-caster with thresholds, segment labels, ray-traced implants and nerve tubes |
+| `src/segment.ts` | Label grid, threshold region growing (seeds replayed in order), separation cuts (plane / panoramic) |
+| `src/nerve.ts` | Nerve canal model: point insertion, smooth centre line, implant-to-nerve distance |
+| `src/views/overlays.ts` | 2D overlays: segment tint/outlines, cut traces, nerve tube sections and projections |
 | `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
 | `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles, diameter/length dragging |
 
@@ -119,4 +150,6 @@ static – scans are processed in the visitor's browser and never uploaded.
 
 - Compressed transfer syntaxes (JPEG, JPEG 2000, RLE) are not decoded – convert first, e.g. `gdcmconv --raw in.dcm out.dcm`.
 - Very large volumes (> ~260 M voxels) are downsampled ×2 on load to fit in browser memory.
+- Segmentation labels use the same grid as the 3D texture (≤ 48 M voxels), so very large scans are segmented at reduced
+  resolution. Segments cannot be exported (e.g. as STL) yet.
 - Not a medical device; for demonstration/educational use only.
