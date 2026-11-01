@@ -188,7 +188,7 @@ export class PlanAxialView extends PlaneView {
       o.strokeStyle = 'rgba(79,179,255,0.45)';
       for (const side of [-1, 1]) {
         o.beginPath();
-        const half = (app.panoThickness() / 2) * side;
+        const half = (app.panoThickness() / 2) * side + app.panoOffset;
         for (let s = 0, i = 0; s <= curve.length; s += 1, i++) {
           const cp = curve.at(s);
           const sp = this.fromAB([cp.p[0] + cp.n[0] * half, cp.p[1] + cp.n[1] * half]);
@@ -198,6 +198,19 @@ export class PlanAxialView extends PlaneView {
         o.stroke();
       }
       o.setLineDash([]);
+      if (app.panoOffset) {
+        // current panoramic slice position
+        o.strokeStyle = 'rgba(79,179,255,0.85)';
+        o.lineWidth = 1;
+        o.beginPath();
+        for (let s = 0, i = 0; s <= curve.length; s += 1, i++) {
+          const cp = curve.at(s);
+          const sp = this.fromAB([cp.p[0] + cp.n[0] * app.panoOffset, cp.p[1] + cp.n[1] * app.panoOffset]);
+          if (i) o.lineTo(sp[0], sp[1]);
+          else o.moveTo(sp[0], sp[1]);
+        }
+        o.stroke();
+      }
       // control points
       for (const c of curve.ctrl) {
         const s = this.fromAB(c);
@@ -357,6 +370,19 @@ export class CrossView extends PlaneView {
     o.lineTo(this.w, s[1]);
     o.stroke();
     o.setLineDash([]);
+    // panoramic slice/slab position (buccal is screen-left)
+    const off = app.panoOffset;
+    const half = app.panoThickness() / 2;
+    const xOff = (d: number) => s[0] - d / this.vs.scale;
+    o.fillStyle = 'rgba(79,179,255,0.08)';
+    o.fillRect(Math.min(xOff(off + half), xOff(off - half)), 0, Math.abs((2 * half) / this.vs.scale), this.h);
+    if (off) {
+      o.strokeStyle = 'rgba(79,179,255,0.8)';
+      o.beginPath();
+      o.moveTo(xOff(off), 0);
+      o.lineTo(xOff(off), this.h);
+      o.stroke();
+    }
     this.drawImplantAxes(o);
     drawLabel(o, 'B', 8, this.h / 2 + 4, '#9fb0c8');
     drawLabel(o, 'L', this.w - 8, this.h / 2 + 4, '#9fb0c8', 'right');
@@ -494,7 +520,7 @@ export class PanoView extends View {
       const b = document.createElement('button');
       b.dataset.mode = m;
       b.textContent = m === 'slab' ? 'Slab' : 'Slice';
-      b.title = m === 'slab' ? 'Thick averaged panoramic (slab)' : 'Thin panoramic slice (Alt+wheel moves it buccal/lingual)';
+      b.title = m === 'slab' ? 'Thick averaged panoramic (slab)' : 'Thin panoramic slice (mouse wheel moves it buccal/lingual)';
       b.onclick = () => app.setPanoMode(m);
       this.modeSeg.append(b);
     }
@@ -698,12 +724,12 @@ export class PanoView extends View {
 
   protected onScroll(dir: number, _p: Pt, e: WheelEvent) {
     if (e.altKey) {
-      // shift the panoramic layer buccal/lingual
-      this.app.panoOffset += dir * 0.5;
-      this.app.changed();
+      this.app.moveAlongCurve(dir);
       return;
     }
-    this.app.moveAlongCurve(dir);
+    // wheel up = buccal, wheel down = lingual (moves the panoramic slice position)
+    this.app.panoOffset = Math.round((this.app.panoOffset - dir * 0.5) * 10) / 10;
+    this.app.changed();
   }
 
   protected drawOverlay(o: CanvasRenderingContext2D) {

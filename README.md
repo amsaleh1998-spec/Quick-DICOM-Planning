@@ -28,7 +28,8 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - Axial view: draw the panoramic curve (click along the arch from patient right to left, double-click/Enter to finish).
   Drag control points to edit, double-click the curve to insert a point, double-click a point to remove it.
 - Panoramic reconstruction along the curve, switchable between a thick **slab** and a thin **slice** (separate adjustable
-  thicknesses; switch in the sidebar or inside the panoramic view). Alt+wheel shifts the layer buccal/lingual.
+  thicknesses; switch in the sidebar or inside the panoramic view). The mouse wheel in the panoramic moves the slice
+  position buccal (up) / lingual (down); Alt+wheel moves the cross-sections along the curve. *Center* puts it back on the curve.
 - Three cross-sections perpendicular to the curve (adjustable spacing); wheel moves them along the curve.
 - Tangential view: a plane tangential to the curve that rotates 360° on mouse wheel.
   When an implant is selected the view pivots around the implant axis, keeping the implant vertical.
@@ -40,6 +41,14 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform.
 - New implants can be placed parallel to the selected one, and any implant can be made parallel to another.
 - Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.
+
+**Projects (pause and continue later)**
+- *Save project* (or **Ctrl+S**) writes one `.qdp.zip` file to your computer containing the CBCT voxels and the complete
+  plan: orientation/rotation, crop box, window/level, panoramic curve and slice settings, implants and abutments,
+  measurements, zoom/pan of every view, the 3D camera and which view was maximized.
+- *Open project* (or drag the file onto the page / *Open files*) restores everything exactly as it was.
+- The file is a normal ZIP: `project.json` (plan + view state) and `volume.raw` (int16, little endian, x fastest;
+  dimensions/spacing in `project.json`).
 
 **Measurements**
 - *Ruler* (toolbar or **R**): click the first point, then the second point on any slice – MPR, axial, cross-sections,

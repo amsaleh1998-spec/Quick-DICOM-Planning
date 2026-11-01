@@ -295,6 +295,19 @@ export class View3D extends View {
 
   // ---- camera ---------------------------------------------------------------
 
+  /** Camera state for saving / restoring a project. */
+  getCamera() {
+    return { right: this.right, up: this.up, fwd: this.fwd, target: this.target };
+  }
+
+  setCamera(c: { right: Vec3; up: Vec3; fwd: Vec3; target: Vec3 }) {
+    this.right = c.right;
+    this.up = c.up;
+    this.fwd = c.fwd;
+    this.target = c.target;
+    this.app.requestRender();
+  }
+
   setPreset(p: Preset) {
     const F = this.app.frame;
     const [e1, e2, e3] = F;

@@ -605,6 +605,15 @@ export class App {
     this.deleteMeasurement(p.m.id);
   }
 
+  /** Replace all measurements (project restore). */
+  setMeasurements(ms: Measurement[]) {
+    this.measurements = ms;
+    this.pendingMeasurement = null;
+    this.hoverMeasurementId = null;
+    nextMeasurementId = Math.max(nextMeasurementId, ...ms.map((m) => m.id + 1));
+    this.changed();
+  }
+
   clearMeasurements() {
     this.measurements = [];
     this.pendingMeasurement = null;

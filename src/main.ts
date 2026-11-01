@@ -1,5 +1,6 @@
 import { App, Jaw, Mode, MprTool, RenderMode } from './app';
 import { MUA_HEIGHTS } from './implant';
+import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
 import { createPhantom } from './volume';
 
@@ -54,6 +55,10 @@ const hideLoading = () => loading.classList.add('hidden');
 
 async function loadFiles(files: File[]) {
   if (!files.length) return;
+  if (files.length === 1 && /\.(zip|qdp)$/i.test(files[0].name)) {
+    await openProject(files[0]);
+    return;
+  }
   try {
     showLoading('Reading files…', 0);
     const vol = await loadDicomFiles(files, (stage, f) => showLoading(`${stage}…`, f));
@@ -67,6 +72,101 @@ async function loadFiles(files: File[]) {
     hideLoading();
   }
 }
+
+// ---- projects ----------------------------------------------------------------------
+async function openProject(file: File) {
+  try {
+    showLoading('Opening project…', 0.2);
+    const buf = await file.arrayBuffer();
+    showLoading('Unpacking project…', 0.5);
+    const { volume, file: pf } = await readProject(buf);
+    showLoading('Restoring views…', 0.9);
+    app.setVolume(volume);
+    setMode(pf.state.mode);
+    applyProjectState(app, pf);
+    setStatus(`Project "${file.name}" restored (saved ${new Date(pf.savedAt).toLocaleString()})`);
+  } catch (e) {
+    console.error(e);
+    setStatus((e as Error).message, true);
+  } finally {
+    hideLoading();
+  }
+}
+
+type DownloadsNs = { save(r: { filename: string; data: Blob }): Promise<unknown> };
+type ClaudeHost = { use(name: string): Promise<unknown> };
+
+/** Hand the file to the user: hosted page capability, native save dialog, or a plain download. */
+async function deliverFile(blob: Blob, filename: string): Promise<boolean> {
+  const host = (window as unknown as { claude?: ClaudeHost }).claude;
+  if (host?.use) {
+    const dl = (await host.use('downloads').catch(() => null)) as DownloadsNs | null;
+    if (dl) {
+      try {
+        await dl.save({ filename, data: blob });
+        return true;
+      } catch (e) {
+        const code = (e as { code?: string }).code;
+        if (code === 'declined') return false;
+        throw new Error(`Saving failed (${code ?? (e as Error).message})`);
+      }
+    }
+  }
+  const picker = (window as unknown as { showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
+  if (picker) {
+    try {
+      const handle = await picker({
+        suggestedName: filename,
+        types: [{ description: 'Quick DICOM Planning project', accept: { 'application/zip': ['.zip'] } }],
+      });
+      const w = await (handle as unknown as { createWritable(): Promise<WritableStream & { write(b: Blob): Promise<void>; close(): Promise<void> }> }).createWritable();
+      await w.write(blob);
+      await w.close();
+      return true;
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return false;
+      // e.g. not allowed in this frame – fall back to a normal download
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  return true;
+}
+
+async function saveProject() {
+  if (!app.vol) {
+    setStatus('Nothing to save – open a CBCT first.', true);
+    return;
+  }
+  try {
+    showLoading('Packing project…', 0);
+    const blob = await buildProject(app, (f) => showLoading('Compressing volume…', f));
+    hideLoading();
+    const name = projectFileName(app);
+    const ok = await deliverFile(blob, name);
+    setStatus(ok ? `Project saved as ${name} (${(blob.size / 1e6).toFixed(1)} MB)` : 'Save cancelled');
+  } catch (e) {
+    console.error(e);
+    setStatus((e as Error).message, true);
+  } finally {
+    hideLoading();
+  }
+}
+
+const projectInput = $<HTMLInputElement>('project-input');
+$('btn-save-project').onclick = () => saveProject();
+$('btn-open-project').onclick = () => projectInput.click();
+projectInput.onchange = () => {
+  const f = projectInput.files?.[0];
+  if (f) openProject(f);
+  projectInput.value = '';
+};
 
 // ---- toolbar -------------------------------------------------------------------
 const fileInput = $<HTMLInputElement>('file-input');
@@ -179,6 +279,10 @@ const spacing = $<HTMLInputElement>('spacing');
 slab.oninput = () => {
   if (app.panoMode === 'slab') app.panoSlab = Number(slab.value);
   else app.panoSlice = Number(slab.value);
+  app.changed();
+};
+$('btn-pano-center').onclick = () => {
+  app.panoOffset = 0;
   app.changed();
 };
 const panoModeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#pano-mode button'));
@@ -316,6 +420,11 @@ function clampNum(v: string, lo: number, hi: number, fallback: number) {
 
 // ---- keyboard ---------------------------------------------------------------
 window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+    e.preventDefault();
+    saveProject();
+    return;
+  }
   if ((e.target as HTMLElement).tagName === 'INPUT') return;
   if (e.key === 'Escape') {
     if (app.drawing) app.cancelDrawing();
@@ -379,6 +488,7 @@ function refreshUi() {
   slab.value = String(app.panoThickness());
   $('slab-label').textContent = isSlab ? 'Slab thickness' : 'Slice thickness';
   $('slab-val').textContent = `${app.panoThickness()} mm`;
+  $('pano-off').textContent = `${app.panoOffset > 0 ? '+' : ''}${app.panoOffset.toFixed(1)} mm ${app.panoOffset > 0 ? '(buccal)' : app.panoOffset < 0 ? '(lingual)' : ''}`;
   spacing.value = String(app.crossSpacing);
   $('spacing-val').textContent = `${app.crossSpacing} mm`;
   if (document.activeElement !== defD) defD.value = String(app.defaultDiameter);
