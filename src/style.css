@@ -601,3 +601,22 @@ select {
   gap: 10px;
   flex-wrap: wrap;
 }
+
+#implant-edit label.grow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+#imp-name {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  background: #0e1420;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: inherit;
+}
