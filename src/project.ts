@@ -156,7 +156,13 @@ export function applyProjectState(app: App, file: ProjectFile) {
   app.panoSlice = st.panoSlice;
   app.panoOffset = st.panoOffset;
   app.tangAngle = st.tangAngle;
-  app.implants = st.implants.map((i) => ({ ...i, apicalDiameter: i.apicalDiameter ?? null, abutment: i.abutment ?? null }));
+  app.implants = st.implants.map((i) => ({
+    ...i,
+    apicalDiameter: i.apicalDiameter ?? null,
+    abutment: i.abutment ?? null,
+    // projects saved before the toggle showed the axis exactly when an MUA was present
+    showProstheticAxis: i.showProstheticAxis ?? !!i.abutment,
+  }));
   reserveImplantIds(Math.max(0, ...app.implants.map((i) => i.id)));
   app.selectedId = st.selectedId;
   app.defaultDiameter = st.defaultDiameter;
