@@ -65,7 +65,10 @@ export class App {
   /** height (frame z) of the axial level / focus */
   focusC = 0;
   crossSpacing = 2;
+  /** panoramic shows either a thick slab or a thin slice */
+  panoMode: 'slab' | 'slice' = 'slab';
   panoSlab = 12;
+  panoSlice = 1;
   panoOffset = 0;
   tangAngle = 0;
   implants: Implant[] = [];
@@ -345,6 +348,16 @@ export class App {
   clearCurve() {
     this.curve = null;
     this.drawing = null;
+    this.changed();
+  }
+
+  /** Thickness actually used for the panoramic reconstruction. */
+  panoThickness() {
+    return this.panoMode === 'slab' ? this.panoSlab : this.panoSlice;
+  }
+
+  setPanoMode(m: 'slab' | 'slice') {
+    this.panoMode = m;
     this.changed();
   }
 

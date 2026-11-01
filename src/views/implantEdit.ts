@@ -19,7 +19,14 @@ export interface ImplantViewAdapter {
   hitBody(p: Pt): Implant | null;
   /** whether the implant is cut by / relevant for this view (guides and handles) */
   visible(imp: Implant): boolean;
+  /** element the live dimension badge is placed in */
+  container: HTMLElement;
 }
+
+type DimKind = 'diameter' | 'length';
+/** dimension changes per mm of mouse travel (lower = finer control) */
+const DIM_GAIN = 0.5;
+const BADGE_MS = 5000;
 
 const HANDLE_R = 7;
 
@@ -29,7 +36,18 @@ const HANDLE_R = 7;
  * by dragging the apical end.
  */
 export class ImplantEditor {
-  private drag: { imp: Implant; mode: EditMode; basis: { u: Vec3; v: Vec3; n: Vec3 } } | null = null;
+  private drag: {
+    imp: Implant;
+    mode: EditMode;
+    basis: { u: Vec3; v: Vec3; n: Vec3 };
+    /** value and mouse measure at drag start (relative, damped dimension changes) */
+    startValue: number;
+    startMeasure: number;
+  } | null = null;
+  // live dimension badge
+  private badge: HTMLDivElement | null = null;
+  private badgeState: { imp: Implant; kind: DimKind; editing: boolean } | null = null;
+  private hideTimer = 0;
 
   constructor(
     private app: App,
@@ -92,8 +110,18 @@ export class ImplantEditor {
   start(p: Pt): boolean {
     const hit = this.hit(p);
     if (!hit) return false;
-    this.drag = { imp: hit.imp, mode: hit.mode, basis: this.ad.basis(hit.imp) };
-    this.app.selectImplant(hit.imp.id, false);
+    const imp = hit.imp;
+    let startValue = 0;
+    let startMeasure = 0;
+    if (hit.mode === 'diameter' || hit.mode === 'length') {
+      const ra = this.ad.radialAxial(p, imp);
+      startValue = hit.mode === 'diameter' ? imp.diameter : imp.length;
+      // diameter: distance from the axis; length: distance from the platform along the axis
+      startMeasure = hit.mode === 'diameter' ? ra.rad : ra.h + imp.length / 2;
+      this.showBadge(imp, hit.mode);
+    }
+    this.drag = { imp, mode: hit.mode, basis: this.ad.basis(imp), startValue, startMeasure };
+    this.app.selectImplant(imp.id, false);
     return true;
   }
 
@@ -124,12 +152,14 @@ export class ImplantEditor {
       }
       case 'diameter': {
         const { rad } = this.ad.radialAxial(p, imp);
-        imp.diameter = clamp(Math.round(rad * 2 * 10) / 10, 2.5, 9);
+        const v = d.startValue + 2 * (rad - d.startMeasure) * DIM_GAIN;
+        imp.diameter = clamp(Math.round(v * 10) / 10, 2.5, 9);
         break;
       }
       case 'length': {
         const { h } = this.ad.radialAxial(p, imp);
-        setImplantLength(imp, clamp(Math.round((h + imp.length / 2) * 2) / 2, 4, 25));
+        const v = d.startValue + (h + imp.length / 2 - d.startMeasure) * DIM_GAIN;
+        setImplantLength(imp, clamp(Math.round(v * 2) / 2, 4, 25));
         break;
       }
     }
@@ -139,6 +169,7 @@ export class ImplantEditor {
 
   end(): boolean {
     if (!this.drag) return false;
+    if (this.drag.mode === 'diameter' || this.drag.mode === 'length') this.scheduleHide();
     this.drag = null;
     this.app.implantChanged(null, true);
     return true;
@@ -150,8 +181,140 @@ export class ImplantEditor {
     return hit ? this.cursorFor(hit.mode, hit.imp) : null;
   }
 
+  // ---- live dimension badge --------------------------------------------------
+
+  private showBadge(imp: Implant, kind: DimKind) {
+    clearTimeout(this.hideTimer);
+    if (this.badgeState?.editing) return;
+    this.badgeState = { imp, kind, editing: false };
+    if (!this.badge) {
+      const b = document.createElement('div');
+      b.className = 'dim-badge';
+      b.title = 'Click to type a value';
+      b.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        if (!this.badgeState?.editing) {
+          e.preventDefault();
+          this.beginEdit();
+        }
+      });
+      this.ad.container.append(b);
+      this.badge = b;
+    }
+    this.badge.style.display = '';
+    this.renderBadgeText();
+  }
+
+  private scheduleHide() {
+    clearTimeout(this.hideTimer);
+    this.hideTimer = window.setTimeout(() => {
+      if (!this.badgeState?.editing) this.hideBadge();
+    }, BADGE_MS);
+  }
+
+  private hideBadge() {
+    clearTimeout(this.hideTimer);
+    this.badgeState = null;
+    if (this.badge) {
+      this.badge.style.display = 'none';
+      this.badge.textContent = '';
+    }
+  }
+
+  private renderBadgeText() {
+    const st = this.badgeState;
+    if (!st || !this.badge || st.editing) return;
+    this.badge.textContent = st.kind === 'diameter' ? `Ø ${st.imp.diameter.toFixed(1)} mm` : `L ${st.imp.length.toFixed(1)} mm`;
+  }
+
+  private beginEdit() {
+    const st = this.badgeState;
+    const b = this.badge;
+    if (!st || !b) return;
+    clearTimeout(this.hideTimer);
+    st.editing = true;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = st.kind === 'diameter' ? '0.1' : '0.5';
+    input.min = st.kind === 'diameter' ? '2.5' : '4';
+    input.max = st.kind === 'diameter' ? '9' : '25';
+    input.value = (st.kind === 'diameter' ? st.imp.diameter : st.imp.length).toFixed(1);
+    b.textContent = st.kind === 'diameter' ? 'Ø ' : 'L ';
+    b.append(input, document.createTextNode(' mm'));
+    b.classList.add('editing');
+    let done = false;
+    const finish = (apply: boolean) => {
+      if (done) return;
+      done = true;
+      b.classList.remove('editing');
+      const v = Number(input.value);
+      if (apply && input.value !== '' && Number.isFinite(v)) {
+        if (st.kind === 'diameter') st.imp.diameter = clamp(Math.round(v * 10) / 10, 2.5, 9);
+        else setImplantLength(st.imp, clamp(Math.round(v * 10) / 10, 4, 25));
+        this.app.implantChanged(st.imp, true);
+      }
+      this.hideBadge();
+      this.app.requestRender();
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') finish(true);
+      else if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.focus();
+    input.select();
+  }
+
+  /** Position the badge next to the implant (called on every overlay redraw). */
+  private placeBadge() {
+    const st = this.badgeState;
+    const b = this.badge;
+    if (!st || !b) return;
+    const imp = st.imp;
+    if (!this.app.implants.includes(imp) || !this.ad.visible(imp)) {
+      if (!st.editing) b.style.display = 'none';
+      return;
+    }
+    b.style.display = '';
+    const a = this.ad.project(platformOf(imp));
+    const c = this.ad.project(apexOf(imp));
+    let dx = c.x - a.x;
+    let dy = c.y - a.y;
+    let l = Math.hypot(dx, dy);
+    if (l < 1) {
+      dx = 1;
+      dy = 0;
+      l = 1;
+    }
+    dx /= l;
+    dy /= l;
+    // perpendicular pointing to the screen right where possible
+    let px = -dy;
+    let py = dx;
+    if (px < 0) {
+      px = -px;
+      py = -py;
+    }
+    const rpx = imp.diameter / 2 / this.ad.scale();
+    const mx = (a.x + c.x) / 2;
+    const my = (a.y + c.y) / 2;
+    let x: number, y: number;
+    if (st.kind === 'diameter') {
+      x = mx + px * (rpx + 40);
+      y = my + py * (rpx + 40);
+    } else {
+      x = c.x - px * (rpx + 40) - dx * 4;
+      y = c.y - py * (rpx + 40) - dy * 4;
+    }
+    b.style.left = `${Math.round(x)}px`;
+    b.style.top = `${Math.round(y)}px`;
+    this.renderBadgeText();
+  }
+
   /** Dashed axis through every visible implant and rotation handles for the selected one. */
   draw(o: CanvasRenderingContext2D) {
+    this.placeBadge();
     const app = this.app;
     for (const imp of app.implants) {
       if (!this.ad.visible(imp)) continue;

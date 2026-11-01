@@ -445,6 +445,7 @@ export abstract class PlaneView extends View {
       const s = this.worldToScreen(imp.center);
       return !!s && Math.abs(s[2]) < imp.diameter / 2 + 1;
     },
+    container: this.el,
   });
 
   protected measureScreen(w: Vec3): Pt | null {

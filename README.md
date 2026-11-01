@@ -27,14 +27,16 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 **Implant planning**
 - Axial view: draw the panoramic curve (click along the arch from patient right to left, double-click/Enter to finish).
   Drag control points to edit, double-click the curve to insert a point, double-click a point to remove it.
-- Panoramic reconstruction along the curve (adjustable slab thickness; Alt+wheel shifts the layer buccal/lingual).
+- Panoramic reconstruction along the curve, switchable between a thick **slab** and a thin **slice** (separate adjustable
+  thicknesses; switch in the sidebar or inside the panoramic view). Alt+wheel shifts the layer buccal/lingual.
 - Three cross-sections perpendicular to the curve (adjustable spacing); wheel moves them along the curve.
 - Tangential view: a plane tangential to the curve that rotates 360° on mouse wheel.
   When an implant is selected the view pivots around the implant axis, keeping the implant vertical.
 - Implants are simple cylinders with a platform (coronal, shown as a bright band) and an apex, with a dashed line along
   the axis. *Add upper implant* (apex up) or *Add lower implant* (apex down), then click in any planning view.
 - Editing in any planning view: drag the body to move; drag the side outline to change the diameter; drag the apical end
-  to change the length (the platform stays fixed). The selected implant has two rotation handles placed beyond its ends:
+  to change the length (the platform stays fixed). Dragging is damped (half speed) for fine control, and the value
+  being changed is shown live on the implant for 5 seconds – click it to type an exact value. The selected implant has two rotation handles placed beyond its ends:
   **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform.
 - New implants can be placed parallel to the selected one, and any implant can be made parallel to another.
 - Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.

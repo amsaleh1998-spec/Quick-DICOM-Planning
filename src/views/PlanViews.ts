@@ -188,7 +188,7 @@ export class PlanAxialView extends PlaneView {
       o.strokeStyle = 'rgba(79,179,255,0.45)';
       for (const side of [-1, 1]) {
         o.beginPath();
-        const half = (app.panoSlab / 2) * side;
+        const half = (app.panoThickness() / 2) * side;
         for (let s = 0, i = 0; s <= curve.length; s += 1, i++) {
           const cp = curve.at(s);
           const sp = this.fromAB([cp.p[0] + cp.n[0] * half, cp.p[1] + cp.n[1] * half]);
@@ -479,11 +479,32 @@ export class PanoView extends View {
     radialAxial: (p, imp) => projectedRadialAxial(p, imp, (w) => this.project(w), this.vs.scale),
     hitBody: (p) => this.hitBody(p),
     visible: () => true,
+    container: this.el,
   });
+
+  private modeSeg: HTMLDivElement;
 
   constructor(app: App) {
     super(app, 'Panoramic', CURVE_COLOR);
     this.maxPixels = 320_000;
+    // Slab / Slice switch inside the view
+    this.modeSeg = document.createElement('div');
+    this.modeSeg.className = 'view-seg';
+    for (const m of ['slab', 'slice'] as const) {
+      const b = document.createElement('button');
+      b.dataset.mode = m;
+      b.textContent = m === 'slab' ? 'Slab' : 'Slice';
+      b.title = m === 'slab' ? 'Thick averaged panoramic (slab)' : 'Thin panoramic slice (Alt+wheel moves it buccal/lingual)';
+      b.onclick = () => app.setPanoMode(m);
+      this.modeSeg.append(b);
+    }
+    this.el.append(this.modeSeg);
+  }
+
+  override render() {
+    for (const b of Array.from(this.modeSeg.children) as HTMLButtonElement[]) b.classList.toggle('active', b.dataset.mode === this.app.panoMode);
+    this.modeSeg.style.display = this.app.curve ? '' : 'none';
+    super.render();
   }
 
   protected measureScreen(w: Vec3): Pt | null {
@@ -556,7 +577,7 @@ export class PanoView extends View {
     const app = this.app;
     if (!app.curve) return null;
     const c = app.cropSpec();
-    const base = JSON.stringify([app.curve.ctrl, app.frame, app.O, this.vs, this.w, this.h, app.panoSlab, app.panoOffset, c && [c.min, c.max]]);
+    const base = JSON.stringify([app.curve.ctrl, app.frame, app.O, this.vs, this.w, this.h, app.panoThickness(), app.panoOffset, c && [c.min, c.max]]);
     if (base !== this.lastBaseKey) {
       const now = performance.now();
       if (this.lastBaseKey && now - this.lastChange < 300) {
@@ -580,7 +601,7 @@ export class PanoView extends View {
     const F = app.frame;
     const k = 1 / this.imgScale;
     const crop = app.cropSpec();
-    const thick = app.panoSlab;
+    const thick = app.panoThickness();
     let samples = thick > 0.2 ? Math.min(40, Math.max(2, Math.ceil(thick / Math.max(0.25, vol.minSpacing)))) : 1;
     if (this.draft) samples = Math.min(samples, 3);
     const c0 = this.cAt(0.5 * k);
@@ -783,7 +804,7 @@ export class PanoView extends View {
     drawLabel(o, 'L', this.xOf(curve.length) - 6, this.h - 10, '#9fb0c8', 'right');
     drawLabel(
       o,
-      `slab ${app.panoSlab.toFixed(0)} mm${app.panoOffset ? ` · offset ${app.panoOffset.toFixed(1)} mm` : ''} · length ${curve.length.toFixed(0)} mm`,
+      `${app.panoMode === 'slab' ? 'slab' : 'slice'} ${app.panoThickness().toFixed(1)} mm${app.panoOffset ? ` · offset ${app.panoOffset.toFixed(1)} mm` : ''} · length ${curve.length.toFixed(0)} mm`,
       this.w - 34,
       16,
       '#9fb0c8',

@@ -86,8 +86,15 @@
               <button id="btn-draw-curve" class="primary">Draw panoramic curve</button>
               <button id="btn-clear-curve">Clear</button>
             </div>
-            <label class="slider">Panoramic slab <span id="slab-val"></span>
-              <input id="slab" type="range" min="0" max="30" step="1" />
+            <div class="row">
+              <span class="muted small">Panoramic view</span>
+              <div class="seg small" id="pano-mode">
+                <button data-pm="slab" title="Thick averaged panoramic">Slab</button>
+                <button data-pm="slice" title="Thin panoramic slice (Alt+wheel in the panoramic moves it buccal/lingual)">Slice</button>
+              </div>
+            </div>
+            <label class="slider"><span class="lbl" id="slab-label">Slab thickness</span> <span id="slab-val"></span>
+              <input id="slab" type="range" min="2" max="30" step="1" />
             </label>
             <label class="slider">Cross-section spacing <span id="spacing-val"></span>
               <input id="spacing" type="range" min="0.5" max="10" step="0.5" />
@@ -152,7 +159,7 @@
                 <li><b>Axial</b>: wheel = level, drag curve points, dbl-click curve = add / point = remove</li>
                 <li><b>Panoramic / cross-sections</b>: wheel = move along the curve, click = jump</li>
                 <li><b>Tangential</b>: wheel = rotate 360° (around the selected implant)</li>
-                <li><b>Implant</b>: drag body = move · drag side outline = diameter · drag apical end = length</li>
+                <li><b>Implant</b>: drag body = move · drag side outline = diameter · drag apical end = length (click the live value to type it)</li>
                 <li><b>C / A handles</b> (selected implant): C rotates around the apex, A rotates around the platform</li>
                 <li><b>Esc</b> deselect / cancel · <b>Del</b> delete implant</li>
                 <li><b>Ctrl+wheel</b> or <b>right drag</b> zoom · <b>Shift/Alt/middle drag</b> pan · <b>M</b> maximize · <b>R</b> ruler</li>
