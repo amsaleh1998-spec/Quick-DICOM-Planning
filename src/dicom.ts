@@ -9,7 +9,12 @@ const UNCOMPRESSED = new Set([
   '1.2.840.10008.1.2.2', // explicit VR big endian (retired)
 ]);
 
-const MAX_VOXELS = 260_000_000;
+let MAX_VOXELS = 260_000_000;
+
+/** Larger series are downsampled on load (lower on phones to fit their memory). */
+export function setMaxVoxels(n: number) {
+  MAX_VOXELS = n;
+}
 
 interface Slice {
   seriesUid: string;

@@ -80,6 +80,18 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - New implants can be placed parallel to the selected one, and any implant can be made parallel to another.
 - Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.
 
+**Mobile version** (`mobile.html`, opens automatically on phones)
+- A simplified viewer: open DICOM files, a project saved on the desktop (`.qdp.zip`, with implants, segments and nerves)
+  or the demo. One full-screen view at a time – Axial, Coronal, Sagittal, Panoramic and Cross-section (when the plan has a
+  curve) and 3D – switched with the tab bar.
+- Touch: swipe to scroll slices (panoramic: left/right along the arch, up/down buccal/lingual; cross-section: along the
+  arch), tap to move the crosshair, pinch to zoom, two fingers to pan, double-tap to fit. 3D: drag to rotate.
+- Settings sheet: implant list (tap to jump to its cross-section; nerve-distance warnings), segment and nerve visibility,
+  brightness/contrast, 3D mode/threshold/view presets. No editing tools.
+- Phones are sent to it before the desktop page renders; *Full desktop version* (`index.html?ui=desktop`) is remembered on
+  that phone, and *Mobile version* in the desktop toolbar (`?ui=mobile`) switches back. Memory/GPU budgets are lower on
+  phones (series above ~110 M voxels are downsampled on load).
+
 **Projects (pause and continue later)**
 - *Save project* (or **Ctrl+S**) writes one `.qdp.zip` file to your computer containing the CBCT voxels and the complete
   plan: orientation/rotation, crop box, window/level, panoramic curve and slice settings, implants and abutments,
@@ -143,6 +155,8 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/views/View3D.ts` | WebGL2 volume ray-caster with thresholds, segment labels, ray-traced implants and nerve tubes |
 | `src/segment.ts` | Label grid, threshold region growing (seeds replayed in order), separation cuts (plane / panoramic) |
 | `src/nerve.ts` | Nerve canal model: point insertion, smooth centre line, implant-to-nerve distance |
+| `mobile.html`, `src/mobile.ts`, `src/mobile.css` | Simplified phone UI (one view at a time, touch gestures, settings sheet) |
+| `src/uiMode.ts` | Phone detection and the desktop/mobile preference (mirrored inline in `index.html`) |
 | `src/views/overlays.ts` | 2D overlays: segment tint/outlines, cut traces, nerve tube sections and projections |
 | `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
 | `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles, diameter/length dragging |

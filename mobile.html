@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0f17" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Quick DICOM Planning</title>
+    <link rel="stylesheet" href="./src/mobile.css" />
+  </head>
+  <body>
+    <div id="m-app">
+      <header id="m-top">
+        <div class="m-brand">Quick DICOM</div>
+        <div id="m-title" class="m-title"></div>
+        <button id="m-open" class="m-btn" aria-label="Open">Open</button>
+        <button id="m-settings" class="m-icon" aria-label="Settings" disabled>
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
+            <circle cx="16" cy="7" r="2.3" stroke="currentColor" stroke-width="2" fill="none" />
+            <circle cx="10" cy="17" r="2.3" stroke="currentColor" stroke-width="2" fill="none" />
+          </svg>
+        </button>
+      </header>
+
+      <main id="m-stage">
+        <div id="m-views"></div>
+        <div id="m-empty">
+          <div class="m-card">
+            <h1>Quick DICOM Planning</h1>
+            <p>View a CBCT scan, or a plan made on the desktop version – implants, segments and nerves included.</p>
+            <button id="m-empty-files" class="m-primary">Open DICOM files</button>
+            <button id="m-empty-project" class="m-secondary">Open project (.qdp.zip)</button>
+            <button id="m-empty-demo" class="m-secondary">Try the demo scan</button>
+            <p class="m-note">Everything stays on this phone – nothing is uploaded.</p>
+            <a class="m-link" href="index.html?ui=desktop">Full desktop version</a>
+          </div>
+        </div>
+        <div id="m-hint" class="hidden"></div>
+        <div id="m-toast" class="hidden"></div>
+      </main>
+
+      <nav id="m-tabs" class="hidden" aria-label="Views">
+        <button data-v="axial">Axial</button>
+        <button data-v="coronal">Coronal</button>
+        <button data-v="sagittal">Sagittal</button>
+        <button data-v="pano">Pano</button>
+        <button data-v="section">Section</button>
+        <button data-v="3d">3D</button>
+      </nav>
+
+      <div id="m-backdrop" class="hidden"></div>
+
+      <!-- open menu -->
+      <section id="m-open-sheet" class="m-sheet" aria-label="Open">
+        <div class="m-grab"></div>
+        <button id="m-open-files" class="m-row-btn">Open DICOM files</button>
+        <button id="m-open-project" class="m-row-btn">Open project (.qdp.zip)</button>
+        <button id="m-open-demo" class="m-row-btn">Demo scan</button>
+        <a class="m-row-btn m-link-row" href="index.html?ui=desktop">Full desktop version</a>
+        <button class="m-row-btn m-cancel" data-close>Cancel</button>
+      </section>
+
+      <!-- settings -->
+      <section id="m-set-sheet" class="m-sheet" aria-label="Settings">
+        <div class="m-grab"></div>
+        <div class="m-sheet-body">
+          <div id="m-implants-box" class="hidden">
+            <h2>Implants</h2>
+            <ul id="m-implants" class="m-list"></ul>
+          </div>
+          <div id="m-segments-box" class="hidden">
+            <h2>Segments</h2>
+            <ul id="m-segments" class="m-list"></ul>
+          </div>
+          <div id="m-nerves-box" class="hidden">
+            <h2>Nerves</h2>
+            <ul id="m-nerves" class="m-list"></ul>
+          </div>
+
+          <h2>Image</h2>
+          <label class="m-slider">Brightness <input id="m-level" type="range" /></label>
+          <label class="m-slider">Contrast <input id="m-width" type="range" /></label>
+          <div class="m-row"><button id="m-auto-wl" class="m-chip">Auto</button></div>
+
+          <h2>3D</h2>
+          <div class="m-seg" id="m-vr-mode">
+            <button data-vr="surface">Surface</button>
+            <button data-vr="translucent">Translucent</button>
+            <button data-vr="mip">X-ray</button>
+          </div>
+          <label class="m-slider">Bone threshold <span id="m-thr-val"></span><input id="m-thr" type="range" /></label>
+          <div class="m-row">
+            <button id="m-auto-thr" class="m-chip">Auto</button>
+            <button class="m-chip" data-preset="front">Front</button>
+            <button class="m-chip" data-preset="left">Left</button>
+            <button class="m-chip" data-preset="right">Right</button>
+            <button class="m-chip" data-preset="top">Top</button>
+            <button class="m-chip" data-preset="bottom">Bottom</button>
+          </div>
+
+          <div id="m-vol-info" class="m-note"></div>
+          <a class="m-link" href="index.html?ui=desktop">Full desktop version</a>
+        </div>
+      </section>
+
+      <div id="m-loading" class="hidden">
+        <div class="m-card"><div id="m-loading-text">Loading…</div><div class="m-bar"><div id="m-loading-bar"></div></div></div>
+      </div>
+
+      <input id="m-file-input" type="file" multiple hidden />
+      <input id="m-project-input" type="file" accept=".zip,.qdp,application/zip" hidden />
+    </div>
+    <script type="module" src="./src/mobile.ts"></script>
+  </body>
+</html>
