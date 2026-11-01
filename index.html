@@ -15,6 +15,10 @@
           <button id="btn-open-folder" title="Select a folder containing a DICOM series">Open folder</button>
           <button id="btn-demo" title="Load a synthetic mandible phantom">Demo volume</button>
         </div>
+        <div class="group">
+          <button id="btn-save-project" title="Save the CBCT, implants and the current views to a project file (Ctrl+S)">Save project</button>
+          <button id="btn-open-project" title="Continue a saved project (.qdp.zip)">Open project</button>
+        </div>
         <div class="tabs" role="tablist">
           <button data-mode="mpr" class="active" role="tab">MPR / Reorient</button>
           <button data-mode="plan" role="tab">Implant planning</button>
@@ -39,6 +43,7 @@
         </div>
         <input id="file-input" type="file" multiple hidden />
         <input id="folder-input" type="file" webkitdirectory multiple hidden />
+        <input id="project-input" type="file" accept=".zip,.qdp" hidden />
       </header>
 
       <div id="main">
@@ -90,12 +95,17 @@
               <span class="muted small">Panoramic view</span>
               <div class="seg small" id="pano-mode">
                 <button data-pm="slab" title="Thick averaged panoramic">Slab</button>
-                <button data-pm="slice" title="Thin panoramic slice (Alt+wheel in the panoramic moves it buccal/lingual)">Slice</button>
+                <button data-pm="slice" title="Thin panoramic slice (mouse wheel in the panoramic moves it buccal/lingual)">Slice</button>
               </div>
             </div>
             <label class="slider"><span class="lbl" id="slab-label">Slab thickness</span> <span id="slab-val"></span>
               <input id="slab" type="range" min="2" max="30" step="1" />
             </label>
+            <div class="row small">
+              <span class="muted">Slice position</span>
+              <span id="pano-off">0.0 mm</span>
+              <button id="btn-pano-center" title="Back onto the drawn curve">Center</button>
+            </div>
             <label class="slider">Cross-section spacing <span id="spacing-val"></span>
               <input id="spacing" type="range" min="0.5" max="10" step="0.5" />
             </label>
@@ -157,7 +167,8 @@
               <summary>Mouse</summary>
               <ul class="help">
                 <li><b>Axial</b>: wheel = level, drag curve points, dbl-click curve = add / point = remove</li>
-                <li><b>Panoramic / cross-sections</b>: wheel = move along the curve, click = jump</li>
+                <li><b>Panoramic</b>: wheel = slice position buccal/lingual, Alt+wheel = move along the curve, click = jump</li>
+                <li><b>Cross-sections</b>: wheel = move along the curve</li>
                 <li><b>Tangential</b>: wheel = rotate 360° (around the selected implant)</li>
                 <li><b>Implant</b>: drag body = move · drag side outline = diameter · drag apical end = length (click the live value to type it)</li>
                 <li><b>C / A handles</b> (selected implant): C rotates around the apex, A rotates around the platform</li>

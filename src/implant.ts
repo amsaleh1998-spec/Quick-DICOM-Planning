@@ -40,6 +40,11 @@ export interface Cylinder {
 
 let nextId = 1;
 
+/** Make sure new implants get ids above the restored ones. */
+export function reserveImplantIds(maxId: number) {
+  nextId = Math.max(nextId, maxId + 1);
+}
+
 export function createImplant(center: Vec3, axis: Vec3, diameter = 4, length = 10): Implant {
   const id = nextId++;
   return { id, name: `Implant ${id}`, center, axis, diameter, length, abutment: null };
