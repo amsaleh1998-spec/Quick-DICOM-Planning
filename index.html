@@ -132,6 +132,9 @@
             <ul id="implant-list"></ul>
             <div id="implant-edit" class="hidden">
               <div class="row">
+                <label class="grow">Name <input id="imp-name" type="text" maxlength="40" placeholder="e.g. 36 or Molar left" /></label>
+              </div>
+              <div class="row">
                 <label>Diameter <input id="imp-d" type="number" step="0.1" min="2" max="8" /> mm</label>
               </div>
               <div class="row">
@@ -182,7 +185,8 @@
                 <li><b>Tangential</b>: wheel = rotate 360° (around the selected implant)</li>
                 <li><b>Implant</b>: drag body = move · drag side outline = diameter · drag apical end = length (click the live value to type it)</li>
                 <li><b>C / A handles</b> (selected implant): C rotates around the apex, A rotates around the platform</li>
-                <li><b>Esc</b> deselect / cancel · <b>Del</b> delete implant</li>
+                <li><b>Esc</b> deselect / cancel · <b>Del</b> delete implant · double-click a name in the list to rename</li>
+                <li>Cross-sections follow the selected implant when it moves</li>
                 <li><b>Ctrl+wheel</b> or <b>right drag</b> zoom · <b>Shift/Alt/middle drag</b> pan · <b>M</b> maximize · <b>R</b> ruler</li>
               </ul>
             </details>

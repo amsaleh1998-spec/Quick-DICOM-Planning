@@ -39,6 +39,10 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   to change the length (the platform stays fixed). Dragging is damped (half speed) for fine control, and the value
   being changed is shown live on the implant for 5 seconds – click it to type an exact value. The selected implant has two rotation handles placed beyond its ends:
   **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform.
+- Implants can be renamed (name field, or double-click a name in the implant list); names appear in the views,
+  the angle table and saved projects.
+- While an implant is selected, the cross-sections follow it: moving, tilting or resizing it re-centres the middle
+  cross-section on the implant (scrolling to neighbouring sections stays free).
 - New implants can be placed parallel to the selected one, and any implant can be made parallel to another.
 - Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.
 

@@ -481,6 +481,27 @@ export class App {
   }
 
   implantChanged(_imp: Implant | null, _final = false) {
+    this.followSelected();
+    this.changed();
+  }
+
+  /**
+   * Keep the cross-sections on the selected implant: whenever it moves (or its
+   * shape changes) the middle cross-section jumps to its position on the curve.
+   * Scrolling the cross-sections afterwards is still free.
+   */
+  followSelected() {
+    const imp = this.selectedImplant();
+    if (!imp || !this.curve) return;
+    const f = toFrame(imp.center, this.O, this.frame);
+    this.s = clamp(this.curve.nearest(f[0], f[1]).s, 0, this.curve.length);
+  }
+
+  /** Rename an implant (empty names fall back to "Implant <id>"). */
+  renameImplant(id: number, name: string) {
+    const imp = this.implantById(id);
+    if (!imp) return;
+    imp.name = name.trim().slice(0, 40) || `Implant ${id}`;
     this.changed();
   }
 
@@ -493,6 +514,7 @@ export class App {
     const imp = this.implantById(id);
     if (!imp) return;
     setImplantAxis(imp, dot(imp.axis, this.frame[2]) >= 0 ? this.frame[2] : neg(this.frame[2]));
+    this.followSelected();
     this.changed();
   }
 
@@ -502,6 +524,7 @@ export class App {
     const ref = this.implantById(refId);
     if (!imp || !ref || imp === ref) return;
     setImplantAxis(imp, ref.axis.slice() as Vec3);
+    this.followSelected();
     this.changed();
   }
 
@@ -510,6 +533,7 @@ export class App {
     const imp = this.implantById(id);
     if (!imp) return;
     imp.axis = neg(imp.axis);
+    this.followSelected();
     this.changed();
   }
 
@@ -517,6 +541,7 @@ export class App {
     const imp = this.implantById(id);
     if (!imp) return;
     setImplantLength(imp, length);
+    this.followSelected();
     this.changed();
   }
 

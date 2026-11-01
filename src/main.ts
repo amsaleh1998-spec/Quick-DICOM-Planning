@@ -332,6 +332,22 @@ const defD = $<HTMLInputElement>('def-d');
 const defL = $<HTMLInputElement>('def-l');
 defD.onchange = () => (app.defaultDiameter = clampNum(defD.value, 2, 8, 4));
 defL.onchange = () => (app.defaultLength = clampNum(defL.value, 4, 20, 10));
+const impName = $<HTMLInputElement>('imp-name');
+impName.oninput = () => {
+  const imp = app.selectedImplant();
+  // keep typing smooth: store as typed, empty is fixed up on blur
+  if (imp) {
+    imp.name = impName.value.slice(0, 40);
+    app.changed();
+  }
+};
+impName.onblur = () => {
+  const imp = app.selectedImplant();
+  if (imp) app.renameImplant(imp.id, impName.value);
+};
+impName.onkeydown = (e) => {
+  if (e.key === 'Enter' || e.key === 'Escape') impName.blur();
+};
 const impD = $<HTMLInputElement>('imp-d');
 const impL = $<HTMLInputElement>('imp-l');
 impD.oninput = () => {
@@ -466,6 +482,7 @@ window.addEventListener('keydown', (e) => {
 
 // ---- state -> UI -----------------------------------------------------------------
 const implantList = $('implant-list');
+const listItems = new Map<number, HTMLLIElement>();
 function refreshUi() {
   const vol = app.vol;
   $('vol-info').innerHTML = vol
@@ -511,18 +528,43 @@ function refreshUi() {
   if (document.activeElement !== defD) defD.value = String(app.defaultDiameter);
   if (document.activeElement !== defL) defL.value = String(app.defaultLength);
 
-  implantList.innerHTML = '';
-  for (const imp of app.implants) {
-    const li = document.createElement('li');
-    li.className = imp.id === app.selectedId ? 'sel' : '';
+  // update the list in place (keeps elements alive so double-click works)
+  const seen = new Set<number>();
+  app.implants.forEach((imp, idx) => {
+    seen.add(imp.id);
+    let li = listItems.get(imp.id);
+    if (!li) {
+      li = document.createElement('li') as HTMLLIElement;
+      const id = imp.id;
+      li.title = 'Click to select · double-click to rename';
+      li.onclick = () => app.selectImplant(id, true);
+      li.ondblclick = () => {
+        app.selectImplant(id, true);
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            impName.focus();
+            impName.select();
+          }),
+        );
+      };
+      listItems.set(id, li);
+    }
     const ab = imp.abutment ? ` · MUA ${imp.abutment.angle}°/${imp.abutment.gingivalHeight}` : '';
-    li.innerHTML = `<span>${escapeHtml(imp.name)}</span><span class="dim">Ø${imp.diameter.toFixed(1)} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
-    li.onclick = () => app.selectImplant(imp.id, true);
-    implantList.append(li);
+    const html = `<span>${escapeHtml(imp.name)}</span><span class="dim">Ø${imp.diameter.toFixed(1)} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
+    if (li.innerHTML !== html) li.innerHTML = html;
+    li.className = imp.id === app.selectedId ? 'sel' : '';
+    if (implantList.children[idx] !== li) implantList.insertBefore(li, implantList.children[idx] ?? null);
+  });
+  for (const [id, li] of listItems) {
+    if (!seen.has(id)) {
+      li.remove();
+      listItems.delete(id);
+    }
   }
   const sel = app.selectedImplant();
   $('implant-edit').classList.toggle('hidden', !sel);
   if (sel) {
+    if (document.activeElement !== impName) impName.value = sel.name;
     if (document.activeElement !== impD) impD.value = sel.diameter.toFixed(1);
     if (document.activeElement !== impL) impL.value = sel.length.toFixed(1);
     const others = app.implants.filter((i) => i !== sel);
