@@ -1,9 +1,11 @@
-import type { App } from '../app';
+import type { App, SegTool } from '../app';
+import type { NewCut } from '../segment';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, Cylinder, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, platformOf } from '../implant';
-import { Vec2, Vec3, add, addScaled, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, toFrame } from '../math';
+import { Vec2, Vec3, add, addScaled, clamp, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, toFrame } from '../math';
 import { CropSpec, SlabSpec, sampleLine } from '../render';
 import { Plane, PlaneView, Pt, View, ViewState, drawLabel } from './View';
 import { ImplantEditor, projectedRadialAxial } from './implantEdit';
+import { composeSegmentation, drawNervesProjected } from './overlays';
 
 const CURVE_COLOR = '#4fb3ff';
 const CROSS_COLOR = '#c38cff';
@@ -513,6 +515,7 @@ export class PanoView extends View {
   constructor(app: App) {
     super(app, 'Panoramic', CURVE_COLOR);
     this.maxPixels = 320_000;
+    this.nervePointDepth = Infinity; // projection: all nerve points are shown
     // Slab / Slice switch inside the view
     this.modeSeg = document.createElement('div');
     this.modeSeg.className = 'view-seg';
@@ -537,6 +540,40 @@ export class PanoView extends View {
     if (!this.app.curve) return null;
     const pr = this.project(w);
     return Math.abs(pr.off - this.app.panoOffset) < 1 ? [pr.x, pr.y] : null;
+  }
+
+  protected supportsTool(_t: SegTool): boolean {
+    return !!this.app.curve;
+  }
+
+  override screenOf(w: Vec3): [number, number, number] | null {
+    if (!this.app.curve) return null;
+    const pr = this.project(w);
+    return [pr.x, pr.y, pr.off - this.app.panoOffset];
+  }
+
+  /** Cut drawn in the panoramic: a curved sheet following the arch (height profile along the curve). */
+  override makeCut(pts: Vec3[], depth: number | null): NewCut | null {
+    const app = this.app;
+    if (!app.curve) return null;
+    return {
+      kind: 'pano',
+      O: [...app.O] as Vec3,
+      F: app.frame.map((a) => [...a]) as [Vec3, Vec3, Vec3],
+      ctrl: app.curve.ctrl.map((c) => [...c] as Vec2),
+      pts: pts.map((w) => [this.project(w).s, toFrame(w, app.O, app.frame)[2]] as Vec2),
+      offset: app.panoOffset,
+      depth,
+    };
+  }
+
+  /** Dragging a nerve point keeps its buccal/lingual position. */
+  protected nervePointAt(p: Pt, old: Vec3): Vec3 | null {
+    const app = this.app;
+    if (!app.curve) return null;
+    const off = this.project(old).off;
+    const cp = app.curve.at(clamp(this.sAt(p[0]), 0, app.curve.length));
+    return fromFrame([cp.p[0] + cp.n[0] * off, cp.p[1] + cp.n[1] * off, this.cAt(p[1])], app.O, app.frame);
   }
 
   /** Distance measured on the developed panoramic surface. */
@@ -649,7 +686,39 @@ export class PanoView extends View {
   }
 
   protected composeExtraKey() {
-    return '';
+    return this.app.segKey();
+  }
+
+  /** Segment tint and cut traces on the panoramic surface (at the slice position). */
+  protected composePixels(rgba: Uint8ClampedArray, w: number, h: number) {
+    const app = this.app;
+    const curve = app.curve;
+    if (!curve || (!app.seg.cuts.length && !app.seg.segments.some((s) => s.voxels))) return;
+    const k = 1 / this.imgScale;
+    const F = app.frame;
+    const off = app.panoOffset;
+    // world position of every column at height 0, and the height of every row
+    const base = new Float64Array(w * 3);
+    const ok = new Uint8Array(w);
+    for (let i = 0; i < w; i++) {
+      const s = this.sAt((i + 0.5) * k);
+      if (s < 0 || s > curve.length) continue;
+      const cp = curve.at(s);
+      const b = fromFrame([cp.p[0] + cp.n[0] * off, cp.p[1] + cp.n[1] * off, 0], app.O, F);
+      base.set(b, i * 3);
+      ok[i] = 1;
+    }
+    const c0 = this.cAt(0.5 * k);
+    const dc = -this.vs.scale * k;
+    const z = F[2];
+    composeSegmentation(app, rgba, w, h, (i, j, out) => {
+      if (!ok[i]) return false;
+      const c = c0 + dc * j;
+      out[0] = base[i * 3] + z[0] * c;
+      out[1] = base[i * 3 + 1] + z[1] * c;
+      out[2] = base[i * 3 + 2] + z[2] * c;
+      return true;
+    });
   }
 
   // ---- interaction --------------------------------------------------------
@@ -813,6 +882,7 @@ export class PanoView extends View {
       const ymin = Math.min(a.y, b.y) - r * 0.3;
       if (!t || ymin < t.y) tops.set(imp.id, { x: (a.x + b.x) / 2, y: ymin });
     }
+    drawNervesProjected(app, o, (w) => this.project(w), this.vs.scale);
     this.editor.draw(o);
     for (const imp of app.implants) {
       const t = tops.get(imp.id)!;
