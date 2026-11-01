@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant } from '../implant';
+import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant } from '../implant';
 import { Vec3, add, cross, dot, length, rotate, scale, sub } from '../math';
 import { CropSpec, SlabSpec, samplePlane, windowToBytes } from '../render';
 
@@ -44,6 +44,8 @@ export abstract class View {
   private drag: DragKind = 'none';
   private last: Pt = [0, 0];
   private downPos: Pt = [0, 0];
+  /** Shift+left drag pans (disabled where Shift has another meaning). */
+  protected shiftPans = true;
   vs: ViewState;
 
   constructor(
@@ -60,7 +62,13 @@ export abstract class View {
     this.imgCanvas.className = 'img';
     this.ovCanvas = document.createElement('canvas');
     this.ovCanvas.className = 'ov';
-    this.el.append(this.imgCanvas, this.ovCanvas);
+    const maxBtn = document.createElement('button');
+    maxBtn.className = 'max-btn';
+    maxBtn.title = 'Maximize / restore (M)';
+    maxBtn.innerHTML =
+      '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+    maxBtn.onclick = () => this.app.toggleMaximize(this);
+    this.el.append(this.imgCanvas, this.ovCanvas, maxBtn);
     this.imgCtx = this.imgCanvas.getContext('2d')!;
     this.ovCtx = this.ovCanvas.getContext('2d')!;
     new ResizeObserver(() => this.resize()).observe(this.el);
@@ -115,7 +123,7 @@ export abstract class View {
   protected onLeftUp(_p: Pt, _e: PointerEvent, _moved: boolean): void {}
   protected onScroll(_dir: number, _p: Pt, _e: WheelEvent): void {}
   protected onDoubleClick(_p: Pt, _e: MouseEvent): void {}
-  protected onHover(_p: Pt): void {}
+  protected onHover(_p: Pt, _e: PointerEvent): void {}
   /** World point under the cursor for the status bar. */
   worldAt(_p: Pt): Vec3 | null {
     return null;
@@ -203,7 +211,7 @@ export abstract class View {
       this.downPos = p;
       this.app.activeView = this;
       if (e.button === 2) this.drag = 'wl';
-      else if (e.button === 1 || (e.button === 0 && e.shiftKey)) this.drag = 'pan';
+      else if (e.button === 1 || (e.button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey)))) this.drag = 'pan';
       else if (e.button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
       if (this.drag !== 'none') {
         c.setPointerCapture(e.pointerId);
@@ -230,9 +238,10 @@ export abstract class View {
           this.onLeftDrag(p, this.last, e);
           break;
         default:
-          this.onHover(p);
+          this.onHover(p, e);
       }
       this.last = p;
+      this.app.activeView = this;
       this.app.reportCursor(this, p);
     });
     const end = (e: PointerEvent) => {
@@ -350,7 +359,7 @@ export abstract class PlaneView extends View {
     return this.app.implantsKey();
   }
 
-  /** Rasterise exact implant/plane intersections into the image. */
+  /** Rasterise exact implant/abutment intersections with the plane into the image. */
   protected composePixels(rgba: Uint8ClampedArray, w: number, h: number) {
     const pl = this.currentPlane();
     if (!pl || !this.app.implants.length) return;
@@ -361,14 +370,15 @@ export abstract class PlaneView extends View {
     const du = scale(pl.u, pxmm);
     const dv = scale(pl.v, pxmm);
     const edge = Math.max(0.12, pxmm * 1.3);
-    for (const imp of this.app.implants) {
-      const r = imp.diameter / 2;
-      const hl = imp.length / 2;
-      if (Math.abs(dot(sub(imp.center, pl.center), n)) > hl + r) continue;
-      const sel = imp.id === this.app.selectedId;
-      const col = sel ? IMPLANT_SELECTED_COLOR : IMPLANT_COLOR;
+    for (const part of this.app.allParts()) {
+      const r = part.radius;
+      const hl = part.half;
+      if (Math.abs(dot(sub(part.center, pl.center), n)) > hl + r) continue;
+      const sel = part.implant.id === this.app.selectedId;
+      const isImplant = part.kind === 'implant';
+      const col = isImplant ? (sel ? IMPLANT_SELECTED_COLOR : IMPLANT_COLOR) : sel ? ABUTMENT_SELECTED_COLOR : ABUTMENT_COLOR;
       // bounding box in image pixels
-      const sc = this.worldToScreen(imp.center, pl)!;
+      const sc = this.worldToScreen(part.center, pl)!;
       const R = Math.hypot(hl, r) / pxmm + 2;
       const cx = sc[0] / k;
       const cy = sc[1] / k;
@@ -376,9 +386,11 @@ export abstract class PlaneView extends View {
       const i1 = Math.min(w - 1, Math.ceil(cx + R));
       const j0 = Math.max(0, Math.floor(cy - R));
       const j1 = Math.min(h - 1, Math.ceil(cy + R));
-      const a = imp.axis;
-      const c = imp.center;
+      const a = part.axis;
+      const c = part.center;
       const r2 = r * r;
+      // platform band (coronal 0.6 mm of the implant body) drawn brighter
+      const platformH = -hl + 0.6;
       for (let j = j0; j <= j1; j++) {
         let qx = p0[0] + du[0] * i0 + dv[0] * j - c[0];
         let qy = p0[1] + du[1] * i0 + dv[1] * j - c[1];
@@ -390,7 +402,8 @@ export abstract class PlaneView extends View {
             const rad2 = qx * qx + qy * qy + qz * qz - hh * hh;
             if (rad2 <= r2) {
               const d = Math.max(Math.sqrt(Math.max(0, rad2)) - r, ah - hl);
-              const alpha = d > -edge ? 0.95 : 0.32;
+              let alpha = d > -edge ? 0.95 : isImplant ? 0.32 : 0.45;
+              if (isImplant && hh < platformH) alpha = Math.max(alpha, 0.7);
               const o = (j * w + i) * 4;
               rgba[o] += (col[0] - rgba[o]) * alpha;
               rgba[o + 1] += (col[1] - rgba[o + 1]) * alpha;
@@ -433,15 +446,18 @@ export abstract class PlaneView extends View {
     if (!w) return null;
     const tol = 4 * this.vs.scale;
     let best: { imp: Implant; mode: 'move' | 'rotate'; d: number } | null = null;
-    for (const imp of this.app.implants) {
-      const q = sub(w, imp.center);
-      const h = dot(q, imp.axis);
-      const rad = length(sub(q, scale(imp.axis, h)));
-      if (Math.abs(h) <= imp.length / 2 + tol && rad <= imp.diameter / 2 + tol) {
-        const capZone = Math.max(1.2, imp.length * 0.2);
-        const mode = Math.abs(h) > imp.length / 2 - capZone ? 'rotate' : 'move';
-        const d = rad;
-        if (!best || d < best.d) best = { imp, mode, d };
+    for (const part of this.app.allParts()) {
+      const q = sub(w, part.center);
+      const h = dot(q, part.axis);
+      const rad = length(sub(q, scale(part.axis, h)));
+      if (Math.abs(h) <= part.half + tol && rad <= part.radius + tol) {
+        let mode: 'move' | 'rotate' = 'move';
+        if (part.kind === 'implant') {
+          const capZone = Math.max(1.2, part.half * 0.4);
+          if (Math.abs(h) > part.half - capZone) mode = 'rotate';
+        }
+        const d = rad + (part.kind === 'implant' ? 0 : 0.5);
+        if (!best || d < best.d) best = { imp: part.implant, mode, d };
       }
     }
     return best;

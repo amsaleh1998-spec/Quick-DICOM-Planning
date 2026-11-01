@@ -1,4 +1,5 @@
-import { App, Mode, MprTool } from './app';
+import { App, Jaw, Mode, MprTool, RenderMode } from './app';
+import { MUA_HEIGHTS } from './implant';
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
 import { createPhantom } from './volume';
 
@@ -21,6 +22,19 @@ app.pano.el.style.gridArea = 'pano';
 app.crossViews.forEach((v, i) => (v.el.style.gridArea = `cs${i + 1}`));
 app.tang.el.style.gridArea = 'tang';
 planLayout.append(app.planAxial.el, app.pano.el, ...app.crossViews.map((v) => v.el), app.tang.el);
+app.view3d.el.style.gridArea = 'v3d';
+mprLayout.append(app.view3d.el);
+
+/** The 3D view lives in whichever layout is active. */
+function moveView3d(target: HTMLElement) {
+  const el = app.view3d.el;
+  if (el.parentElement === target) return;
+  if (el.classList.contains('max')) {
+    el.classList.remove('max');
+    el.parentElement?.classList.remove('has-max');
+  }
+  target.append(el);
+}
 
 // ---- status / loading ---------------------------------------------------------
 const statusMsg = $('status-msg');
@@ -112,6 +126,7 @@ function setMode(m: Mode) {
   planLayout.classList.toggle('hidden', m !== 'plan');
   $('panel-mpr').classList.toggle('hidden', m !== 'mpr');
   $('panel-plan').classList.toggle('hidden', m !== 'plan');
+  moveView3d(m === 'mpr' ? mprLayout : planLayout);
   app.setMode(m);
 }
 tabButtons.forEach((b) => (b.onclick = () => setMode(b.dataset.mode as Mode)));
@@ -191,11 +206,96 @@ impD.oninput = () => {
 };
 impL.oninput = () => {
   const imp = app.selectedImplant();
-  if (imp && impL.value) {
-    imp.length = clampNum(impL.value, 2, 30, imp.length);
+  if (imp && impL.value) app.setLength(imp.id, clampNum(impL.value, 2, 30, imp.length));
+};
+
+// jaw / parallel placement
+const jawButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#jaw-seg button'));
+jawButtons.forEach(
+  (b) =>
+    (b.onclick = () => {
+      app.jaw = b.dataset.jaw as Jaw;
+      app.changed();
+    }),
+);
+const placeParallel = $<HTMLInputElement>('place-parallel');
+placeParallel.onchange = () => (app.placeParallel = placeParallel.checked);
+const parallelTo = $<HTMLSelectElement>('parallel-to');
+$('btn-parallel').onclick = () => {
+  if (app.selectedId !== null && parallelTo.value) app.makeParallel(app.selectedId, Number(parallelTo.value));
+};
+$('btn-flip').onclick = () => app.selectedId !== null && app.flipImplant(app.selectedId);
+
+// abutments
+const abType = $<HTMLSelectElement>('ab-type');
+const abHeight = $<HTMLSelectElement>('ab-height');
+const abRot = $<HTMLInputElement>('ab-rot');
+abHeight.innerHTML = MUA_HEIGHTS.map((h) => `<option value="${h}">${h}</option>`).join('');
+abHeight.value = '2';
+abType.onchange = () => {
+  const imp = app.selectedImplant();
+  if (!imp) return;
+  if (abType.value === 'none') imp.abutment = null;
+  else {
+    const angle = Number(abType.value);
+    imp.abutment = { angle, gingivalHeight: imp.abutment?.gingivalHeight ?? Number(abHeight.value), rotation: imp.abutment?.rotation ?? 0 };
+  }
+  app.changed();
+};
+abHeight.onchange = () => {
+  const imp = app.selectedImplant();
+  if (imp?.abutment) {
+    imp.abutment.gingivalHeight = Number(abHeight.value);
     app.changed();
   }
 };
+abRot.oninput = () => {
+  const imp = app.selectedImplant();
+  if (imp?.abutment) {
+    imp.abutment.rotation = Number(abRot.value);
+    app.changed();
+  }
+};
+$('btn-ab-auto').onclick = () => app.selectedId !== null && app.autoAlignAbutment(app.selectedId);
+
+// ---- 3D panel ------------------------------------------------------------------
+const vrButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#vr-mode button'));
+vrButtons.forEach(
+  (b) =>
+    (b.onclick = () => {
+      app.vr.mode = b.dataset.vr as RenderMode;
+      app.changed();
+    }),
+);
+const vrLo = $<HTMLInputElement>('vr-lo');
+const vrHi = $<HTMLInputElement>('vr-hi');
+const vrLoNum = $<HTMLInputElement>('vr-lo-num');
+const vrHiNum = $<HTMLInputElement>('vr-hi-num');
+const setLo = (v: number) => {
+  if (!Number.isFinite(v)) return;
+  app.vr.lo = v;
+  if (app.vr.hi < v) app.vr.hi = v;
+  app.changed();
+};
+const setHi = (v: number) => {
+  if (!Number.isFinite(v)) return;
+  app.vr.hi = v;
+  if (app.vr.lo > v) app.vr.lo = v;
+  app.changed();
+};
+vrLo.oninput = () => setLo(Number(vrLo.value));
+vrHi.oninput = () => setHi(Number(vrHi.value));
+vrLoNum.onchange = () => setLo(Number(vrLoNum.value));
+vrHiNum.onchange = () => setHi(Number(vrHiNum.value));
+$('btn-vr-auto').onclick = () => {
+  if (!app.vol) return;
+  app.vr.lo = Math.round(app.vol.boneThreshold());
+  app.vr.hi = app.vol.max;
+  app.changed();
+};
+document.querySelectorAll<HTMLButtonElement>('.presets button').forEach(
+  (b) => (b.onclick = () => app.view3d.setPreset(b.dataset.preset as 'front')),
+);
 $('btn-upright').onclick = () => app.selectedId !== null && app.uprightImplant(app.selectedId);
 $('btn-deselect').onclick = () => app.selectImplant(null, false);
 $('btn-delete').onclick = () => app.selectedId !== null && app.deleteImplant(app.selectedId);
@@ -220,6 +320,8 @@ window.addEventListener('keydown', (e) => {
     app.deleteImplant(app.selectedId);
   } else if (e.key === 'f' || e.key === 'F') {
     app.fitAll();
+  } else if ((e.key === 'm' || e.key === 'M') && app.activeView) {
+    app.toggleMaximize(app.activeView);
   }
 });
 
@@ -261,7 +363,8 @@ function refreshUi() {
   for (const imp of app.implants) {
     const li = document.createElement('li');
     li.className = imp.id === app.selectedId ? 'sel' : '';
-    li.innerHTML = `<span>${escapeHtml(imp.name)}</span><span class="dim">Ø${imp.diameter.toFixed(1)} × ${imp.length.toFixed(1)}</span>`;
+    const ab = imp.abutment ? ` · MUA ${imp.abutment.angle}°/${imp.abutment.gingivalHeight}` : '';
+    li.innerHTML = `<span>${escapeHtml(imp.name)}</span><span class="dim">Ø${imp.diameter.toFixed(1)} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
     li.onclick = () => app.selectImplant(imp.id, true);
     implantList.append(li);
   }
@@ -272,9 +375,56 @@ function refreshUi() {
     if (document.activeElement !== impL) impL.value = sel.length.toFixed(1);
     const others = app.implants.filter((i) => i !== sel);
     const lines = [`Inclination ${app.implantTilt(sel).toFixed(1)}° from vertical`];
-    for (const o of others) lines.push(`∠ to ${o.name}: ${app.implantAngle(sel, o).toFixed(1)}°`);
+    if (sel.abutment) {
+      const d = app.prostheticAxis(sel);
+      const t = (Math.acos(Math.min(1, Math.abs(d[0] * app.frame[2][0] + d[1] * app.frame[2][1] + d[2] * app.frame[2][2]))) * 180) / Math.PI;
+      lines.push(`Abutment axis ${t.toFixed(1)}° from vertical`);
+    }
     $('imp-info').innerHTML = lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
+    // parallel-to options
+    const prev = parallelTo.value;
+    parallelTo.innerHTML = others.map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('');
+    if (others.some((o) => String(o.id) === prev)) parallelTo.value = prev;
+    $('parallel-row').classList.toggle('hidden', !others.length);
+    // abutment
+    abType.value = sel.abutment ? String(sel.abutment.angle) : 'none';
+    abHeight.disabled = !sel.abutment;
+    if (sel.abutment) abHeight.value = String(sel.abutment.gingivalHeight);
+    $('ab-rot-row').classList.toggle('hidden', !sel.abutment);
+    if (sel.abutment && document.activeElement !== abRot) abRot.value = String(sel.abutment.rotation);
+    $('ab-rot-val').textContent = sel.abutment ? `${sel.abutment.rotation}°` : '';
   }
+  jawButtons.forEach((b) => b.classList.toggle('active', b.dataset.jaw === app.jaw));
+  placeParallel.checked = app.placeParallel;
+
+  // angle table
+  const rows = app.angleTable();
+  $('angles-box').classList.toggle('hidden', !rows.length);
+  const anyAb = rows.some((r) => r.abutment !== null);
+  $('angle-table').innerHTML =
+    `<tr><th>Implants</th><th>Angle</th>${anyAb ? '<th>Abutments</th>' : ''}</tr>` +
+    rows
+      .map(
+        (r) =>
+          `<tr><td>${escapeHtml(r.a.name.replace('Implant ', '#'))} – ${escapeHtml(r.b.name.replace('Implant ', '#'))}</td><td>${r.implant.toFixed(1)}°</td>${
+            anyAb ? `<td>${r.abutment === null ? '–' : r.abutment.toFixed(1) + '°'}</td>` : ''
+          }</tr>`,
+      )
+      .join('');
+
+  // 3D
+  vrButtons.forEach((b) => b.classList.toggle('active', b.dataset.vr === app.vr.mode));
+  if (vol) {
+    for (const r of [vrLo, vrHi]) {
+      r.min = String(vol.min);
+      r.max = String(vol.max);
+      r.step = String(Math.max(1, Math.round((vol.max - vol.min) / 500)));
+    }
+  }
+  if (document.activeElement !== vrLo) vrLo.value = String(app.vr.lo);
+  if (document.activeElement !== vrHi) vrHi.value = String(app.vr.hi);
+  if (document.activeElement !== vrLoNum) vrLoNum.value = String(Math.round(app.vr.lo));
+  if (document.activeElement !== vrHiNum) vrHiNum.value = String(Math.round(app.vr.hi));
 }
 app.onStateChange = refreshUi;
 

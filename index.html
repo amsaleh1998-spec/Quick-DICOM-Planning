@@ -55,10 +55,12 @@
               <summary>Mouse</summary>
               <ul class="help">
                 <li><b>Left click/drag</b> – move crosshair</li>
+                <li><b>Hold Shift</b> – crosshair follows the mouse</li>
                 <li><b>Ctrl+Alt+drag</b> (or Rotate tool) – rotate the other planes around this view</li>
                 <li><b>Crop tool</b> – drag the blue box edges</li>
                 <li><b>Wheel</b> – scroll slices</li>
-                <li><b>Ctrl+wheel</b> – zoom · <b>Shift/middle drag</b> – pan</li>
+                <li><b>Ctrl+wheel</b> – zoom · <b>Alt/middle drag</b> – pan</li>
+                <li><b>M</b> or <b>⤢</b> – maximize / restore view</li>
                 <li><b>Right drag</b> – window / level</li>
               </ul>
             </details>
@@ -80,7 +82,12 @@
             <h3>Implants</h3>
             <div class="row">
               <button id="btn-add-implant" class="primary">Add implant</button>
+              <div class="seg small" id="jaw-seg" title="Default implant direction (apex down in the mandible, up in the maxilla)">
+                <button data-jaw="mandible">Mandible</button>
+                <button data-jaw="maxilla">Maxilla</button>
+              </div>
             </div>
+            <label class="check small"><input id="place-parallel" type="checkbox" checked /> New implant parallel to the selected one</label>
             <div class="row small">
               <label>Default Ø <input id="def-d" type="number" step="0.1" min="2" max="8" /> mm</label>
               <label>L <input id="def-l" type="number" step="0.5" min="4" max="20" /> mm</label>
@@ -92,13 +99,41 @@
               </div>
               <div class="row">
                 <label>Length <input id="imp-l" type="number" step="0.5" min="4" max="20" /> mm</label>
+                <span class="muted small">(apical side)</span>
               </div>
               <div id="imp-info" class="muted small"></div>
+              <div class="row" id="parallel-row">
+                <label class="small">Parallel to <select id="parallel-to"></select></label>
+                <button id="btn-parallel">Apply</button>
+              </div>
               <div class="row">
                 <button id="btn-upright">Make vertical</button>
+                <button id="btn-flip" title="Swap platform and apex">Flip</button>
+              </div>
+              <h4>Abutment (MUA Ø4.8)</h4>
+              <div class="row">
+                <select id="ab-type">
+                  <option value="none">None</option>
+                  <option value="0">Straight MUA 0°</option>
+                  <option value="17">Angled MUA 17°</option>
+                  <option value="30">Angled MUA 30°</option>
+                </select>
+                <label class="small">GH <select id="ab-height"></select> mm</label>
+              </div>
+              <div id="ab-rot-row">
+                <label class="slider">Rotation (0° = buccal) <span id="ab-rot-val"></span>
+                  <input id="ab-rot" type="range" min="0" max="355" step="5" />
+                </label>
+                <div class="row"><button id="btn-ab-auto" title="Choose angulation and rotation that bring the abutment closest to vertical">Auto-align to vertical</button></div>
+              </div>
+              <div class="row">
                 <button id="btn-deselect">Deselect</button>
                 <button id="btn-delete" class="danger">Delete</button>
               </div>
+            </div>
+            <div id="angles-box" class="hidden">
+              <h3>Angulation</h3>
+              <table id="angle-table"></table>
             </div>
             <details open>
               <summary>Mouse</summary>
@@ -106,11 +141,38 @@
                 <li><b>Axial</b>: wheel = level, drag curve points, dbl-click curve = add / point = remove</li>
                 <li><b>Panoramic / cross-sections</b>: wheel = move along the curve, click = jump</li>
                 <li><b>Tangential</b>: wheel = rotate 360° (around the selected implant)</li>
-                <li><b>Implant</b>: drag body = move, drag near an end = tilt</li>
+                <li><b>Implant</b>: drag body = move, drag near an end = tilt (bright band = platform)</li>
                 <li><b>Esc</b> deselect / cancel · <b>Del</b> delete implant</li>
-                <li><b>Ctrl+wheel</b> zoom · <b>Shift/middle drag</b> pan · <b>Right drag</b> W/L</li>
+                <li><b>Ctrl+wheel</b> zoom · <b>Shift/Alt/middle drag</b> pan · <b>Right drag</b> W/L · <b>M</b> maximize</li>
               </ul>
             </details>
+          </section>
+
+          <section id="panel-3d" class="panel">
+            <h3>3D render</h3>
+            <div class="seg" id="vr-mode">
+              <button data-vr="surface">Surface</button>
+              <button data-vr="translucent">Translucent</button>
+              <button data-vr="mip">MIP</button>
+            </div>
+            <label class="slider">Lower threshold <span><input id="vr-lo-num" type="number" step="10" /></span>
+              <input id="vr-lo" type="range" />
+            </label>
+            <label class="slider">Upper threshold <span><input id="vr-hi-num" type="number" step="10" /></span>
+              <input id="vr-hi" type="range" />
+            </label>
+            <div class="row">
+              <button id="btn-vr-auto" title="Bone threshold from the histogram">Auto threshold</button>
+            </div>
+            <div class="row presets">
+              <button data-preset="front">Front</button>
+              <button data-preset="left">Left</button>
+              <button data-preset="right">Right</button>
+              <button data-preset="back">Back</button>
+              <button data-preset="top">Top</button>
+              <button data-preset="bottom">Bottom</button>
+            </div>
+            <div class="muted small">Drag = rotate · wheel = zoom · Alt/Shift drag = pan · double-click = reset. The crop box also clips the 3D view.</div>
           </section>
         </aside>
 

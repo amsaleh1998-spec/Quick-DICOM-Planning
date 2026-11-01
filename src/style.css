@@ -209,8 +209,14 @@ summary {
   border-color: #ffb81c;
   background: rgba(255, 184, 28, 0.12);
 }
+#implant-list li > span:first-child {
+  white-space: nowrap;
+  margin-right: 8px;
+}
 #implant-list li .dim {
   color: var(--muted);
+  font-size: 11px;
+  text-align: right;
 }
 #implant-edit {
   border: 1px solid #5a4410;
@@ -220,6 +226,54 @@ summary {
 }
 #implant-edit label {
   color: var(--muted);
+}
+#implant-edit h4 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+select {
+  background: #0e1420;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 4px;
+  font: inherit;
+}
+.check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  margin: 6px 0;
+}
+.slider span input {
+  width: 72px;
+  padding: 1px 4px;
+}
+.presets button {
+  flex: 1 1 28%;
+  padding: 4px 6px;
+}
+#angle-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+#angle-table th,
+#angle-table td {
+  text-align: left;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+}
+#angle-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+.seg.small button {
+  padding: 4px 8px;
+  font-size: 12px;
 }
 
 #viewport {
@@ -236,18 +290,44 @@ summary {
   background: #1a2130;
 }
 #layout-mpr {
-  grid-template-columns: 1.25fr 1fr;
+  grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
   grid-template-areas:
     'ax co'
-    'ax sa';
+    'sa v3d';
 }
 #layout-plan {
-  grid-template-columns: 1fr 1fr 1fr 1.15fr;
+  grid-template-columns: repeat(20, 1fr);
   grid-template-rows: 1fr 1.15fr;
   grid-template-areas:
-    'pax pano pano pano'
-    'cs1 cs2 cs3 tang';
+    'pax pax pax pax pax pano pano pano pano pano pano pano pano pano pano pano pano pano pano pano'
+    'cs1 cs1 cs1 cs1 cs2 cs2 cs2 cs2 cs3 cs3 cs3 cs3 tang tang tang tang v3d v3d v3d v3d';
+}
+.layout.has-max > .view:not(.max) {
+  display: none;
+}
+.layout.has-max > .view.max {
+  grid-area: 1 / 1 / -1 / -1 !important;
+}
+.max-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 28, 42, 0.75);
+  border-color: rgba(60, 76, 104, 0.8);
+  color: #b8c4d8;
+  z-index: 2;
+  opacity: 0.65;
+}
+.view:hover .max-btn,
+.view.max .max-btn {
+  opacity: 1;
 }
 
 .view {

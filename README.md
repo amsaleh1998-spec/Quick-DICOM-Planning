@@ -12,12 +12,17 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - "Demo volume" generates a synthetic mandible (with a missing molar and a slightly tilted occlusal plane) to try the app.
 
 **MPR / Reorient**
-- Axial, coronal and sagittal views with a linked crosshair.
+- Axial, coronal and sagittal views with a linked crosshair. Hold **Shift** to make the crosshair follow the mouse.
 - **Ctrl+Alt+drag** in a view (or the *Rotate* tool) rotates the other two planes around that view's axis, like 3D Slicer.
   *Straighten views* shows the rotated frame axis-aligned in all views; *Reset rotation* undoes it.
 - **Crop** tool: drag the edges of the blue box in any view.
 - **Apply rotate + crop** resamples the volume into the rotated, cropped frame (smaller and faster to work with).
   Any existing curve/implants are carried over.
+
+**3D render** (WebGL2, in both layouts)
+- GPU ray-casting with adjustable lower/upper thresholds: *Surface* (shaded iso-surface), *Translucent* and *MIP*.
+- Automatic bone threshold from the histogram, view presets (front/back/left/right/top/bottom), drag to orbit.
+- Implants and abutments are drawn in 3D; the crop box clips the rendering (e.g. to hide the opposing jaw).
 
 **Implant planning**
 - Axial view: draw the panoramic curve (click along the arch from patient right to left, double-click/Enter to finish).
@@ -26,11 +31,18 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - Three cross-sections perpendicular to the curve (adjustable spacing); wheel moves them along the curve.
 - Tangential view: a plane tangential to the curve that rotates 360° on mouse wheel.
   When an implant is selected the view pivots around the implant axis, keeping the implant vertical.
-- Implants are simple cylinders: *Add implant* then click in any planning view. Drag the body to move, drag near an end to tilt
-  (in the plane of that view). Diameter and length are editable; inclination and angles between implants are shown.
+- Implants are simple cylinders with a platform (coronal, shown as a bright band) and an apex. *Add implant* then click in
+  any planning view; the Mandible/Maxilla switch sets which way the apex points. Drag the body to move, drag near an end
+  to tilt (in the plane of that view). Changing the length keeps the platform fixed and only extends the apical part.
+- New implants can be placed parallel to the selected one, and any implant can be made parallel to another.
+- Angulation: inclination of each implant, a pairwise angle table, and angles between neighbouring implants in the panoramic.
+- Abutments: generic Ø4.8 mm multi-unit abutments (straight, 17°, 30°) with 1–5 mm gingival height and adjustable
+  rotation; *Auto-align* picks angulation + rotation that bring the abutment closest to vertical. Abutment-to-abutment
+  angles are listed next to the implant angles.
 
 **Common mouse controls**: wheel = scroll / navigate · Ctrl+wheel = zoom · Shift+drag or middle-drag = pan ·
-right-drag = window/level · F = fit all views · Esc = cancel / deselect · Del = delete selected implant.
+Alt/middle-drag = pan (also Shift-drag outside the MPR) · right-drag = window/level · F = fit all views ·
+M or the ⤢ button = maximize/restore a view · Esc = cancel / deselect · Del = delete selected implant.
 
 ## Development
 
@@ -54,6 +66,8 @@ npm run build      # static build in dist/ (relative paths, can be hosted anywhe
 | `src/views/View.ts` | Base view (canvas, zoom/pan/W-L), planar view, implant rasterisation & dragging |
 | `src/views/MprView.ts` | Axial/coronal/sagittal MPR with Slicer-style rotation and crop box |
 | `src/views/PlanViews.ts` | Planning axial, panoramic, cross-section and tangential views |
+| `src/views/View3D.ts` | WebGL2 volume ray-caster with thresholds and ray-traced implants |
+| `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
 
 ## Limitations
 
