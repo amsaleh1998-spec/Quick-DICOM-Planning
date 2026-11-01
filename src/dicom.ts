@@ -65,22 +65,73 @@ function lookupFloats(ds: DataSet, tag: string, groupSeqs: string[]): number[] |
   return undefined;
 }
 
-function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
-  const bytes = new Uint8Array(buffer);
-  let ds: DataSet;
-  try {
-    ds = dicomParser.parseDicom(bytes);
-  } catch {
-    // Some exports have no preamble/meta header – try raw implicit little endian.
+const IMPLICIT_LE = '1.2.840.10008.1.2';
+const EXPLICIT_LE = '1.2.840.10008.1.2.1';
+const EXPLICIT_BE = '1.2.840.10008.1.2.2';
+const VRS = new Set(
+  'AE AS AT CS DA DS DT FD FL IS LO LT OB OD OF OL OV OW PN SH SL SQ SS ST SV TM UC UI UL UN UR US UT UV'.split(' '),
+);
+
+/** Files that are certainly not DICOM (macOS metadata, thumbnails …) – skipped without parsing. */
+export function isIgnorableFile(name: string): boolean {
+  const base = name.split('/').pop() ?? name;
+  return base.startsWith('._') || base === '.DS_Store' || base === 'Thumbs.db' || /\.(jpe?g|png|gif|bmp|txt|xml|html?|pdf|exe|dll|ini|inf|db|js|css|json|zip|qdp)$/i.test(base);
+}
+
+const hasPart10Prefix = (b: Uint8Array) => b.length > 132 && b[128] === 0x44 && b[129] === 0x49 && b[130] === 0x43 && b[131] === 0x4d; // "DICM"
+
+/**
+ * Guess the encoding of a "raw" DICOM file (no 128-byte preamble / DICM marker,
+ * as written by many scanners, often without a file extension). A DICOM data
+ * set starts with a small, even group number (0000–0028); explicit-VR files
+ * carry a two-letter VR code in bytes 4–5.
+ */
+function sniffRawSyntax(b: Uint8Array): string | null {
+  if (b.length < 16) return null;
+  const groupLE = b[0] | (b[1] << 8);
+  const groupBE = (b[0] << 8) | b[1];
+  const plausible = (g: number) => g <= 0x0028 && g % 2 === 0;
+  const vr = String.fromCharCode(b[4], b[5]);
+  if (VRS.has(vr)) {
+    if (plausible(groupLE)) return EXPLICIT_LE;
+    if (plausible(groupBE)) return EXPLICIT_BE;
+  }
+  return plausible(groupLE) ? IMPLICIT_LE : null;
+}
+
+/** Parse a DICOM file with or without the Part 10 header; returns data set + transfer syntax. */
+function parseAny(bytes: Uint8Array): { ds: DataSet; ts: string } | null {
+  if (hasPart10Prefix(bytes)) {
     try {
-      ds = dicomParser.parseDicom(bytes, { TransferSyntaxUID: '1.2.840.10008.1.2' });
+      const ds = dicomParser.parseDicom(bytes);
+      return { ds, ts: str(ds, 'x00020010') ?? IMPLICIT_LE };
     } catch {
-      return [];
+      // fall through: try the data set after the header as a raw stream
     }
   }
+  const sniffed = sniffRawSyntax(bytes);
+  if (!sniffed) return null;
+  // try the sniffed syntax first, then the other little-endian flavour
+  const order = sniffed === IMPLICIT_LE ? [IMPLICIT_LE, EXPLICIT_LE] : [sniffed, IMPLICIT_LE];
+  for (const ts of order) {
+    try {
+      const ds = dicomParser.parseDicom(bytes, { TransferSyntaxUID: ts });
+      if (ds.elements.x7fe00010 || ds.elements.x00280010) return { ds, ts };
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
+  const bytes = new Uint8Array(buffer);
+  const parsed = parseAny(bytes);
+  if (!parsed) return [];
+  const { ds } = parsed;
   const pixelEl = ds.elements.x7fe00010;
   if (!pixelEl) return [];
-  const ts = str(ds, 'x00020010') ?? '1.2.840.10008.1.2';
+  const ts = parsed.ts;
   if (!UNCOMPRESSED.has(ts) || pixelEl.encapsulatedPixelData) {
     throw new Error(
       `"${name}" uses a compressed transfer syntax (${ts}). Only uncompressed DICOM is supported – export uncompressed or convert (e.g. "gdcmconv --raw").`,
@@ -189,12 +240,19 @@ function dominantAxis(v: Vec3): [number, number] {
 export async function loadDicomFiles(files: File[], progress: LoadProgress): Promise<Volume> {
   const slices: Slice[] = [];
   let compressedError: Error | null = null;
+  let ignored = 0;
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    if (f.size < 132 && !/\.dcm$/i.test(f.name)) continue;
+    // Any file name is accepted (many scanners write DICOM files without an extension).
+    if (f.size < 64 || isIgnorableFile(f.webkitRelativePath || f.name)) {
+      ignored++;
+      continue;
+    }
     try {
       const buf = await f.arrayBuffer();
-      slices.push(...parseFile(f.name, buf));
+      const got = parseFile(f.name, buf);
+      if (!got.length) ignored++;
+      slices.push(...got);
     } catch (e) {
       compressedError = e as Error;
     }
@@ -204,7 +262,7 @@ export async function loadDicomFiles(files: File[], progress: LoadProgress): Pro
     }
   }
   if (!slices.length) {
-    throw compressedError ?? new Error('No DICOM images found in the selected files.');
+    throw compressedError ?? new Error(`No DICOM images found in the selected files (${files.length} checked).`);
   }
 
   // Pick the series with the most slices of the most common size.
@@ -315,7 +373,10 @@ export async function loadDicomFiles(files: File[], progress: LoadProgress): Pro
     }
   }
   if (clipped) console.warn('Some voxel values were clipped to the 16-bit range.');
-  const info = { ...ref.info, source: `${series.length} slices${step > 1 ? ` (downsampled ×${step})` : ''}` };
+  const info = {
+    ...ref.info,
+    source: `${series.length} slices${step > 1 ? ` (downsampled ×${step})` : ''}${ignored ? ` · ${ignored} other file${ignored > 1 ? 's' : ''} ignored` : ''}`,
+  };
   return new Volume(dims, spacing, data, info);
 }
 

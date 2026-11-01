@@ -1,11 +1,17 @@
-// Writes a small synthetic uncompressed DICOM series (explicit VR little endian)
-// for testing the loader:  node scripts/make-test-dicom.mjs <outDir>
+// Writes a small synthetic uncompressed DICOM series for testing the loader:
+//   node scripts/make-test-dicom.mjs <outDir> [--noext] [--raw | --raw-explicit]
+//   --noext         file names without an extension (IM000001 …)
+//   --raw           no 128-byte preamble / DICM header, implicit VR little endian
+//   --raw-explicit  no preamble / header, explicit VR little endian
 // The volume contains a sphere in the centre and a bright cube marker in the
 // patient's left-anterior-superior corner so orientation can be verified.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const out = process.argv[2] ?? 'test-output/dicom';
+const args = process.argv.slice(2);
+const out = args.find((a) => !a.startsWith('--')) ?? 'test-output/dicom';
+const noExt = args.includes('--noext');
+const raw = args.includes('--raw') ? 'implicit' : args.includes('--raw-explicit') ? 'explicit' : null;
 mkdirSync(out, { recursive: true });
 
 const cols = 80;
@@ -17,6 +23,7 @@ const intercept = -1000;
 const seriesUid = '1.2.826.0.1.3680043.8.498.1';
 
 function el(group, elem, vr, value) {
+  if (raw === 'implicit' && group !== 0x0002) return elImplicit(group, elem, vr, value);
   let bytes;
   if (typeof value === 'string') {
     let s = value;
@@ -33,6 +40,20 @@ function el(group, elem, vr, value) {
   return Buffer.concat([head, bytes]);
 }
 const us = (v) => new Uint16Array([v]);
+
+function elImplicit(group, elem, vr, value) {
+  let bytes;
+  if (typeof value === 'string') {
+    let s = value;
+    if (s.length % 2) s += vr === 'UI' ? '\0' : ' ';
+    bytes = Buffer.from(s, 'latin1');
+  } else bytes = Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  const head = Buffer.alloc(8);
+  head.writeUInt16LE(group, 0);
+  head.writeUInt16LE(elem, 2);
+  head.writeUInt32LE(bytes.length, 4);
+  return Buffer.concat([head, bytes]);
+}
 
 for (let k = 0; k < slices; k++) {
   const z = 100 - k * dz; // positions written in descending order
@@ -83,8 +104,9 @@ for (let k = 0; k < slices; k++) {
     el(0x0028, 0x1053, 'DS', '1'),
     el(0x7fe0, 0x0010, 'OW', px),
   ]);
-  const file = Buffer.concat([Buffer.alloc(128), Buffer.from('DICM'), groupLen, meta, ds]);
+  const file = raw ? ds : Buffer.concat([Buffer.alloc(128), Buffer.from('DICM'), groupLen, meta, ds]);
   // shuffle file names relative to slice order
-  writeFileSync(join(out, `IMG${String((k * 37) % slices).padStart(4, '0')}.dcm`), file);
+  const n = String((k * 37) % slices).padStart(4, '0');
+  writeFileSync(join(out, noExt ? `IM${n}` : `IMG${n}.dcm`), file);
 }
 console.log(`Wrote ${slices} slices to ${out}`);

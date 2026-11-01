@@ -66,7 +66,7 @@ async function loadFiles(files: File[]) {
     const vol = await loadDicomFiles(files, (stage, f) => showLoading(`${stage}…`, f));
     app.setVolume(vol);
     setMode('mpr');
-    setStatus(`Loaded ${vol.nx}×${vol.ny}×${vol.nz} voxels`);
+    setStatus(`Loaded ${vol.nx}×${vol.ny}×${vol.nz} voxels from ${vol.info.source}`);
   } catch (e) {
     console.error(e);
     setStatus((e as Error).message, true);
