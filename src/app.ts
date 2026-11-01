@@ -78,6 +78,10 @@ export class App {
   /** ruler tool active */
   ruler = false;
   measurements: Measurement[] = [];
+  /** ruler waiting for its second click (and the view it was started in) */
+  pendingMeasurement: { m: Measurement; view: object } | null = null;
+  /** measurement under the mouse (Delete removes it) */
+  hoverMeasurementId: number | null = null;
   /** what right-drag does */
   rightDrag: 'zoom' | 'wl' = 'zoom';
   defaultDiameter = 4;
@@ -157,6 +161,8 @@ export class App {
     this.selectedId = null;
     this.placing = null;
     this.measurements = [];
+    this.pendingMeasurement = null;
+    this.hoverMeasurementId = null;
     this.s = 0;
     this.focusC = 0;
     this.panoOffset = 0;
@@ -586,15 +592,28 @@ export class App {
 
   deleteMeasurement(id: number) {
     this.measurements = this.measurements.filter((m) => m.id !== id);
+    if (this.pendingMeasurement?.m.id === id) this.pendingMeasurement = null;
+    if (this.hoverMeasurementId === id) this.hoverMeasurementId = null;
     this.changed();
+  }
+
+  /** Drop a ruler that only has its first point. */
+  cancelPendingMeasurement() {
+    const p = this.pendingMeasurement;
+    if (!p) return;
+    this.pendingMeasurement = null;
+    this.deleteMeasurement(p.m.id);
   }
 
   clearMeasurements() {
     this.measurements = [];
+    this.pendingMeasurement = null;
+    this.hoverMeasurementId = null;
     this.changed();
   }
 
   setRuler(on: boolean) {
+    this.cancelPendingMeasurement();
     this.ruler = on;
     if (on) {
       this.placing = null;
