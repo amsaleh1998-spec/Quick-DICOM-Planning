@@ -3,6 +3,7 @@ import { MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronal
 import { NERVE_SAFETY_MM, nerveLength } from './nerve';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
+import { isPhone } from './uiMode';
 
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
 import { createPhantom } from './volume';
@@ -315,6 +316,8 @@ function setInput(v: 'mouse' | 'trackpad') {
 }
 inputButtons.forEach((b) => (b.onclick = () => setInput(b.dataset.input as 'mouse' | 'trackpad')));
 $('btn-trackpad-guide').onclick = () => showTrackpadGuide();
+// phone user on the full version: offer the way back
+$('btn-mobile').classList.toggle('hidden', !isPhone());
 initTrackpadGuide(setInput, () => app.input);
 // Keep pinch / ctrl+wheel from zooming the whole page (and Safari's page pinch)
 window.addEventListener('wheel', (e) => e.ctrlKey && e.preventDefault(), { passive: false });
