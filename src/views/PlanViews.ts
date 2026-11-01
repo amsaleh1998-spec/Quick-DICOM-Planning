@@ -49,6 +49,21 @@ export class PlanAxialView extends PlaneView {
     return [s[0], s[1]];
   }
 
+  /** control point hit radius (px): bigger for fingers */
+  private get hitR() {
+    return this.app.touchUi ? 18 : 8;
+  }
+
+  /** Touch: dragging starts on a curve control point (otherwise a swipe changes the level). */
+  protected touchDragAt(p: Pt): boolean {
+    const app = this.app;
+    if (app.drawing || app.placing || !app.curve) return false;
+    return app.curve.ctrl.some((c) => {
+      const s = this.fromAB(c);
+      return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
+    });
+  }
+
   protected onLeftDown(p: Pt): boolean {
     const app = this.app;
     if (app.placing) {
@@ -63,7 +78,7 @@ export class PlanAxialView extends PlaneView {
     if (app.curve) {
       const i = app.curve.ctrl.findIndex((c) => {
         const s = this.fromAB(c);
-        return Math.hypot(s[0] - p[0], s[1] - p[1]) < 8;
+        return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
       });
       if (i >= 0) {
         this.dragPt = i;
@@ -109,7 +124,7 @@ export class PlanAxialView extends PlaneView {
     this.hover = null;
     if (app.curve && app.curve.ctrl.some((c) => {
       const s = this.fromAB(c);
-      return Math.hypot(s[0] - p[0], s[1] - p[1]) < 8;
+      return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
     })) {
       this.el.style.cursor = 'grab';
       return;
@@ -136,7 +151,7 @@ export class PlanAxialView extends PlaneView {
     const ctrl = app.curve.ctrl.slice();
     const i = ctrl.findIndex((c) => {
       const s = this.fromAB(c);
-      return Math.hypot(s[0] - p[0], s[1] - p[1]) < 8;
+      return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
     });
     if (i >= 0) {
       if (ctrl.length > 2) {
@@ -280,9 +295,17 @@ export class PlanAxialView extends PlaneView {
         o.arc(s[0], s[1], 4, 0, Math.PI * 2);
         o.fill();
       }
-      drawLabel(o, 'Click to add points along the arch (patient right → left). Double-click / Enter to finish, Esc to cancel.', 8, this.h - 10, '#ffd34f');
+      drawLabel(
+        o,
+        app.touchUi
+          ? `Tap along the arch, patient right → left (${app.drawing.length} point${app.drawing.length === 1 ? '' : 's'})`
+          : 'Click to add points along the arch (patient right → left). Double-click / Enter to finish, Esc to cancel.',
+        8,
+        this.h - 10,
+        '#ffd34f',
+      );
     } else if (!curve) {
-      drawLabel(o, 'Use “Draw panoramic curve” and click along the arch.', 8, this.h - 10, '#ffd34f');
+      drawLabel(o, app.touchUi ? 'Tap “Draw curve”, then tap along the arch' : 'Use “Draw panoramic curve” and click along the arch.', 8, this.h - 10, '#ffd34f');
     }
     drawLabel(o, `level ${app.focusC.toFixed(1)} mm`, this.w - 34, 16, '#9fb0c8', 'right');
   }

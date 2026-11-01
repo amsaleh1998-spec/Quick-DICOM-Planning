@@ -149,6 +149,10 @@ export abstract class View {
     return false;
   }
   protected onDoubleClick(_p: Pt, _e: MouseEvent): void {}
+  /** Touch UI: a one-finger touch starting at p drags (like a left drag) instead of scrolling. */
+  protected touchDragAt(_p: Pt): boolean {
+    return false;
+  }
   protected onHover(_p: Pt, _e: PointerEvent): void {}
   /** World point under the cursor for the status bar. */
   worldAt(_p: Pt): Vec3 | null {
@@ -664,7 +668,8 @@ export abstract class View {
       this.gestureActive = false;
     });
     c.addEventListener('dblclick', (e) => {
-      if (!this.app.vol) return;
+      // the touch UI has its own double-tap; browsers also turn quick taps into dblclick
+      if (!this.app.vol || this.app.touchUi) return;
       if (this.app.segTool && this.supportsTool(this.app.segTool)) {
         this.toolDoubleClick(this.pos(e));
         return;
@@ -680,7 +685,7 @@ export abstract class View {
   // ---- touch (phone UI) ---------------------------------------------------------
 
   private touches = new Map<number, Pt>();
-  private touchStart: { p: Pt; t: number; moved: boolean } | null = null;
+  private touchStart: { p: Pt; t: number; moved: boolean; drag: boolean } | null = null;
   private pinch: { dist: number; c: Pt } | null = null;
   private lastTapAt = 0;
 
@@ -696,11 +701,19 @@ export abstract class View {
     this.touches.set(e.pointerId, p);
     this.app.activeView = this;
     if (this.touches.size === 1) {
-      this.touchStart = { p, t: performance.now(), moved: false };
+      const drag = this.touchDragAt(p) && this.onLeftDown(p, e);
+      this.touchStart = { p, t: performance.now(), moved: false, drag };
       this.accX = 0;
       this.accY = 0;
     } else {
-      if (this.touchStart) this.touchStart.moved = true; // no tap once a second finger lands
+      const st = this.touchStart;
+      if (st) {
+        st.moved = true; // no tap once a second finger lands
+        if (st.drag) {
+          st.drag = false;
+          this.onLeftUp(p, e, true);
+        }
+      }
       if (this.touches.size === 2) this.pinch = this.pinchState();
     }
   }
@@ -722,6 +735,11 @@ export abstract class View {
     }
     const st = this.touchStart;
     if (!st) return;
+    if (st.drag) {
+      if (Math.hypot(p[0] - st.p[0], p[1] - st.p[1]) > 3) st.moved = true;
+      this.onLeftDrag(p, prev, e);
+      return;
+    }
     if (!st.moved) {
       if (Math.hypot(p[0] - st.p[0], p[1] - st.p[1]) < 8) return;
       st.moved = true;
@@ -756,9 +774,11 @@ export abstract class View {
     this.touches.delete(e.pointerId);
     if (this.ovCanvas.hasPointerCapture(e.pointerId)) this.ovCanvas.releasePointerCapture(e.pointerId);
     if (this.touches.size === 0) {
-      if (e.type === 'pointerup' && st && !st.moved && performance.now() - st.t < 450) {
+      if (st?.drag) this.onLeftUp(this.pos(e), e, st.moved);
+      else if (e.type === 'pointerup' && st && !st.moved && performance.now() - st.t < 450) {
         const now = performance.now();
-        if (now - this.lastTapAt < 320) {
+        // (no double-tap fit while tapping out a curve)
+        if (now - this.lastTapAt < 320 && !this.app.drawing) {
           this.lastTapAt = 0;
           this.vs.fitted = false;
           this.app.requestRender();
@@ -772,7 +792,7 @@ export abstract class View {
     } else if (this.touches.size === 1) {
       // continue with the remaining finger without a jump
       this.pinch = null;
-      this.touchStart = { p: [...this.touches.values()][0], t: 0, moved: true };
+      this.touchStart = { p: [...this.touches.values()][0], t: 0, moved: true, drag: false };
     } else if (this.touches.size === 2) this.pinch = this.pinchState();
   }
 

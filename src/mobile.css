@@ -15,7 +15,7 @@ body {
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr auto auto;
   background: var(--bg);
 }
 
@@ -64,16 +64,83 @@ body {
   background: #000;
   touch-action: none;
 }
-#m-views {
-  position: absolute;
-  inset: 0;
+/* layouts (.layout from style.css: absolute, grid, 3px gaps; .has-max = one view full screen) */
+#m-layout-mpr {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  grid-template-areas:
+    'ax co'
+    'sa v3d';
 }
-#m-views > .view {
-  position: absolute;
-  inset: 0;
+#m-layout-plan {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1.2fr 0.85fr 1fr;
+  grid-template-areas:
+    'pax pax pax'
+    'pano pano pano'
+    'cs1 cs2 cs3';
 }
-#m-views .max-btn {
-  display: none;
+#m-layout-3d {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+#m-layout-3d > .view {
+  grid-area: 1 / 1 / -1 / -1 !important;
+}
+@media (orientation: landscape) {
+  #m-layout-mpr {
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: 1fr;
+    grid-template-areas: 'ax co sa v3d';
+  }
+  #m-layout-plan {
+    grid-template-columns: repeat(6, 1fr);
+    grid-template-rows: 1fr 1fr;
+    grid-template-areas:
+      'pax pax pano pano pano pano'
+      'cs1 cs1 cs2 cs2 cs3 cs3';
+  }
+}
+/* full-screen button: finger-sized, always visible */
+.m-layout .max-btn {
+  width: 30px;
+  height: 28px;
+  opacity: 0.85;
+}
+.m-layout .max-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* tool strip above the tabs */
+#m-tools {
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  padding: 6px calc(env(safe-area-inset-right) + 10px) 6px calc(env(safe-area-inset-left) + 10px);
+}
+.m-tools-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+}
+.m-tools-row .m-chip {
+  flex: 0 0 auto;
+}
+.m-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06121e;
+}
+.m-chip-primary {
+  background: #1d4f7a;
+  border-color: #2c6aa0;
+}
+.m-tools-info {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 /* empty state */
@@ -179,6 +246,7 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
 #m-hint {
+  pointer-events: none; /* never blocks the views underneath */
   bottom: 14px;
   background: rgba(19, 26, 38, 0.92);
   border: 1px solid var(--border);
@@ -435,11 +503,11 @@ body {
 }
 
 /* the panoramic's slab/slice switch: keep it clear of the view title */
-#m-views .view-seg {
+.m-layout .view-seg {
   left: 8px;
   top: 26px;
 }
-#m-views .view-seg button {
+.m-layout .view-seg button {
   padding: 5px 12px;
   font-size: 13px;
 }

@@ -74,6 +74,11 @@ export class MprView extends PlaneView {
 
   // ---- interaction -------------------------------------------------------
 
+  /** Touch: with the Rotate tool a one-finger drag tilts the other planes. */
+  protected touchDragAt(): boolean {
+    return this.app.mprTool === 'rotate';
+  }
+
   protected onLeftDown(p: Pt, e: PointerEvent): boolean {
     const tool = this.app.mprTool;
     if (((e.ctrlKey || e.metaKey) && e.altKey) || tool === 'rotate') {
