@@ -76,7 +76,7 @@ export class MprView extends PlaneView {
 
   protected onLeftDown(p: Pt, e: PointerEvent): boolean {
     const tool = this.app.mprTool;
-    if ((e.ctrlKey && e.altKey) || tool === 'rotate') {
+    if (((e.ctrlKey || e.metaKey) && e.altKey) || tool === 'rotate') {
       this.rotating = true;
       return true;
     }

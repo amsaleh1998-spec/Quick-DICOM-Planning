@@ -1,6 +1,8 @@
-import { App, Jaw, Mode, MprTool, RenderMode } from './app';
+import { App, Jaw, Mode, MprTool, RenderMode, saveInputPreference } from './app';
 import { MUA_HEIGHTS } from './implant';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
+import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
+
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
 import { createPhantom } from './volume';
 
@@ -301,6 +303,20 @@ const placeButton = (jaw: Jaw) => () => {
 $('btn-add-upper').onclick = placeButton('upper');
 $('btn-add-lower').onclick = placeButton('lower');
 
+// input device (mouse / trackpad) and the trackpad guide
+const inputButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#input-seg button'));
+function setInput(v: 'mouse' | 'trackpad') {
+  app.input = v;
+  saveInputPreference(v);
+  app.changed();
+}
+inputButtons.forEach((b) => (b.onclick = () => setInput(b.dataset.input as 'mouse' | 'trackpad')));
+$('btn-trackpad-guide').onclick = () => showTrackpadGuide();
+initTrackpadGuide(setInput, () => app.input);
+// Keep pinch / ctrl+wheel from zooming the whole page (and Safari's page pinch)
+window.addEventListener('wheel', (e) => e.ctrlKey && e.preventDefault(), { passive: false });
+for (const g of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(g, (e) => e.preventDefault());
+
 // ruler / right-drag behaviour
 $('btn-ruler').onclick = () => app.setRuler(!app.ruler);
 $('btn-clear-measure').onclick = () => app.clearMeasurements();
@@ -480,6 +496,7 @@ function refreshUi() {
   $('btn-ruler').classList.toggle('active', app.ruler);
   $('btn-clear-measure').toggleAttribute('disabled', !app.measurements.length);
   rdButtons.forEach((b) => b.classList.toggle('active', b.dataset.rd === app.rightDrag));
+  inputButtons.forEach((b) => b.classList.toggle('active', b.dataset.input === app.input));
   panoModeButtons.forEach((b) => b.classList.toggle('active', b.dataset.pm === app.panoMode));
   const isSlab = app.panoMode === 'slab';
   slab.min = isSlab ? '2' : '0';

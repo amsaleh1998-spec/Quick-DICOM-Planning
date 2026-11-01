@@ -30,6 +30,14 @@
           <button id="btn-clear-measure" title="Delete all measurements">Clear</button>
         </div>
         <div class="group">
+          <span class="muted small">Input</span>
+          <div class="seg small" id="input-seg">
+            <button data-input="mouse" title="Mouse: wheel scrolls slices, Ctrl/⌘+wheel zooms">Mouse</button>
+            <button data-input="trackpad" title="Trackpad: two-finger swipe scrolls, pinch zooms, ⌘+swipe pans, ⇧+swipe brightness/contrast">Trackpad</button>
+          </div>
+          <button id="btn-trackpad-guide" title="How to use the app with a Mac trackpad">Trackpad guide</button>
+        </div>
+        <div class="group">
           <span class="muted small">Right-drag</span>
           <div class="seg small" id="rd-seg">
             <button data-rd="zoom" title="Right-drag down/up zooms in/out">Zoom</button>
@@ -73,6 +81,7 @@
               <summary>Mouse</summary>
               <ul class="help">
                 <li><b>Left click/drag</b> – move crosshair</li>
+                <li><b>Trackpad?</b> Switch Input → Trackpad and see the <b>Trackpad guide</b></li>
                 <li><b>Hold Shift</b> – crosshair follows the mouse</li>
                 <li><b>Ctrl+Alt+drag</b> (or Rotate tool) – rotate the other planes around this view</li>
                 <li><b>Crop tool</b> – drag the blue box edges</li>
@@ -166,6 +175,7 @@
             <details open>
               <summary>Mouse</summary>
               <ul class="help">
+                <li><b>Trackpad?</b> Switch Input → Trackpad and see the <b>Trackpad guide</b></li>
                 <li><b>Axial</b>: wheel = level, drag curve points, dbl-click curve = add / point = remove</li>
                 <li><b>Panoramic</b>: wheel = slice position buccal/lingual, Alt+wheel = move along the curve, click = jump</li>
                 <li><b>Cross-sections</b>: wheel = move along the curve</li>
