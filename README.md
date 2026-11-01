@@ -7,7 +7,9 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 
 **Import**
 - Open a DICOM series as files, as a folder, or by drag & drop (folders are searched recursively).
-- Uncompressed DICOM (implicit/explicit VR little endian), single- or multi-frame. Slices are sorted by
+- Uncompressed DICOM (implicit/explicit VR little endian), single- or multi-frame. File names don't matter: files
+  without a `.dcm` extension (e.g. `IM000001`) and "raw" files without the 128-byte preamble/DICM header are detected
+  from their content; non-DICOM files in the folder (DICOMDIR, `._*`, `.DS_Store`, text, images …) are ignored. Slices are sorted by
   position and the volume is re-oriented to patient axes (LPS).
 - "Demo volume" generates a synthetic mandible (with a missing molar and a slightly tilted occlusal plane) to try the app.
 
