@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, Cylinder, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, platformOf } from '../implant';
+import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, Cylinder, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, platformOf } from '../implant';
 import { Vec2, Vec3, add, addScaled, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, toFrame } from '../math';
 import { CropSpec, SlabSpec, sampleLine } from '../render';
 import { Plane, PlaneView, Pt, View, ViewState, drawLabel } from './View';
@@ -673,6 +673,7 @@ export class PanoView extends View {
 
   private hitBody(p: Pt): Implant | null {
     for (const part of this.app.allParts()) {
+      if (part.kind === 'prosthetic') continue; // guide only, not clickable
       const { a, b } = this.partEnds(part);
       const rpx = part.radius / this.vs.scale + 3;
       if (distToSegment2(p[0], p[1], a.x, a.y, b.x, b.y) <= rpx) return part.implant;
@@ -766,24 +767,39 @@ export class PanoView extends View {
       const { a, b } = this.partEnds(part);
       const sel = imp.id === app.selectedId;
       const isImp = part.kind === 'implant';
-      const col = isImp ? (sel ? IMPLANT_SELECTED_COLOR : IMPLANT_COLOR) : sel ? ABUTMENT_SELECTED_COLOR : ABUTMENT_COLOR;
+      const isGuide = part.kind === 'prosthetic';
+      const col = isImp
+        ? sel
+          ? IMPLANT_SELECTED_COLOR
+          : IMPLANT_COLOR
+        : isGuide
+          ? PROSTHETIC_COLOR
+          : sel
+            ? ABUTMENT_SELECTED_COLOR
+            : ABUTMENT_COLOR;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const l = Math.hypot(dx, dy) || 1;
       const nx = -dy / l;
       const ny = dx / l;
       const r = part.radius / this.vs.scale;
+      // a = r1 end, b = r0 end (tapered parts are trapezoids)
+      const ra = part.r1 / this.vs.scale;
+      const rb = part.r0 / this.vs.scale;
       o.beginPath();
-      o.moveTo(a.x + nx * r, a.y + ny * r);
-      o.lineTo(b.x + nx * r, b.y + ny * r);
-      o.lineTo(b.x - nx * r, b.y - ny * r);
-      o.lineTo(a.x - nx * r, a.y - ny * r);
+      o.moveTo(a.x + nx * ra, a.y + ny * ra);
+      o.lineTo(b.x + nx * rb, b.y + ny * rb);
+      o.lineTo(b.x - nx * rb, b.y - ny * rb);
+      o.lineTo(a.x - nx * ra, a.y - ny * ra);
       o.closePath();
-      o.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${isImp ? 0.35 : 0.5})`;
-      o.strokeStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+      o.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${isImp ? 0.35 : isGuide ? 0.1 : 0.5})`;
+      o.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${isGuide ? 0.8 : 1})`;
       o.lineWidth = sel ? 2 : 1.5;
+      if (isGuide) o.setLineDash([5, 4]);
       o.fill();
       o.stroke();
+      o.setLineDash([]);
+      if (isGuide) continue; // labels sit above the implant/abutment, not the guide
       if (isImp) {
         // platform marker
         const pf = this.project(platformOf(imp));

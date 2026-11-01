@@ -55,8 +55,9 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   tangential, or the panoramic (distances on the developed panoramic surface). The tool then switches off; ruler ends can
   be dragged at any time to adjust them. Hover a ruler and press Delete (or double-click it) to remove it, *Clear* removes
   all, Esc cancels a ruler in progress. A ruler shows on the slice it was drawn on.
-- Abutments: generic Ø4.8 mm multi-unit abutments (straight, 17°, 30°) with 1–5 mm gingival height and adjustable
-  rotation; *Auto-align* picks angulation + rotation that bring the abutment closest to vertical. Abutment-to-abutment
+- Abutments: generic multi-unit abutments (straight, 17°, 30°) with 1–5 mm gingival height and adjustable rotation.
+  Profile: Ø3.5 mm at the implant widening to Ø4.8 mm at the gingival level, then a 2.5 mm head tapering to Ø3 mm,
+  followed by a Ø3 × 15 mm prosthetic axis (shown translucent, not clickable) along the abutment direction; *Auto-align* picks angulation + rotation that bring the abutment closest to vertical. Abutment-to-abutment
   angles are listed next to the implant angles.
 
 **Mac trackpad** (Input → Trackpad; chosen automatically on a Mac, with a built-in *Trackpad guide* shown on first visit)

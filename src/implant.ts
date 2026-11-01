@@ -1,4 +1,4 @@
-import { Vec3, addScaled, dot, neg, sub } from './math';
+import { Vec3, addScaled, neg } from './math';
 
 /** Generic multi-unit abutment (MUA). */
 export interface Abutment {
@@ -10,8 +10,14 @@ export interface Abutment {
   rotation: number;
 }
 
-export const MUA_DIAMETER = 4.8;
-export const MUA_HEAD_HEIGHT = 3;
+/** Generic MUA profile (mm): narrow at the implant, widest at the gingiva, tapering to the top. */
+export const MUA_BASE_DIAMETER = 3.5; // at the implant platform
+export const MUA_DIAMETER = 4.8; // at gingival level
+export const MUA_HEAD_HEIGHT = 2.5; // protrusion above the gingival level
+export const MUA_TOP_DIAMETER = 3; // most coronal part of the abutment
+/** Prosthetic axis drawn from the top of the MUA (screw channel / path of insertion). */
+export const PROSTHETIC_AXIS_DIAMETER = 3;
+export const PROSTHETIC_AXIS_LENGTH = 15;
 export const MUA_ANGLES = [0, 17, 30];
 export const MUA_HEIGHTS = [1, 2, 3, 4, 5];
 
@@ -27,15 +33,42 @@ export interface Implant {
   abutment: Abutment | null;
 }
 
-/** A cylinder primitive used for drawing / hit testing. */
+/**
+ * A cylinder or truncated cone used for drawing / hit testing. Radius r0 is at
+ * centre - axis*half, r1 at centre + axis*half.
+ */
 export interface Cylinder {
   center: Vec3;
   /** unit axis */
   axis: Vec3;
+  /** largest radius (for bounds) */
   radius: number;
+  r0: number;
+  r1: number;
   half: number;
-  kind: 'implant' | 'abutment';
+  /** 'prosthetic' = prosthetic axis guide (drawn translucent, not clickable) */
+  kind: 'implant' | 'abutment' | 'prosthetic';
   implant: Implant;
+}
+
+/** Part along `dir` from point `from`, `len` long, radius rStart → rEnd. */
+function cone(from: Vec3, dir: Vec3, len: number, rStart: number, rEnd: number, kind: Cylinder['kind'], implant: Implant): Cylinder {
+  return {
+    center: addScaled(from, dir, len / 2),
+    axis: dir,
+    radius: Math.max(rStart, rEnd),
+    r0: rStart,
+    r1: rEnd,
+    half: len / 2,
+    kind,
+    implant,
+  };
+}
+
+/** Radius of a part at axial coordinate h (0 = centre). */
+export function radiusAt(c: Cylinder, h: number): number {
+  const t = c.half > 0 ? (h + c.half) / (2 * c.half) : 0.5;
+  return c.r0 + (c.r1 - c.r0) * Math.min(1, Math.max(0, t));
 }
 
 let nextId = 1;
@@ -78,48 +111,31 @@ export function setImplantAxis(imp: Implant, axis: Vec3) {
  * coronal direction of the abutment head (computed by the app).
  */
 export function implantParts(imp: Implant, abutmentDir: Vec3 | null): Cylinder[] {
+  const r = imp.diameter / 2;
   const parts: Cylinder[] = [
-    { center: imp.center, axis: imp.axis, radius: imp.diameter / 2, half: imp.length / 2, kind: 'implant', implant: imp },
+    { center: imp.center, axis: imp.axis, radius: r, r0: r, r1: r, half: imp.length / 2, kind: 'implant', implant: imp },
   ];
   const ab = imp.abutment;
   if (ab) {
     const up = neg(imp.axis);
     const p = platformOf(imp);
     const gh = ab.gingivalHeight;
-    parts.push({
-      center: addScaled(p, up, gh / 2),
-      axis: up,
-      radius: MUA_DIAMETER / 2,
-      half: gh / 2,
-      kind: 'abutment',
-      implant: imp,
-    });
+    // transmucosal collar: Ø3.5 at the implant -> Ø4.8 at the gingiva
+    parts.push(cone(p, up, gh, MUA_BASE_DIAMETER / 2, MUA_DIAMETER / 2, 'abutment', imp));
+    // head: 2.5 mm above the gingiva, Ø4.8 -> Ø3 (follows the abutment angulation)
     const dir = abutmentDir ?? up;
-    const top = addScaled(p, up, gh);
-    parts.push({
-      center: addScaled(top, dir, MUA_HEAD_HEIGHT / 2),
-      axis: dir,
-      radius: MUA_DIAMETER / 2,
-      half: MUA_HEAD_HEIGHT / 2,
-      kind: 'abutment',
-      implant: imp,
-    });
+    const gingiva = addScaled(p, up, gh);
+    parts.push(cone(gingiva, dir, MUA_HEAD_HEIGHT, MUA_DIAMETER / 2, MUA_TOP_DIAMETER / 2, 'abutment', imp));
+    // prosthetic axis: Ø3, 15 mm from the top of the MUA
+    const top = addScaled(gingiva, dir, MUA_HEAD_HEIGHT);
+    const pr = PROSTHETIC_AXIS_DIAMETER / 2;
+    parts.push(cone(top, dir, PROSTHETIC_AXIS_LENGTH, pr, pr, 'prosthetic', imp));
   }
   return parts;
-}
-
-/**
- * Approximate signed distance from p to a cylinder surface (negative inside)
- * plus the axial coordinate h of p (0 at the centre).
- */
-export function cylinderDistance(c: { center: Vec3; axis: Vec3; radius: number; half: number }, p: Vec3): { d: number; h: number } {
-  const q = sub(p, c.center);
-  const h = dot(q, c.axis);
-  const rad = Math.sqrt(Math.max(0, dot(q, q) - h * h));
-  return { d: Math.max(rad - c.radius, Math.abs(h) - c.half), h };
 }
 
 export const IMPLANT_COLOR: [number, number, number] = [64, 214, 128];
 export const IMPLANT_SELECTED_COLOR: [number, number, number] = [255, 184, 28];
 export const ABUTMENT_COLOR: [number, number, number] = [140, 180, 230];
 export const ABUTMENT_SELECTED_COLOR: [number, number, number] = [200, 225, 255];
+export const PROSTHETIC_COLOR: [number, number, number] = [232, 121, 249];

@@ -1,10 +1,10 @@
 import type { App } from '../app';
-import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR } from '../implant';
+import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, PROSTHETIC_COLOR } from '../implant';
 import { Frame, Vec3, add, cross, dot, fromFrame, neg, reorthonormalize, rotate, scale } from '../math';
 import { Volume } from '../volume';
 import { Pt, View, drawLabel } from './View';
 
-const MAX_CYL = 32;
+const MAX_CYL = 48;
 const FOV = (30 * Math.PI) / 180;
 
 const VS = `#version 300 es
@@ -46,25 +46,35 @@ vec2 boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax) {
   vec3 tmax = max(t0, t1);
   return vec2(max(max(tmin.x, tmin.y), tmin.z), min(min(tmax.x, tmax.y), tmax.z));
 }
-// capped cylinder (Inigo Quilez)
-vec4 cylHit(vec3 ro, vec3 rd, vec3 pa, vec3 pb, float ra) {
+float dot2(vec3 v) { return dot(v, v); }
+// capped cone, radius ra at pa and rb at pb (Inigo Quilez); returns (t, normal)
+vec4 coneHit(vec3 ro, vec3 rd, vec3 pa, vec3 pb, float ra, float rb) {
   vec3 ba = pb - pa;
-  vec3 oc = ro - pa;
-  float baba = dot(ba, ba);
-  float bard = dot(ba, rd);
-  float baoc = dot(ba, oc);
-  float k2 = baba - bard * bard;
-  float k1 = baba * dot(oc, rd) - baoc * bard;
-  float k0 = baba * dot(oc, oc) - baoc * baoc - ra * ra * baba;
+  vec3 oa = ro - pa;
+  vec3 ob = ro - pb;
+  float m0 = dot(ba, ba);
+  float m1 = dot(oa, ba);
+  float m2 = dot(rd, ba);
+  float m3 = dot(rd, oa);
+  float m5 = dot(oa, oa);
+  float m9 = dot(ob, ba);
+  if (m1 < 0.0) {
+    if (dot2(oa * m2 - rd * m1) < (ra * ra * m2 * m2)) return vec4(-m1 / m2, -ba * inversesqrt(m0));
+  } else if (m9 > 0.0) {
+    float t = -m9 / m2;
+    if (dot2(ob + rd * t) < (rb * rb)) return vec4(t, ba * inversesqrt(m0));
+  }
+  float rr = ra - rb;
+  float hy = m0 + rr * rr;
+  float k2 = m0 * m0 - m2 * m2 * hy;
+  float k1 = m0 * m0 * m3 - m1 * m2 * hy + m0 * ra * (rr * m2);
+  float k0 = m0 * m0 * m5 - m1 * m1 * hy + m0 * ra * (rr * m1 * 2.0 - m0 * ra);
   float h = k1 * k1 - k2 * k0;
   if (h < 0.0) return vec4(-1.0);
-  h = sqrt(h);
-  float t = (-k1 - h) / k2;
-  float y = baoc + t * bard;
-  if (y > 0.0 && y < baba) return vec4(t, (oc + t * rd - ba * y / baba) / ra);
-  t = (((y < 0.0) ? 0.0 : baba) - baoc) / bard;
-  if (abs(k1 + k2 * t) < h) return vec4(t, ba * sign(y) / sqrt(baba));
-  return vec4(-1.0);
+  float t = (-k1 - sqrt(h)) / k2;
+  float y = m1 + t * m2;
+  if (y < 0.0 || y > m0) return vec4(-1.0);
+  return vec4(t, normalize(m0 * (m0 * (oa + t * rd) + rr * ba * ra) - ba * hy * y));
 }
 vec3 shade(vec3 base, vec3 n, vec3 rd, vec3 L, float specK) {
   if (dot(n, rd) > 0.0) n = -n;
@@ -82,17 +92,26 @@ void main() {
   vec3 bg = mix(vec3(0.02, 0.03, 0.05), vec3(0.10, 0.13, 0.19), gl_FragCoord.y / uRes.y);
   vec3 L = normalize(-rd + 0.35 * uUp - 0.25 * uRight);
 
+  // A = (centre, r0), B = (axis, half; negative = translucent guide), C = (colour, r1)
   float tImp = 1e20;
   vec3 nImp = vec3(0.0);
   vec3 cImp = vec3(0.0);
+  float tGuide = 1e20;
+  vec3 nGuide = vec3(0.0);
+  vec3 cGuide = vec3(0.0);
   for (int i = 0; i < ${MAX_CYL}; i++) {
     if (i >= uNumCyl) break;
     vec4 A = uCyl[i * 3];
     vec4 B = uCyl[i * 3 + 1];
     vec4 C = uCyl[i * 3 + 2];
-    vec4 h = cylHit(ro, rd, A.xyz - B.xyz * B.w, A.xyz + B.xyz * B.w, A.w);
-    if (h.x > 0.0 && h.x < tImp) { tImp = h.x; nImp = h.yzw; cImp = C.rgb; }
+    float half_ = abs(B.w);
+    vec4 h = coneHit(ro, rd, A.xyz - B.xyz * half_, A.xyz + B.xyz * half_, A.w, C.w);
+    if (h.x <= 0.0) continue;
+    if (B.w < 0.0) {
+      if (h.x < tGuide) { tGuide = h.x; nGuide = h.yzw; cGuide = C.rgb; }
+    } else if (h.x < tImp) { tImp = h.x; nImp = h.yzw; cImp = C.rgb; }
   }
+  float tSurf = 1e20;
 
   vec2 b1 = boxHit(ro, rd, vec3(0.0), uBoxMax);
   mat3 Ft = transpose(uFrame);
@@ -123,6 +142,7 @@ void main() {
             if (v >= uLo && v <= uHi) b = m; else a = m;
           }
           t = b;
+          tSurf = t;
           vec3 g = grad(ro + rd * t);
           if (length(g) > 1e-6) n = -normalize(g);
         }
@@ -164,6 +184,8 @@ void main() {
     if (tImp < 1e19) tail = shade(cImp, nImp, rd, L, 0.45);
     col += rem * tail;
   }
+  // prosthetic axis guides: translucent, in front of whatever they cover
+  if (tGuide < min(tImp, tSurf)) col = mix(col, shade(cGuide, nGuide, rd, L, 0.3), 0.42);
   outColor = vec4(col, 1.0);
 }`;
 
@@ -484,8 +506,18 @@ export class View3D extends View {
     const cyl = new Float32Array(MAX_CYL * 12);
     parts.forEach((c, i) => {
       const sel = c.implant.id === app.selectedId;
-      const col = c.kind === 'implant' ? (sel ? IMPLANT_SELECTED_COLOR : IMPLANT_COLOR) : sel ? ABUTMENT_SELECTED_COLOR : ABUTMENT_COLOR;
-      cyl.set([...c.center, c.radius, ...c.axis, c.half, col[0] / 255, col[1] / 255, col[2] / 255, 0], i * 12);
+      const col =
+        c.kind === 'implant'
+          ? sel
+            ? IMPLANT_SELECTED_COLOR
+            : IMPLANT_COLOR
+          : c.kind === 'prosthetic'
+            ? PROSTHETIC_COLOR
+            : sel
+              ? ABUTMENT_SELECTED_COLOR
+              : ABUTMENT_COLOR;
+      const half = c.kind === 'prosthetic' ? -c.half : c.half; // sign marks translucent guides
+      cyl.set([...c.center, c.r0, ...c.axis, half, col[0] / 255, col[1] / 255, col[2] / 255, c.r1], i * 12);
     });
     gl.uniform1i(u.uNumCyl, parts.length);
     gl.uniform4fv(u.uCyl, cyl);

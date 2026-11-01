@@ -1,6 +1,6 @@
 import type { App } from '../app';
 import type { Measurement } from '../app';
-import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant } from '../implant';
+import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, radiusAt } from '../implant';
 import { ImplantEditor } from './implantEdit';
 import { Vec3, add, cross, distToSegment2, dot, length, scale, sub } from '../math';
 import { CropSpec, SlabSpec, samplePlane, windowToBytes } from '../render';
@@ -689,7 +689,21 @@ export abstract class PlaneView extends View {
       if (Math.abs(dot(sub(part.center, pl.center), n)) > hl + r) continue;
       const sel = part.implant.id === this.app.selectedId;
       const isImplant = part.kind === 'implant';
-      const col = isImplant ? (sel ? IMPLANT_SELECTED_COLOR : IMPLANT_COLOR) : sel ? ABUTMENT_SELECTED_COLOR : ABUTMENT_COLOR;
+      const isGuide = part.kind === 'prosthetic';
+      const col = isImplant
+        ? sel
+          ? IMPLANT_SELECTED_COLOR
+          : IMPLANT_COLOR
+        : isGuide
+          ? PROSTHETIC_COLOR
+          : sel
+            ? ABUTMENT_SELECTED_COLOR
+            : ABUTMENT_COLOR;
+      // translucent fill so the guide never hides anatomy
+      const fillAlpha = isImplant ? 0.32 : isGuide ? 0.12 : 0.45;
+      const edgeAlpha = isGuide ? 0.75 : 0.95;
+      const r0 = part.r0;
+      const dr = part.half > 0 ? (part.r1 - part.r0) / (2 * part.half) : 0; // radius change per mm
       // bounding box in image pixels
       const sc = this.worldToScreen(part.center, pl)!;
       const R = Math.hypot(hl, r) / pxmm + 2;
@@ -713,9 +727,10 @@ export abstract class PlaneView extends View {
           const ah = Math.abs(hh);
           if (ah <= hl) {
             const rad2 = qx * qx + qy * qy + qz * qz - hh * hh;
-            if (rad2 <= r2) {
-              const d = Math.max(Math.sqrt(Math.max(0, rad2)) - r, ah - hl);
-              let alpha = d > -edge ? 0.95 : isImplant ? 0.32 : 0.45;
+            const rh = r0 + dr * (hh + hl); // radius at this height (cone)
+            if (rad2 <= rh * rh && rad2 <= r2) {
+              const d = Math.max(Math.sqrt(Math.max(0, rad2)) - rh, ah - hl);
+              let alpha = d > -edge ? edgeAlpha : fillAlpha;
               if (isImplant && hh < platformH) alpha = Math.max(alpha, 0.7);
               const o = (j * w + i) * 4;
               rgba[o] += (col[0] - rgba[o]) * alpha;
@@ -744,10 +759,11 @@ export abstract class PlaneView extends View {
     const tol = 4 * this.vs.scale;
     let best: { imp: Implant; d: number } | null = null;
     for (const part of this.app.allParts()) {
+      if (part.kind === 'prosthetic') continue; // guide only, not clickable
       const q = sub(w, part.center);
       const h = dot(q, part.axis);
       const rad = length(sub(q, scale(part.axis, h)));
-      if (Math.abs(h) <= part.half + tol && rad <= part.radius + tol) {
+      if (Math.abs(h) <= part.half + tol && rad <= radiusAt(part, h) + tol) {
         const d = rad + (part.kind === 'implant' ? 0 : 0.5);
         if (!best || d < best.d) best = { imp: part.implant, d };
       }
