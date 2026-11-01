@@ -81,13 +81,18 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.
 
 **Mobile version** (`mobile.html`, opens automatically on phones)
-- A simplified viewer: open DICOM files, a project saved on the desktop (`.qdp.zip`, with implants, segments and nerves)
-  or the demo. One full-screen view at a time – Axial, Coronal, Sagittal, Panoramic and Cross-section (when the plan has a
-  curve) and 3D – switched with the tab bar.
-- Touch: swipe to scroll slices (panoramic: left/right along the arch, up/down buccal/lingual; cross-section: along the
-  arch), tap to move the crosshair, pinch to zoom, two fingers to pan, double-tap to fit. 3D: drag to rotate.
+- Open DICOM files, a project saved on the desktop (`.qdp.zip`, with implants, segments and nerves) or the demo.
+- **MPR** tab: axial, coronal, sagittal and 3D on one screen (2 × 2, or in a row in landscape); ⤢ shows one view full
+  screen. *Rotate axes*: drag around the centre of a view to tilt the other two planes (like the desktop Rotate tool);
+  *Straighten* and *Reset* as on the desktop.
+- **Plan** tab: axial, panoramic and three cross-sections. *Draw curve*, tap along the arch (patient right → left),
+  *Undo point*, *Done*; drag a curve point to adjust it, *Clear curve* to start over.
+- **3D** tab: the 3D view full screen.
+- Touch: swipe to scroll slices (panoramic: left/right along the arch, up/down buccal/lingual; cross-sections: along the
+  arch; axial planning view: level), tap to move the crosshair / pick a position, pinch to zoom, two fingers to pan,
+  double-tap to fit. 3D: drag to rotate.
 - Settings sheet: implant list (tap to jump to its cross-section; nerve-distance warnings), segment and nerve visibility,
-  brightness/contrast, 3D mode/threshold/view presets. No editing tools.
+  brightness/contrast, 3D mode/threshold/view presets. Implants, segmentation and nerve tracing are edited on the desktop.
 - Phones are sent to it before the desktop page renders; *Full desktop version* (`index.html?ui=desktop`) is remembered on
   that phone, and *Mobile version* in the desktop toolbar (`?ui=mobile`) switches back. Memory/GPU budgets are lower on
   phones (series above ~110 M voxels are downsampled on load).
@@ -155,7 +160,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/views/View3D.ts` | WebGL2 volume ray-caster with thresholds, segment labels, ray-traced implants and nerve tubes |
 | `src/segment.ts` | Label grid, threshold region growing (seeds replayed in order), separation cuts (plane / panoramic) |
 | `src/nerve.ts` | Nerve canal model: point insertion, smooth centre line, implant-to-nerve distance |
-| `mobile.html`, `src/mobile.ts`, `src/mobile.css` | Simplified phone UI (one view at a time, touch gestures, settings sheet) |
+| `mobile.html`, `src/mobile.ts`, `src/mobile.css` | Phone UI: MPR / Plan / 3D layouts, touch gestures, settings sheet |
 | `src/uiMode.ts` | Phone detection and the desktop/mobile preference (mirrored inline in `index.html`) |
 | `src/views/overlays.ts` | 2D overlays: segment tint/outlines, cut traces, nerve tube sections and projections |
 | `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
