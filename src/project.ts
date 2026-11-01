@@ -156,7 +156,7 @@ export function applyProjectState(app: App, file: ProjectFile) {
   app.panoSlice = st.panoSlice;
   app.panoOffset = st.panoOffset;
   app.tangAngle = st.tangAngle;
-  app.implants = st.implants.map((i) => ({ ...i, abutment: i.abutment ?? null }));
+  app.implants = st.implants.map((i) => ({ ...i, apicalDiameter: i.apicalDiameter ?? null, abutment: i.abutment ?? null }));
   reserveImplantIds(Math.max(0, ...app.implants.map((i) => i.id)));
   app.selectedId = st.selectedId;
   app.defaultDiameter = st.defaultDiameter;

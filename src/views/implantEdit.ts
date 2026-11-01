@@ -1,9 +1,21 @@
 import type { App } from '../app';
-import { Implant, MUA_HEAD_HEIGHT, apexOf, platformOf, setImplantAxis, setImplantLength } from '../implant';
+import {
+  Implant,
+  MUA_HEAD_HEIGHT,
+  apexOf,
+  apicalDiameterOf,
+  implantRadiusAt,
+  isTapered,
+  platformOf,
+  setApicalDiameter,
+  setCoronalDiameter,
+  setImplantAxis,
+  setImplantLength,
+} from '../implant';
 import { Vec3, add, addScaled, clamp, rotate, scale } from '../math';
 import type { Pt } from './View';
 
-export type EditMode = 'move' | 'rotCoronal' | 'rotApical' | 'diameter' | 'length';
+export type EditMode = 'move' | 'rotCoronal' | 'rotApical' | 'diameter' | 'apicalDiameter' | 'length';
 
 /** What the editor needs to know about a view. */
 export interface ImplantViewAdapter {
@@ -23,7 +35,7 @@ export interface ImplantViewAdapter {
   container: HTMLElement;
 }
 
-type DimKind = 'diameter' | 'length';
+type DimKind = 'diameter' | 'apicalDiameter' | 'length';
 /** dimension changes per mm of mouse travel (lower = finer control) */
 const DIM_GAIN = 0.5;
 const BADGE_MS = 5000;
@@ -87,10 +99,12 @@ export class ImplantEditor {
       }
       const tol = 5 * this.ad.scale();
       const { rad, h } = this.ad.radialAxial(p, sel);
-      const r = sel.diameter / 2;
       const hl = sel.length / 2;
-      if (Math.abs(h - hl) < tol && rad < r + tol) return { imp: sel, mode: 'length' };
-      if (Math.abs(rad - r) < tol && h > -hl && h < hl - tol * 0.5) return { imp: sel, mode: 'diameter' };
+      const rApex = apicalDiameterOf(sel) / 2;
+      if (Math.abs(h - hl) < tol && rad < rApex + tol) return { imp: sel, mode: 'length' };
+      // side outline (follows the taper): apical half edits the apex of a tapered implant
+      if (Math.abs(rad - implantRadiusAt(sel, h)) < tol && h > -hl && h < hl - tol * 0.5)
+        return { imp: sel, mode: isTapered(sel) && h > 0 ? 'apicalDiameter' : 'diameter' };
     }
     const imp = this.ad.hitBody(p);
     return imp ? { imp, mode: 'move' } : null;
@@ -103,6 +117,7 @@ export class ImplantEditor {
     const b = this.ad.project(apexOf(imp));
     const vertical = Math.abs(b.y - a.y) >= Math.abs(b.x - a.x);
     if (mode === 'length') return vertical ? 'ns-resize' : 'ew-resize';
+    // diameter and apicalDiameter
     return vertical ? 'ew-resize' : 'ns-resize';
   }
 
@@ -113,11 +128,11 @@ export class ImplantEditor {
     const imp = hit.imp;
     let startValue = 0;
     let startMeasure = 0;
-    if (hit.mode === 'diameter' || hit.mode === 'length') {
+    if (hit.mode === 'diameter' || hit.mode === 'apicalDiameter' || hit.mode === 'length') {
       const ra = this.ad.radialAxial(p, imp);
-      startValue = hit.mode === 'diameter' ? imp.diameter : imp.length;
-      // diameter: distance from the axis; length: distance from the platform along the axis
-      startMeasure = hit.mode === 'diameter' ? ra.rad : ra.h + imp.length / 2;
+      startValue = hit.mode === 'diameter' ? imp.diameter : hit.mode === 'apicalDiameter' ? apicalDiameterOf(imp) : imp.length;
+      // diameters: distance from the axis; length: distance from the platform along the axis
+      startMeasure = hit.mode === 'length' ? ra.h + imp.length / 2 : ra.rad;
       this.showBadge(imp, hit.mode);
     }
     this.drag = { imp, mode: hit.mode, basis: this.ad.basis(imp), startValue, startMeasure };
@@ -153,7 +168,13 @@ export class ImplantEditor {
       case 'diameter': {
         const { rad } = this.ad.radialAxial(p, imp);
         const v = d.startValue + 2 * (rad - d.startMeasure) * DIM_GAIN;
-        imp.diameter = clamp(Math.round(v * 10) / 10, 2.5, 9);
+        setCoronalDiameter(imp, clamp(Math.round(v * 10) / 10, 2.5, 9));
+        break;
+      }
+      case 'apicalDiameter': {
+        const { rad } = this.ad.radialAxial(p, imp);
+        const v = d.startValue + 2 * (rad - d.startMeasure) * DIM_GAIN;
+        setApicalDiameter(imp, Math.round(v * 10) / 10);
         break;
       }
       case 'length': {
@@ -169,7 +190,7 @@ export class ImplantEditor {
 
   end(): boolean {
     if (!this.drag) return false;
-    if (this.drag.mode === 'diameter' || this.drag.mode === 'length') this.scheduleHide();
+    if (this.drag.mode === 'diameter' || this.drag.mode === 'apicalDiameter' || this.drag.mode === 'length') this.scheduleHide();
     this.drag = null;
     this.app.implantChanged(null, true);
     return true;
@@ -224,7 +245,12 @@ export class ImplantEditor {
   private renderBadgeText() {
     const st = this.badgeState;
     if (!st || !this.badge || st.editing) return;
-    this.badge.textContent = st.kind === 'diameter' ? `Ø ${st.imp.diameter.toFixed(1)} mm` : `L ${st.imp.length.toFixed(1)} mm`;
+    this.badge.textContent =
+      st.kind === 'diameter'
+        ? `Ø ${st.imp.diameter.toFixed(1)} mm${isTapered(st.imp) ? ' (platform)' : ''}`
+        : st.kind === 'apicalDiameter'
+          ? `Ø apex ${apicalDiameterOf(st.imp).toFixed(1)} mm`
+          : `L ${st.imp.length.toFixed(1)} mm`;
   }
 
   private beginEdit() {
@@ -235,11 +261,12 @@ export class ImplantEditor {
     st.editing = true;
     const input = document.createElement('input');
     input.type = 'number';
-    input.step = st.kind === 'diameter' ? '0.1' : '0.5';
-    input.min = st.kind === 'diameter' ? '2.5' : '4';
-    input.max = st.kind === 'diameter' ? '9' : '25';
-    input.value = (st.kind === 'diameter' ? st.imp.diameter : st.imp.length).toFixed(1);
-    b.textContent = st.kind === 'diameter' ? 'Ø ' : 'L ';
+    const isDia = st.kind !== 'length';
+    input.step = isDia ? '0.1' : '0.5';
+    input.min = st.kind === 'diameter' ? '2.5' : st.kind === 'apicalDiameter' ? '1.5' : '4';
+    input.max = st.kind === 'diameter' ? '9' : st.kind === 'apicalDiameter' ? String(st.imp.diameter) : '25';
+    input.value = (st.kind === 'diameter' ? st.imp.diameter : st.kind === 'apicalDiameter' ? apicalDiameterOf(st.imp) : st.imp.length).toFixed(1);
+    b.textContent = st.kind === 'diameter' ? 'Ø ' : st.kind === 'apicalDiameter' ? 'Ø apex ' : 'L ';
     b.append(input, document.createTextNode(' mm'));
     b.classList.add('editing');
     let done = false;
@@ -249,7 +276,8 @@ export class ImplantEditor {
       b.classList.remove('editing');
       const v = Number(input.value);
       if (apply && input.value !== '' && Number.isFinite(v)) {
-        if (st.kind === 'diameter') st.imp.diameter = clamp(Math.round(v * 10) / 10, 2.5, 9);
+        if (st.kind === 'diameter') setCoronalDiameter(st.imp, clamp(Math.round(v * 10) / 10, 2.5, 9));
+        else if (st.kind === 'apicalDiameter') setApicalDiameter(st.imp, Math.round(v * 10) / 10);
         else setImplantLength(st.imp, clamp(Math.round(v * 10) / 10, 4, 25));
         this.app.implantChanged(st.imp, true);
       }
@@ -301,8 +329,13 @@ export class ImplantEditor {
     const my = (a.y + c.y) / 2;
     let x: number, y: number;
     if (st.kind === 'diameter') {
-      x = mx + px * (rpx + 40);
-      y = my + py * (rpx + 40);
+      // beside the coronal half
+      x = (mx + a.x) / 2 + px * (rpx + 44);
+      y = (my + a.y) / 2 + py * (rpx + 44);
+    } else if (st.kind === 'apicalDiameter') {
+      // beside the apical half
+      x = (mx + c.x) / 2 + px * (rpx + 44);
+      y = (my + c.y) / 2 + py * (rpx + 44);
     } else {
       x = c.x - px * (rpx + 40) - dx * 4;
       y = c.y - py * (rpx + 40) - dy * 4;

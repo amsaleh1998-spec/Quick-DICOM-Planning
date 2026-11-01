@@ -1,5 +1,5 @@
 import { App, Jaw, Mode, MprTool, RenderMode, saveInputPreference } from './app';
-import { MUA_HEIGHTS } from './implant';
+import { MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronalDiameter } from './implant';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
 
@@ -349,11 +349,27 @@ impName.onkeydown = (e) => {
   if (e.key === 'Enter' || e.key === 'Escape') impName.blur();
 };
 const impD = $<HTMLInputElement>('imp-d');
+const impTapered = $<HTMLInputElement>('imp-tapered');
+const impAd = $<HTMLInputElement>('imp-ad');
+impTapered.onchange = () => {
+  const imp = app.selectedImplant();
+  if (!imp) return;
+  // default taper: apex 1 mm narrower than the platform
+  if (impTapered.checked) setApicalDiameter(imp, Math.round((imp.diameter - 1) * 10) / 10);
+  else imp.apicalDiameter = null;
+  app.implantChanged(imp, true);
+};
+impAd.oninput = () => {
+  const imp = app.selectedImplant();
+  if (!imp || impAd.value === '') return;
+  setApicalDiameter(imp, clampNum(impAd.value, 1.5, imp.diameter, apicalDiameterOf(imp)));
+  app.implantChanged(imp, true);
+};
 const impL = $<HTMLInputElement>('imp-l');
 impD.oninput = () => {
   const imp = app.selectedImplant();
   if (imp && impD.value) {
-    imp.diameter = clampNum(impD.value, 1, 10, imp.diameter);
+    setCoronalDiameter(imp, clampNum(impD.value, 1, 10, imp.diameter));
     app.changed();
   }
 };
@@ -550,7 +566,8 @@ function refreshUi() {
       listItems.set(id, li);
     }
     const ab = imp.abutment ? ` · MUA ${imp.abutment.angle}°/${imp.abutment.gingivalHeight}` : '';
-    const html = `<span>${escapeHtml(imp.name)}</span><span class="dim">Ø${imp.diameter.toFixed(1)} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
+    const dia = isTapered(imp) ? `Ø${imp.diameter.toFixed(1)}→${apicalDiameterOf(imp).toFixed(1)}` : `Ø${imp.diameter.toFixed(1)}`;
+    const html = `<span>${escapeHtml(imp.name)}</span><span class="dim">${dia} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
     if (li.innerHTML !== html) li.innerHTML = html;
     li.className = imp.id === app.selectedId ? 'sel' : '';
     if (implantList.children[idx] !== li) implantList.insertBefore(li, implantList.children[idx] ?? null);
@@ -566,6 +583,12 @@ function refreshUi() {
   if (sel) {
     if (document.activeElement !== impName) impName.value = sel.name;
     if (document.activeElement !== impD) impD.value = sel.diameter.toFixed(1);
+    const tapered = sel.apicalDiameter !== null;
+    impTapered.checked = tapered;
+    impAd.disabled = !tapered;
+    impAd.max = String(sel.diameter);
+    $('imp-ad-label').classList.toggle('muted', !tapered);
+    if (document.activeElement !== impAd) impAd.value = apicalDiameterOf(sel).toFixed(1);
     if (document.activeElement !== impL) impL.value = sel.length.toFixed(1);
     const others = app.implants.filter((i) => i !== sel);
     const lines = [`Inclination ${app.implantTilt(sel).toFixed(1)}° from vertical`];
