@@ -20,6 +20,8 @@ export class MprView extends PlaneView {
     readonly orient: 0 | 1 | 2,
   ) {
     super(app, MPR_NAMES[orient], MPR_COLORS[orient]);
+    // Shift makes the crosshair follow the mouse instead
+    this.shiftPans = false;
   }
 
   /** In-plane basis for this view (includes its in-plane offset angle psi). */
@@ -112,7 +114,12 @@ export class MprView extends PlaneView {
     this.cropEdge = null;
   }
 
-  protected onHover(p: Pt) {
+  protected onHover(p: Pt, e: PointerEvent) {
+    if (e.shiftKey && this.app.vol) {
+      this.setCrosshair(p);
+      this.el.style.cursor = 'crosshair';
+      return;
+    }
     if (this.app.mprTool === 'crop') {
       const e = this.hitCropEdge(p);
       if (e) {

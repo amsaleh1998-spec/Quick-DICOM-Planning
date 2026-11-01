@@ -83,6 +83,50 @@ export class Volume {
     return trilinear(this.data, this.nx, this.nx * this.ny, this.nx - 1, this.ny - 1, this.nz - 1, x, y, z, bg);
   }
 
+  /**
+   * Threshold separating bone/teeth from soft tissue for 3D rendering:
+   * Otsu on the whole histogram (air vs. tissue), then Otsu again above it.
+   */
+  boneThreshold(): number {
+    const d = this.data;
+    const bins = 1024;
+    const lo = this.min;
+    const range = Math.max(1, this.max - this.min);
+    const hist = new Float64Array(bins);
+    const step = Math.max(1, Math.floor(d.length / 2_000_000));
+    for (let i = 0; i < d.length; i += step) hist[Math.min(bins - 1, Math.floor(((d[i] - lo) / range) * bins))]++;
+    const otsu = (from: number) => {
+      let total = 0;
+      let sum = 0;
+      for (let b = from; b < bins; b++) {
+        total += hist[b];
+        sum += b * hist[b];
+      }
+      let wB = 0;
+      let sumB = 0;
+      let best = 0;
+      let bt = from;
+      for (let b = from; b < bins; b++) {
+        wB += hist[b];
+        if (!wB) continue;
+        const wF = total - wB;
+        if (!wF) break;
+        sumB += b * hist[b];
+        const mB = sumB / wB;
+        const mF = (sum - sumB) / wF;
+        const between = wB * wF * (mB - mF) * (mB - mF);
+        if (between > best) {
+          best = between;
+          bt = b;
+        }
+      }
+      return bt;
+    };
+    const t1 = otsu(0);
+    const t2 = otsu(t1 + 1);
+    return lo + ((t2 + 0.5) / bins) * range;
+  }
+
   /** Window from histogram percentiles – CBCT grey values are rarely calibrated HU. */
   autoWindow(): { center: number; width: number } {
     const d = this.data;

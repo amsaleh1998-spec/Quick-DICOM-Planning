@@ -1,5 +1,5 @@
 import { ArchCurve } from './curve';
-import { Implant, createImplant } from './implant';
+import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, setImplantAxis, setImplantLength } from './implant';
 import {
   Frame,
   Vec2,
@@ -13,6 +13,7 @@ import {
   identityFrame,
   neg,
   normalize,
+  perpendicular,
   rotateFrame,
   scale,
   sub,
@@ -21,11 +22,14 @@ import {
 import { CropSpec } from './render';
 import { Volume, resampleVolume } from './volume';
 import { MprView } from './views/MprView';
+import { View3D } from './views/View3D';
 import { CrossView, PanoView, PlanAxialView, TangView } from './views/PlanViews';
 import { Pt, View, newViewState } from './views/View';
 
 export type Mode = 'mpr' | 'plan';
 export type MprTool = 'navigate' | 'rotate' | 'crop';
+export type Jaw = 'mandible' | 'maxilla';
+export type RenderMode = 'surface' | 'translucent' | 'mip';
 
 export class App {
   vol: Volume | null = null;
@@ -60,6 +64,13 @@ export class App {
   placing = false;
   defaultDiameter = 4;
   defaultLength = 10;
+  /** decides the default apical direction of new implants */
+  jaw: Jaw = 'mandible';
+  /** new implants copy the axis of the selected implant */
+  placeParallel = true;
+
+  /** 3D rendering settings */
+  vr = { mode: 'surface' as RenderMode, lo: 0, hi: 0 };
 
   activeView: View | null = null;
   readonly mprViews: MprView[];
@@ -67,6 +78,7 @@ export class App {
   readonly pano: PanoView;
   readonly crossViews: CrossView[];
   readonly tang: TangView;
+  readonly view3d: View3D;
   readonly views: View[];
 
   /** UI hooks set by main.ts */
@@ -84,7 +96,8 @@ export class App {
     const crossVs = newViewState();
     this.crossViews = [new CrossView(this, 0, crossVs), new CrossView(this, 1, crossVs), new CrossView(this, 2, crossVs)];
     this.tang = new TangView(this);
-    this.views = [...this.mprViews, this.planAxial, this.pano, ...this.crossViews, this.tang];
+    this.view3d = new View3D(this);
+    this.views = [...this.mprViews, this.planAxial, this.pano, ...this.crossViews, this.tang, this.view3d];
   }
 
   // ---- scheduling -----------------------------------------------------------
@@ -120,6 +133,8 @@ export class App {
     this.resetCrop();
     const w = vol.info.defaultWindow ?? vol.autoWindow();
     this.wl = { ...w };
+    this.vr.lo = Math.round(vol.boneThreshold());
+    this.vr.hi = vol.max;
     this.curve = null;
     this.drawing = null;
     this.implants = [];
@@ -253,6 +268,7 @@ export class App {
     const ctrl = this.curve?.ctrl.map((p) => [p[0] - min[0] - O2[0], p[1] - min[1] - O2[1]] as Vec2);
     const focus = this.focusC - min[2] - O2[2];
     const { s, selectedId, wl } = this;
+    const vr = { ...this.vr };
 
     this.setVolume(nv);
     this.X = X2;
@@ -262,6 +278,7 @@ export class App {
     this.s = s;
     this.focusC = focus;
     this.wl = wl;
+    this.vr = vr;
     this.onWindowChange();
     this.fitAll();
     this.changed();
@@ -364,8 +381,17 @@ export class App {
     this.changed();
   }
 
-  placeImplantAt(w: Vec3, axis: Vec3) {
+  /** Default apical direction for new implants (down in the mandible, up in the maxilla). */
+  apicalDirection(): Vec3 {
+    return this.jaw === 'mandible' ? neg(this.frame[2]) : this.frame[2];
+  }
+
+  /** Place a new implant with its centre at w. */
+  placeImplantAt(w: Vec3) {
+    const ref = this.selectedImplant();
+    const axis = this.placeParallel && ref ? ref.axis : this.apicalDirection();
     const imp = createImplant(w, normalize(axis), this.defaultDiameter, this.defaultLength);
+    if (this.placeParallel && ref?.abutment) imp.abutment = { ...ref.abutment };
     this.implants.push(imp);
     this.placing = false;
     this.tangAngle = 0;
@@ -395,16 +421,132 @@ export class App {
     this.changed();
   }
 
-  /** Make the selected implant parallel to the frame's vertical axis. */
+  implantById(id: number | null) {
+    return this.implants.find((i) => i.id === id) ?? null;
+  }
+
+  /** Make the implant parallel to the frame's vertical axis (rotating around its platform). */
   uprightImplant(id: number) {
-    const imp = this.implants.find((i) => i.id === id);
+    const imp = this.implantById(id);
     if (!imp) return;
-    imp.axis = dot(imp.axis, this.frame[2]) >= 0 ? this.frame[2] : neg(this.frame[2]);
+    setImplantAxis(imp, dot(imp.axis, this.frame[2]) >= 0 ? this.frame[2] : neg(this.frame[2]));
     this.changed();
   }
 
+  /** Make implant `id` parallel to implant `refId` (rotating around its platform). */
+  makeParallel(id: number, refId: number) {
+    const imp = this.implantById(id);
+    const ref = this.implantById(refId);
+    if (!imp || !ref || imp === ref) return;
+    setImplantAxis(imp, ref.axis.slice() as Vec3);
+    this.changed();
+  }
+
+  /** Swap platform and apex. */
+  flipImplant(id: number) {
+    const imp = this.implantById(id);
+    if (!imp) return;
+    imp.axis = neg(imp.axis);
+    this.changed();
+  }
+
+  setLength(id: number, length: number) {
+    const imp = this.implantById(id);
+    if (!imp) return;
+    setImplantLength(imp, length);
+    this.changed();
+  }
+
+  /** Buccal direction at the implant (curve normal), used as 0° for abutment rotation. */
+  private buccalAt(imp: Implant): Vec3 {
+    const F = this.frame;
+    if (this.curve) {
+      const f = toFrame(imp.center, this.O, F);
+      const cp = this.curve.at(this.curve.nearest(f[0], f[1]).s);
+      return add(scale(F[0], cp.n[0]), scale(F[1], cp.n[1]));
+    }
+    return neg(F[1]);
+  }
+
+  /** In-plane basis around the implant's coronal direction: [up, buccal, mesial-ish]. */
+  private abutmentBasis(imp: Implant): [Vec3, Vec3, Vec3] {
+    const up = neg(imp.axis);
+    const b0 = this.buccalAt(imp);
+    let B = sub(b0, scale(up, dot(b0, up)));
+    B = Math.hypot(B[0], B[1], B[2]) < 1e-3 ? perpendicular(up) : normalize(B);
+    return [up, B, cross(up, B)];
+  }
+
+  /** Coronal direction of the abutment head. */
+  abutmentDir(imp: Implant): Vec3 | null {
+    const ab = imp.abutment;
+    if (!ab) return null;
+    const [up, B, M] = this.abutmentBasis(imp);
+    const r = (ab.rotation * Math.PI) / 180;
+    const t = (ab.angle * Math.PI) / 180;
+    const d = add(scale(B, Math.cos(r)), scale(M, Math.sin(r)));
+    return normalize(add(scale(up, Math.cos(t)), scale(d, Math.sin(t))));
+  }
+
+  /** Pick MUA angulation and rotation so the abutment points as vertically as possible. */
+  autoAlignAbutment(id: number) {
+    const imp = this.implantById(id);
+    if (!imp || !imp.abutment) return;
+    const [up, B, M] = this.abutmentBasis(imp);
+    const F2 = this.frame[2];
+    const target = dot(F2, up) >= 0 ? F2 : neg(F2);
+    const tilt = deg(Math.acos(clamp(dot(target, up), -1, 1)));
+    const tp = sub(target, scale(up, dot(target, up)));
+    imp.abutment.angle = MUA_ANGLES.reduce((best, a) => (Math.abs(a - tilt) < Math.abs(best - tilt) ? a : best), 0);
+    if (Math.hypot(tp[0], tp[1], tp[2]) > 1e-4) {
+      imp.abutment.rotation = Math.round(((deg(Math.atan2(dot(tp, M), dot(tp, B))) % 360) + 360) % 360);
+    }
+    this.changed();
+  }
+
+  /** Cylinders of all implants and abutments. */
+  allParts(): Cylinder[] {
+    return this.implants.flatMap((imp) => implantParts(imp, this.abutmentDir(imp)));
+  }
+
+  /** Direction the prosthesis "sees": abutment head axis or implant coronal axis. */
+  prostheticAxis(imp: Implant): Vec3 {
+    return this.abutmentDir(imp) ?? neg(imp.axis);
+  }
+
+  /** Pairwise angles between implants (and their abutments). */
+  angleTable(): { a: Implant; b: Implant; implant: number; abutment: number | null }[] {
+    const out: { a: Implant; b: Implant; implant: number; abutment: number | null }[] = [];
+    for (let i = 0; i < this.implants.length; i++) {
+      for (let j = i + 1; j < this.implants.length; j++) {
+        const a = this.implants[i];
+        const b = this.implants[j];
+        const hasAb = !!(a.abutment || b.abutment);
+        out.push({
+          a,
+          b,
+          implant: this.implantAngle(a, b),
+          abutment: hasAb ? deg(Math.acos(clamp(dot(this.prostheticAxis(a), this.prostheticAxis(b)), -1, 1))) : null,
+        });
+      }
+    }
+    return out;
+  }
+
   implantsKey(): string {
-    return JSON.stringify([this.implants, this.selectedId]);
+    const hasAb = this.implants.some((i) => i.abutment);
+    return JSON.stringify([this.implants, this.selectedId, hasAb ? [this.curve?.ctrl, this.frame] : 0]);
+  }
+
+  /** Toggle a view between its grid cell and filling the whole layout. */
+  toggleMaximize(v: View) {
+    const layout = v.el.parentElement;
+    if (!layout) return;
+    const was = v.el.classList.contains('max');
+    layout.querySelectorAll('.view.max').forEach((e) => e.classList.remove('max'));
+    layout.classList.toggle('has-max', !was);
+    if (!was) v.el.classList.add('max');
+    this.requestRender();
   }
 
   /** Implant inclination relative to the frame's vertical axis (degrees). */
@@ -412,9 +554,9 @@ export class App {
     return deg(Math.acos(clamp(Math.abs(dot(imp.axis, this.frame[2])), 0, 1)));
   }
 
-  /** Angle between two implants' axes. */
+  /** Angle between two implants' axes (both point apically). */
   implantAngle(a: Implant, b: Implant) {
-    return deg(Math.acos(clamp(Math.abs(dot(a.axis, b.axis)), 0, 1)));
+    return deg(Math.acos(clamp(dot(a.axis, b.axis), -1, 1)));
   }
 
   // ---- status -----------------------------------------------------------------
