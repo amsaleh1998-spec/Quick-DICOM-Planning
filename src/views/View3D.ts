@@ -349,8 +349,16 @@ export class View3D extends View {
   }
 
   protected onLeftDrag(p: Pt, last: Pt) {
-    const dx = p[0] - last[0];
-    const dy = p[1] - last[1];
+    this.orbit(p[0] - last[0], p[1] - last[1]);
+  }
+
+  /** Trackpad: two-finger swipe orbits (content follows the fingers). */
+  protected onSwipe(dx: number, dy: number): boolean {
+    this.orbit(-dx * 0.8, -dy * 0.8);
+    return true;
+  }
+
+  private orbit(dx: number, dy: number) {
     const axis = this.app.frame[2];
     const a = -dx * 0.008;
     const b = -dy * 0.008;

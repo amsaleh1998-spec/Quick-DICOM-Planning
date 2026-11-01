@@ -722,6 +722,11 @@ export class PanoView extends View {
     this.el.style.cursor = this.editor.hoverCursor(p) ?? (this.app.placing ? 'crosshair' : 'col-resize');
   }
 
+  /** Horizontal trackpad swipe moves the cross-sections along the curve. */
+  protected onScrollH(dir: number) {
+    this.app.moveAlongCurve(dir);
+  }
+
   protected onScroll(dir: number, _p: Pt, e: WheelEvent) {
     if (e.altKey) {
       this.app.moveAlongCurve(dir);

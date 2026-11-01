@@ -7,6 +7,8 @@ import { CropSpec, SlabSpec, samplePlane, windowToBytes } from '../render';
 
 export type Pt = [number, number];
 
+export const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent);
+
 /** Zoom/pan state; can be shared between views (e.g. the cross-sections). */
 export interface ViewState {
   /** mm per CSS pixel */
@@ -129,6 +131,14 @@ export abstract class View {
   protected onLeftDrag(_p: Pt, _last: Pt, _e: PointerEvent): void {}
   protected onLeftUp(_p: Pt, _e: PointerEvent, _moved: boolean): void {}
   protected onScroll(_dir: number, _p: Pt, _e: WheelEvent): void {}
+  /** Horizontal trackpad swipe step; defaults to the vertical action. */
+  protected onScrollH(dir: number, p: Pt, e: WheelEvent): void {
+    this.onScroll(dir, p, e);
+  }
+  /** Continuous trackpad swipe (px); return true when handled (e.g. 3D orbit). */
+  protected onSwipe(_dx: number, _dy: number, _p: Pt, _e: WheelEvent): boolean {
+    return false;
+  }
   protected onDoubleClick(_p: Pt, _e: MouseEvent): void {}
   protected onHover(_p: Pt, _e: PointerEvent): void {}
   /** World point under the cursor for the status bar. */
@@ -346,14 +356,16 @@ export abstract class View {
       this.last = p;
       this.downPos = p;
       this.app.activeView = this;
-      if (e.button === 2) this.drag = 'right';
-      else if (e.button === 1 || (e.button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey)))) this.drag = 'pan';
-      else if (e.button === 0 && this.app.ruler && this.measureKind) this.drag = this.rulerClick(p) ? 'ruler' : 'none';
-      else if (e.button === 0 && this.measureKind && this.hitMeasureEnd(p)) {
+      // macOS: Control+click arrives as a right click – treat it as a modified left click
+      const button = IS_MAC && e.button === 2 && e.ctrlKey ? 0 : e.button;
+      if (button === 2) this.drag = 'right';
+      else if (button === 1 || (button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey && !e.metaKey)))) this.drag = 'pan';
+      else if (button === 0 && this.app.ruler && this.measureKind) this.drag = this.rulerClick(p) ? 'ruler' : 'none';
+      else if (button === 0 && this.measureKind && this.hitMeasureEnd(p)) {
         // edit an existing ruler end without the tool
         this.rulerDrag = { ...this.hitMeasureEnd(p)!, created: false };
         this.drag = 'ruler';
-      } else if (e.button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
+      } else if (button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
       if (this.drag !== 'none') {
         c.setPointerCapture(e.pointerId);
         e.preventDefault();
@@ -451,10 +463,16 @@ export abstract class View {
       (e) => {
         if (!this.app.vol) return;
         e.preventDefault();
+        if (this.gestureActive) return; // Safari pinch is handled by the gesture events
         const p = this.pos(e);
-        if (e.ctrlKey || e.metaKey) {
-          const f = Math.exp(Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 100) * 0.0025 * (e.deltaMode ? 30 : 1));
-          this.zoomAt(p, f);
+        const trackpad = this.app.input === 'trackpad';
+        if (e.ctrlKey || (e.metaKey && !trackpad)) {
+          // pinch (trackpads report it as ctrl+wheel) or ctrl/cmd + mouse wheel
+          const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+          const d = Math.max(-100, Math.min(100, e.deltaY * unit));
+          this.zoomAt(p, Math.exp(d * (trackpad ? 0.01 : 0.0025)));
+        } else if (trackpad) {
+          this.trackpadWheel(e, p);
         } else {
           const dir = Math.sign(e.deltaY || e.deltaX);
           if (dir) this.onScroll(dir, p, e);
@@ -462,6 +480,25 @@ export abstract class View {
       },
       { passive: false },
     );
+    // Safari reports trackpad pinch as gesture events
+    let gScale = 1;
+    const gesture = (name: string, fn: (e: Event & { scale: number; clientX: number; clientY: number }) => void) =>
+      c.addEventListener(name, (e) => {
+        e.preventDefault();
+        if (this.app.vol) fn(e as Event & { scale: number; clientX: number; clientY: number });
+      });
+    gesture('gesturestart', () => {
+      this.gestureActive = true;
+      gScale = 1;
+    });
+    gesture('gesturechange', (e) => {
+      if (!e.scale) return;
+      this.zoomAt(this.pos(e as unknown as MouseEvent), gScale / e.scale);
+      gScale = e.scale;
+    });
+    gesture('gestureend', () => {
+      this.gestureActive = false;
+    });
     c.addEventListener('dblclick', (e) => {
       if (!this.app.vol) return;
       if (this.measureKind && !this.app.ruler && performance.now() - this.rulerDoneAt > 500) {
@@ -470,6 +507,61 @@ export abstract class View {
       if (this.app.ruler) return;
       this.onDoubleClick(this.pos(e), e);
     });
+  }
+
+  // ---- trackpad --------------------------------------------------------------
+
+  private gestureActive = false;
+  private accX = 0;
+  private accY = 0;
+  private lastWheel = 0;
+
+  /**
+   * Two-finger swipe: scroll in steps (accumulated so a swipe is smooth, not a
+   * burst), ⌘ + swipe pans, ⇧ + swipe adjusts brightness / contrast.
+   */
+  private trackpadWheel(e: WheelEvent, p: Pt) {
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    const dx = e.deltaX * unit;
+    const dy = e.deltaY * unit;
+    if (e.metaKey) {
+      this.vs.panU += dx * this.vs.scale;
+      this.vs.panV += dy * this.vs.scale;
+      this.app.requestRender();
+      return;
+    }
+    if (e.shiftKey) {
+      const wl = this.app.wl;
+      const k = Math.max(1, wl.width) * 0.002;
+      // some browsers turn shift+vertical scroll into horizontal: use whichever axis dominates
+      this.app.setWindow(wl.center - dy * k, Math.max(1, wl.width + dx * k));
+      return;
+    }
+    if (this.onSwipe(dx, dy, p, e)) return;
+    const now = performance.now();
+    if (now - this.lastWheel > 250) {
+      this.accX = 0;
+      this.accY = 0;
+    }
+    this.lastWheel = now;
+    const STEP = 28; // px of finger travel per slice step
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (Math.sign(dx) !== Math.sign(this.accX)) this.accX = 0;
+      this.accX += dx;
+      while (Math.abs(this.accX) >= STEP) {
+        const dir = Math.sign(this.accX);
+        this.onScrollH(dir, p, e);
+        this.accX -= dir * STEP;
+      }
+    } else {
+      if (Math.sign(dy) !== Math.sign(this.accY)) this.accY = 0;
+      this.accY += dy;
+      while (Math.abs(this.accY) >= STEP) {
+        const dir = Math.sign(this.accY);
+        this.onScroll(dir, p, e);
+        this.accY -= dir * STEP;
+      }
+    }
   }
 
   zoomAt(p: Pt, factor: number) {

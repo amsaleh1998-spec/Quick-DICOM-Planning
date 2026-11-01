@@ -24,7 +24,7 @@ import { Volume, resampleVolume } from './volume';
 import { MprView } from './views/MprView';
 import { View3D } from './views/View3D';
 import { CrossView, PanoView, PlanAxialView, TangView } from './views/PlanViews';
-import { Pt, View, newViewState } from './views/View';
+import { IS_MAC, Pt, View, newViewState } from './views/View';
 
 export type Mode = 'mpr' | 'plan';
 export type MprTool = 'navigate' | 'rotate' | 'crop';
@@ -38,6 +38,24 @@ export interface Measurement {
   b: Vec3;
 }
 let nextMeasurementId = 1;
+
+const INPUT_KEY = 'qdp.input';
+function loadInputPreference(): 'mouse' | 'trackpad' {
+  try {
+    const v = localStorage.getItem(INPUT_KEY);
+    if (v === 'mouse' || v === 'trackpad') return v;
+  } catch {
+    /* storage unavailable */
+  }
+  return IS_MAC ? 'trackpad' : 'mouse';
+}
+export function saveInputPreference(v: 'mouse' | 'trackpad') {
+  try {
+    localStorage.setItem(INPUT_KEY, v);
+  } catch {
+    /* storage unavailable */
+  }
+}
 export type RenderMode = 'surface' | 'translucent' | 'mip';
 
 export class App {
@@ -84,6 +102,8 @@ export class App {
   hoverMeasurementId: number | null = null;
   /** what right-drag does */
   rightDrag: 'zoom' | 'wl' = 'zoom';
+  /** pointing device: trackpad mode maps two-finger gestures to navigation */
+  input: 'mouse' | 'trackpad' = loadInputPreference();
   defaultDiameter = 4;
   defaultLength = 10;
   /** new implants copy the axis of the selected implant */
