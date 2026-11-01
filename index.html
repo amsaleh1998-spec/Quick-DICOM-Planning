@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quick DICOM Planning</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="toolbar">
+        <div class="brand">Quick&nbsp;DICOM&nbsp;Planning</div>
+        <div class="group">
+          <button id="btn-open" title="Select one or more DICOM files">Open files</button>
+          <button id="btn-open-folder" title="Select a folder containing a DICOM series">Open folder</button>
+          <button id="btn-demo" title="Load a synthetic mandible phantom">Demo volume</button>
+        </div>
+        <div class="tabs" role="tablist">
+          <button data-mode="mpr" class="active" role="tab">MPR / Reorient</button>
+          <button data-mode="plan" role="tab">Implant planning</button>
+        </div>
+        <div class="group wl">
+          <label>W <input id="ww" type="number" step="10" /></label>
+          <label>L <input id="wc" type="number" step="10" /></label>
+          <button id="btn-auto-wl" title="Automatic window from histogram">Auto</button>
+        </div>
+        <input id="file-input" type="file" multiple hidden />
+        <input id="folder-input" type="file" webkitdirectory multiple hidden />
+      </header>
+
+      <div id="main">
+        <aside id="sidebar">
+          <section id="panel-info" class="panel">
+            <h3>Volume</h3>
+            <div id="vol-info" class="muted">Open a DICOM series (files or folder, or drag &amp; drop) or load the demo volume.</div>
+          </section>
+
+          <section id="panel-mpr" class="panel">
+            <h3>MPR tools</h3>
+            <div class="seg" id="mpr-tools">
+              <button data-tool="navigate" class="active">Navigate</button>
+              <button data-tool="rotate">Rotate</button>
+              <button data-tool="crop">Crop</button>
+            </div>
+            <div class="row">
+              <button id="btn-straighten" title="Show the rotated frame axis-aligned in every view">Straighten views</button>
+              <button id="btn-reset-rot">Reset rotation</button>
+            </div>
+            <div class="row">
+              <button id="btn-reset-crop">Reset crop</button>
+              <button id="btn-apply" class="primary" title="Resample the volume into the rotated, cropped frame">Apply rotate + crop</button>
+            </div>
+            <div id="mpr-status" class="muted small"></div>
+            <details open>
+              <summary>Mouse</summary>
+              <ul class="help">
+                <li><b>Left click/drag</b> – move crosshair</li>
+                <li><b>Ctrl+Alt+drag</b> (or Rotate tool) – rotate the other planes around this view</li>
+                <li><b>Crop tool</b> – drag the blue box edges</li>
+                <li><b>Wheel</b> – scroll slices</li>
+                <li><b>Ctrl+wheel</b> – zoom · <b>Shift/middle drag</b> – pan</li>
+                <li><b>Right drag</b> – window / level</li>
+              </ul>
+            </details>
+          </section>
+
+          <section id="panel-plan" class="panel hidden">
+            <h3>Panoramic curve</h3>
+            <div class="row">
+              <button id="btn-draw-curve" class="primary">Draw panoramic curve</button>
+              <button id="btn-clear-curve">Clear</button>
+            </div>
+            <label class="slider">Panoramic slab <span id="slab-val"></span>
+              <input id="slab" type="range" min="0" max="30" step="1" />
+            </label>
+            <label class="slider">Cross-section spacing <span id="spacing-val"></span>
+              <input id="spacing" type="range" min="0.5" max="10" step="0.5" />
+            </label>
+
+            <h3>Implants</h3>
+            <div class="row">
+              <button id="btn-add-implant" class="primary">Add implant</button>
+            </div>
+            <div class="row small">
+              <label>Default Ø <input id="def-d" type="number" step="0.1" min="2" max="8" /> mm</label>
+              <label>L <input id="def-l" type="number" step="0.5" min="4" max="20" /> mm</label>
+            </div>
+            <ul id="implant-list"></ul>
+            <div id="implant-edit" class="hidden">
+              <div class="row">
+                <label>Diameter <input id="imp-d" type="number" step="0.1" min="2" max="8" /> mm</label>
+              </div>
+              <div class="row">
+                <label>Length <input id="imp-l" type="number" step="0.5" min="4" max="20" /> mm</label>
+              </div>
+              <div id="imp-info" class="muted small"></div>
+              <div class="row">
+                <button id="btn-upright">Make vertical</button>
+                <button id="btn-deselect">Deselect</button>
+                <button id="btn-delete" class="danger">Delete</button>
+              </div>
+            </div>
+            <details open>
+              <summary>Mouse</summary>
+              <ul class="help">
+                <li><b>Axial</b>: wheel = level, drag curve points, dbl-click curve = add / point = remove</li>
+                <li><b>Panoramic / cross-sections</b>: wheel = move along the curve, click = jump</li>
+                <li><b>Tangential</b>: wheel = rotate 360° (around the selected implant)</li>
+                <li><b>Implant</b>: drag body = move, drag near an end = tilt</li>
+                <li><b>Esc</b> deselect / cancel · <b>Del</b> delete implant</li>
+                <li><b>Ctrl+wheel</b> zoom · <b>Shift/middle drag</b> pan · <b>Right drag</b> W/L</li>
+              </ul>
+            </details>
+          </section>
+        </aside>
+
+        <section id="viewport">
+          <div id="layout-mpr" class="layout"></div>
+          <div id="layout-plan" class="layout hidden"></div>
+          <div id="drop-overlay" class="hidden">Drop DICOM files or a folder</div>
+          <div id="loading" class="hidden"><div class="box"><div id="loading-text">Loading…</div><div class="bar"><div id="loading-bar"></div></div></div></div>
+        </section>
+      </div>
+      <footer id="status"><span id="status-cursor"></span><span id="status-msg"></span></footer>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
