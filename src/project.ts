@@ -2,6 +2,8 @@ import type { App, Measurement, Mode, RenderMode } from './app';
 import { ArchCurve } from './curve';
 import { Implant, reserveImplantIds } from './implant';
 import { Frame, Vec2, Vec3 } from './math';
+import { Nerve, reserveNerveIds } from './nerve';
+import type { Cut, Segment } from './segment';
 import { Volume, VolumeInfo } from './volume';
 import { readZip, writeZip } from './zip';
 import type { ViewState } from './views/View';
@@ -42,6 +44,7 @@ interface ProjectFile {
     implants: Implant[];
     selectedId: number | null;
     defaultDiameter: number;
+    defaultTapered?: boolean;
     defaultLength: number;
     placeParallel: boolean;
     vr: { mode: RenderMode; lo: number; hi: number };
@@ -50,6 +53,15 @@ interface ProjectFile {
     camera3d: { right: Vec3; up: Vec3; fwd: Vec3; target: Vec3 };
     /** index into app.views of the maximized view, or -1 */
     maximized: number;
+    // segmentation & nerves (optional: older projects have none)
+    segments?: Segment[];
+    cuts?: Cut[];
+    nerves?: Nerve[];
+    activeSegId?: number | null;
+    activeNerveId?: number | null;
+    showUnsegmented?: boolean;
+    showSegOverlay?: boolean;
+    cutDepth?: number | null;
   };
 }
 
@@ -93,6 +105,7 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       implants: app.implants,
       selectedId: app.selectedId,
       defaultDiameter: app.defaultDiameter,
+      defaultTapered: app.defaultTapered,
       defaultLength: app.defaultLength,
       placeParallel: app.placeParallel,
       vr: app.vr,
@@ -100,6 +113,14 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       views: app.views.map((v) => ({ ...v.vs })),
       camera3d: app.view3d.getCamera(),
       maximized: maxIdx,
+      segments: app.seg.segments,
+      cuts: app.seg.cuts,
+      nerves: app.nerves,
+      activeSegId: app.activeSegId,
+      activeNerveId: app.activeNerveId,
+      showUnsegmented: app.showUnsegmented,
+      showSegOverlay: app.showSegOverlay,
+      cutDepth: app.cutDepth,
     },
   };
   const json = new TextEncoder().encode(JSON.stringify(file, null, 1));
@@ -166,6 +187,7 @@ export function applyProjectState(app: App, file: ProjectFile) {
   reserveImplantIds(Math.max(0, ...app.implants.map((i) => i.id)));
   app.selectedId = st.selectedId;
   app.defaultDiameter = st.defaultDiameter;
+  app.defaultTapered = st.defaultTapered ?? true;
   app.defaultLength = st.defaultLength;
   app.placeParallel = st.placeParallel;
   app.vr = { ...st.vr };
@@ -178,6 +200,14 @@ export function applyProjectState(app: App, file: ProjectFile) {
   for (const v of app.views) v.invalidate();
   const mv = app.views[st.maximized];
   if (mv && !mv.el.classList.contains('max')) app.toggleMaximize(mv);
+  app.showUnsegmented = st.showUnsegmented ?? true;
+  app.showSegOverlay = st.showSegOverlay ?? true;
+  app.cutDepth = st.cutDepth ?? null;
+  app.activeSegId = st.activeSegId ?? null;
+  app.activeNerveId = st.activeNerveId ?? null;
+  const nerves = (st.nerves ?? []).map((n) => ({ ...n, pts: n.pts.map((p) => [...p] as Vec3) }));
+  reserveNerveIds(Math.max(0, ...nerves.map((n) => n.id)));
+  app.restoreSegmentation(st.segments ?? [], st.cuts ?? [], nerves);
   app.onWindowChange();
   app.changed();
 }

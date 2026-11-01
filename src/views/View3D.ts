@@ -1,10 +1,12 @@
 import type { App } from '../app';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, PROSTHETIC_COLOR } from '../implant';
-import { Frame, Vec3, add, cross, dot, fromFrame, neg, reorthonormalize, rotate, scale } from '../math';
+import { NERVE_COLOR, nervePath } from '../nerve';
+import { Frame, Vec3, add, cross, dot, fromFrame, neg, normalize, reorthonormalize, rotate, scale, toFrame } from '../math';
 import { Volume } from '../volume';
 import { Pt, View, drawLabel } from './View';
 
 const MAX_CYL = 48;
+const MAX_NERVE_SEG = 1024;
 const FOV = (30 * Math.PI) / 180;
 
 const VS = `#version 300 es
@@ -27,9 +29,58 @@ uniform float uLo, uHi, uStep, uOpac, uWC, uWW;
 uniform int uMode;
 uniform int uNumCyl;
 uniform vec4 uCyl[${MAX_CYL * 3}];
+// segmentation: label grid (nearest voxel), segment table (row 0 colour + visible, row 1 threshold)
+uniform highp usampler3D uLab;
+uniform sampler2D uSegTab;
+uniform vec3 uLabInv;
+uniform ivec3 uLabMax;
+uniform int uSegOn;
+uniform int uShowUnseg;
+// nerve canals: capsules (a.xyz, r) (b.xyz, 0) in a float texture
+uniform sampler2D uNerve;
+uniform int uNumNerve;
+uniform vec3 uNerveMin, uNerveMax, uNerveCol;
 out vec4 outColor;
 
 float vol(vec3 p) { return texture(uVol, p * uTexScale + uTexOffset).r; }
+uint labAt(vec3 p) {
+  ivec3 ic = clamp(ivec3(floor(p * uLabInv + 0.5)), ivec3(0), uLabMax);
+  return texelFetch(uLab, ic, 0).r & 127u;
+}
+vec4 segInfo(uint l) { return texelFetch(uSegTab, ivec2(int(l), 0), 0); }
+float segLo(uint l) { return texelFetch(uSegTab, ivec2(int(l), 1), 0).r; }
+vec3 labGrad(vec3 p, uint l) {
+  vec3 e = 1.0 / uLabInv;
+  return vec3(
+    float(labAt(p + vec3(e.x, 0.0, 0.0)) == l) - float(labAt(p - vec3(e.x, 0.0, 0.0)) == l),
+    float(labAt(p + vec3(0.0, e.y, 0.0)) == l) - float(labAt(p - vec3(0.0, e.y, 0.0)) == l),
+    float(labAt(p + vec3(0.0, 0.0, e.z)) == l) - float(labAt(p - vec3(0.0, 0.0, e.z)) == l));
+}
+// capsule a-b with radius r (Inigo Quilez)
+float capHit(vec3 ro, vec3 rd, vec3 pa, vec3 pb, float ra) {
+  vec3 ba = pb - pa;
+  vec3 oa = ro - pa;
+  float baba = dot(ba, ba);
+  float bard = dot(ba, rd);
+  float baoa = dot(ba, oa);
+  float rdoa = dot(rd, oa);
+  float oaoa = dot(oa, oa);
+  float a = baba - bard * bard;
+  float b = baba * rdoa - baoa * bard;
+  float c = baba * oaoa - baoa * baoa - ra * ra * baba;
+  float h = b * b - a * c;
+  if (h >= 0.0 && abs(a) > 1e-9) {
+    float t = (-b - sqrt(h)) / a;
+    float y = baoa + t * bard;
+    if (y > 0.0 && y < baba) return t;
+    vec3 oc = (y <= 0.0) ? oa : ro - pb;
+    b = dot(rd, oc);
+    c = dot(oc, oc) - ra * ra;
+    h = b * b - c;
+    if (h > 0.0) return -b - sqrt(h);
+  }
+  return -1.0;
+}
 vec3 grad(vec3 p) {
   vec3 tc = p * uTexScale + uTexOffset;
   vec3 g = vec3(
@@ -111,6 +162,30 @@ void main() {
       if (h.x < tGuide) { tGuide = h.x; nGuide = h.yzw; cGuide = C.rgb; }
     } else if (h.x < tImp) { tImp = h.x; nImp = h.yzw; cImp = C.rgb; }
   }
+  // nerve canals: opaque in front, shown through the bone when hidden
+  float tNerve = 1e20;
+  vec3 nNerve = vec3(0.0);
+  if (uNumNerve > 0) {
+    vec2 nb = boxHit(ro, rd, uNerveMin, uNerveMax);
+    if (nb.x <= nb.y && nb.y > 0.0) {
+      vec3 na = vec3(0.0), nbb = vec3(0.0);
+      float nr = 1.0;
+      for (int i = 0; i < ${MAX_NERVE_SEG}; i++) {
+        if (i >= uNumNerve) break;
+        vec4 A = texelFetch(uNerve, ivec2(i * 2, 0), 0);
+        vec4 B = texelFetch(uNerve, ivec2(i * 2 + 1, 0), 0);
+        float t = capHit(ro, rd, A.xyz, B.xyz, A.w);
+        if (t > 0.0 && t < tNerve) { tNerve = t; na = A.xyz; nbb = B.xyz; nr = A.w; }
+      }
+      if (tNerve < 1e19) {
+        vec3 pos = ro + rd * tNerve;
+        vec3 ba = nbb - na;
+        float hh = clamp(dot(pos - na, ba) / max(1e-9, dot(ba, ba)), 0.0, 1.0);
+        nNerve = (pos - na - hh * ba) / nr;
+        if (tNerve < tImp) { tImp = tNerve; nImp = nNerve; cImp = uNerveCol; }
+      }
+    }
+  }
   float tSurf = 1e20;
 
   vec2 b1 = boxHit(ro, rd, vec3(0.0), uBoxMax);
@@ -124,10 +199,24 @@ void main() {
       float t = tn;
       bool hit = false;
       bool first = true;
+      vec3 base = vec3(0.93, 0.88, 0.79);
+      float lo = uLo;
+      float hi = uHi;
+      uint lab = 0u;
       for (int i = 0; i < 4096; i++) {
         if (t > tf) break;
-        float v = vol(ro + rd * t);
-        if (v >= uLo && v <= uHi) { hit = true; break; }
+        vec3 p = ro + rd * t;
+        float v = vol(p);
+        if (uSegOn == 1) {
+          uint l = labAt(p);
+          if (l == 0u) {
+            if (uShowUnseg == 1 && v >= uLo && v <= uHi) { hit = true; break; }
+          } else {
+            vec4 si = segInfo(l);
+            float slo = segLo(l);
+            if (si.w > 0.5 && v >= slo) { hit = true; base = si.rgb; lo = slo; hi = 1e9; lab = l; break; }
+          }
+        } else if (v >= uLo && v <= uHi) { hit = true; break; }
         first = false;
         t += uStep;
       }
@@ -136,17 +225,22 @@ void main() {
         if (!first) {
           float a = t - uStep;
           float b = t;
-          for (int k = 0; k < 6; k++) {
-            float m = 0.5 * (a + b);
-            float v = vol(ro + rd * m);
-            if (v >= uLo && v <= uHi) b = m; else a = m;
+          float va = vol(ro + rd * a);
+          // inner face (cut between two segments / a hidden neighbour): voxel shading
+          bool inner = lab != 0u && va >= lo;
+          if (!inner) {
+            for (int k = 0; k < 6; k++) {
+              float m = 0.5 * (a + b);
+              float v = vol(ro + rd * m);
+              if (v >= lo && v <= hi) b = m; else a = m;
+            }
           }
           t = b;
           tSurf = t;
-          vec3 g = grad(ro + rd * t);
+          vec3 g = inner ? labGrad(ro + rd * t, lab) : grad(ro + rd * t);
           if (length(g) > 1e-6) n = -normalize(g);
         }
-        acc = vec4(shade(vec3(0.93, 0.88, 0.79), n, rd, L, 0.25), 1.0);
+        acc = vec4(shade(base, n, rd, L, 0.25), 1.0);
       }
     } else if (uMode == 1) {
       float t = tn;
@@ -154,11 +248,25 @@ void main() {
         if (t > tf || acc.a > 0.97) break;
         vec3 p = ro + rd * t;
         float v = vol(p);
-        float a = clamp((v - uLo) / max(1.0, uHi - uLo), 0.0, 1.0);
-        if (a > 0.0 && v <= uHi * 1.0001 + 1.0) {
+        float lo = uLo;
+        vec3 tint = vec3(-1.0);
+        if (uSegOn == 1) {
+          uint l = labAt(p);
+          if (l == 0u) {
+            if (uShowUnseg == 0) { t += uStep; continue; }
+          } else {
+            vec4 si = segInfo(l);
+            if (si.w < 0.5) { t += uStep; continue; }
+            tint = si.rgb;
+            lo = segLo(l);
+          }
+        }
+        float a = clamp((v - lo) / max(1.0, uHi - lo), 0.0, 1.0);
+        if (a > 0.0 && (tint.x >= 0.0 || v <= uHi * 1.0001 + 1.0)) {
           vec3 g = grad(p);
           vec3 n = length(g) > 1e-6 ? -normalize(g) : -rd;
-          vec3 col = shade(mix(vec3(0.85, 0.55, 0.45), vec3(1.0, 0.97, 0.9), a), n, rd, L, 0.1);
+          vec3 baseCol = tint.x >= 0.0 ? mix(tint * 0.75, tint, a) : mix(vec3(0.85, 0.55, 0.45), vec3(1.0, 0.97, 0.9), a);
+          vec3 col = shade(baseCol, n, rd, L, 0.1);
           float al = min(1.0, (0.08 + a * a) * uOpac);
           acc.rgb += (1.0 - acc.a) * al * col;
           acc.a += (1.0 - acc.a) * al;
@@ -170,8 +278,13 @@ void main() {
       float t = tn;
       for (int i = 0; i < 4096; i++) {
         if (t > tf) break;
-        m = max(m, vol(ro + rd * t));
+        vec3 p = ro + rd * t;
         t += uStep;
+        if (uSegOn == 1) {
+          uint l = labAt(p);
+          if (l == 0u ? uShowUnseg == 0 : segInfo(l).w < 0.5) continue;
+        }
+        m = max(m, vol(p));
       }
       float g = clamp((m - (uWC - uWW * 0.5)) / uWW, 0.0, 1.0);
       acc = vec4(vec3(g), g);
@@ -186,6 +299,8 @@ void main() {
   }
   // prosthetic axis guides: translucent, in front of whatever they cover
   if (tGuide < min(tImp, tSurf)) col = mix(col, shade(cGuide, nGuide, rd, L, 0.3), 0.42);
+  // nerve hidden behind bone: still visible as a ghost
+  if (tNerve < 1e19 && tNerve > tSurf) col = mix(col, shade(uNerveCol, nNerve, rd, L, 0.3), 0.45);
   outColor = vec4(col, 1.0);
 }`;
 
@@ -223,7 +338,13 @@ export class View3D extends View {
   private texDims: [number, number, number] = [1, 1, 1];
   private texFactor = 1;
   private error = '';
+  private segError = '';
   private lastKey = '';
+  private labTex: WebGLTexture | null = null;
+  private segTabTex: WebGLTexture | null = null;
+  private nerveTex: WebGLTexture | null = null;
+  private labVersion = -1;
+  private nerveKey = '';
   // camera basis (world)
   private right: Vec3 = [1, 0, 0];
   private up: Vec3 = [0, 0, 1];
@@ -269,13 +390,108 @@ export class View3D extends View {
       const names = [
         'uVol', 'uTexScale', 'uTexOffset', 'uTexel', 'uBoxMax', 'uCam', 'uRight', 'uUp', 'uFwd', 'uTanHalf', 'uRes',
         'uFrame', 'uOrigin', 'uCropMin', 'uCropMax', 'uLo', 'uHi', 'uStep', 'uOpac', 'uWC', 'uWW', 'uMode', 'uNumCyl', 'uCyl',
+        'uLab', 'uSegTab', 'uLabInv', 'uLabMax', 'uSegOn', 'uShowUnseg', 'uNerve', 'uNumNerve', 'uNerveMin', 'uNerveMax', 'uNerveCol',
       ];
       for (const n of names) this.uni[n] = gl.getUniformLocation(p, n);
       gl.bindVertexArray(gl.createVertexArray());
+      // placeholders so every sampler always has a texture of the right type
+      this.labTex = this.makeTex(gl.TEXTURE_3D);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8UI, 1, 1, 1, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, new Uint8Array(1));
+      this.segTabTex = this.makeTex(gl.TEXTURE_2D);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 128, 2, 0, gl.RGBA, gl.FLOAT, new Float32Array(128 * 2 * 4));
+      this.nerveTex = this.makeTex(gl.TEXTURE_2D);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 2, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array(8));
     } catch (e) {
       console.error(e);
       this.error = '3D shader failed to compile: ' + (e as Error).message;
     }
+  }
+
+  /** Texture with nearest filtering (integer / float lookup tables). */
+  private makeTex(target: number): WebGLTexture {
+    const gl = this.gl!;
+    const t = gl.createTexture()!;
+    gl.bindTexture(target, t);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    if (target === gl.TEXTURE_3D) gl.texParameteri(target, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+
+  /** Bind segmentation and nerve data; returns whether segments are rendered. */
+  private bindSegmentation(): boolean {
+    const gl = this.gl!;
+    const app = this.app;
+    const u = this.uni;
+    const seg = app.seg;
+    this.segError = '';
+    let segOn = !!seg.labels && seg.segments.some((g) => g.voxels > 0);
+    if (segOn) {
+      const maxDim = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE) as number;
+      if (Math.max(seg.nx, seg.ny, seg.nz) > maxDim) {
+        segOn = false;
+        this.segError = 'segments cannot be shown in 3D on this GPU (volume too large)';
+      }
+    }
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_3D, this.labTex);
+    if (segOn && this.labVersion !== seg.version) {
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8UI, seg.nx, seg.ny, seg.nz, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, seg.labels);
+      this.labVersion = seg.version;
+    }
+    gl.uniform1i(u.uLab, 1);
+    gl.uniform3f(u.uLabInv, 1 / seg.gs[0], 1 / seg.gs[1], 1 / seg.gs[2]);
+    gl.uniform3i(u.uLabMax, Math.max(0, seg.nx - 1), Math.max(0, seg.ny - 1), Math.max(0, seg.nz - 1));
+    gl.uniform1i(u.uSegOn, segOn ? 1 : 0);
+    gl.uniform1i(u.uShowUnseg, app.showUnsegmented ? 1 : 0);
+    // segment table: row 0 = colour + visible, row 1 = threshold
+    const tab = new Float32Array(128 * 2 * 4);
+    for (const g of seg.segments) {
+      tab.set([g.color[0] / 255, g.color[1] / 255, g.color[2] / 255, g.visible ? 1 : 0], g.id * 4);
+      tab[(128 + g.id) * 4] = seg.segmentLo(g);
+    }
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.segTabTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 128, 2, 0, gl.RGBA, gl.FLOAT, tab);
+    gl.uniform1i(u.uSegTab, 2);
+
+    // nerves as capsules
+    const caps: number[] = [];
+    const mn: Vec3 = [Infinity, Infinity, Infinity];
+    const mx: Vec3 = [-Infinity, -Infinity, -Infinity];
+    const nerves = app.nerves.filter((n) => n.visible && n.pts.length >= 2);
+    const total = nerves.reduce((a, n) => a + nervePath(n).length, 0);
+    const every = Math.max(1, Math.ceil(total / MAX_NERVE_SEG));
+    for (const n of nerves) {
+      const path = nervePath(n).filter((_, i, a) => i % every === 0 || i === a.length - 1);
+      const r = n.diameter / 2;
+      for (let i = 0; i + 1 < path.length && caps.length < MAX_NERVE_SEG * 8; i++) {
+        caps.push(...path[i], r, ...path[i + 1], 0);
+        for (let a = 0; a < 3; a++) {
+          mn[a] = Math.min(mn[a], path[i][a] - r, path[i + 1][a] - r);
+          mx[a] = Math.max(mx[a], path[i][a] + r, path[i + 1][a] + r);
+        }
+      }
+    }
+    const nSeg = caps.length / 8;
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this.nerveTex);
+    const key = JSON.stringify(caps);
+    if (key !== this.nerveKey) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, Math.max(2, nSeg * 2), 1, 0, gl.RGBA, gl.FLOAT, nSeg ? new Float32Array(caps) : new Float32Array(8));
+      this.nerveKey = key;
+    }
+    gl.uniform1i(u.uNerve, 3);
+    gl.uniform1i(u.uNumNerve, nSeg);
+    gl.uniform3fv(u.uNerveMin, nSeg ? mn : [0, 0, 0]);
+    gl.uniform3fv(u.uNerveMax, nSeg ? mx : [0, 0, 0]);
+    gl.uniform3f(u.uNerveCol, NERVE_COLOR[0] / 255, NERVE_COLOR[1] / 255, NERVE_COLOR[2] / 255);
+    gl.activeTexture(gl.TEXTURE0);
+    return segOn;
   }
 
   private uploadVolume(vol: Volume) {
@@ -401,6 +617,55 @@ export class View3D extends View {
     this.zoomAt(p, Math.exp(dir * 0.12));
   }
 
+  /** A click (no drag) with the grow tool picks the surface under the cursor as a seed. */
+  protected onLeftUp(p: Pt, _e: PointerEvent, moved: boolean) {
+    const app = this.app;
+    if (moved || app.segTool !== 'grow') return;
+    const w = this.pickSurface(p);
+    if (w) app.growAt(w);
+    else app.onStatus('No surface under the cursor – click on the rendered bone.', true);
+  }
+
+  protected onHover() {
+    this.el.style.cursor = this.app.segTool === 'grow' ? 'crosshair' : '';
+  }
+
+  /** First rendered surface point under the screen point (CPU ray cast, same rules as the shader). */
+  pickSurface(p: Pt): Vec3 | null {
+    const app = this.app;
+    const vol = app.vol;
+    if (!vol || !this.w || !this.h) return null;
+    const cam = this.camera();
+    const th = Math.tan(FOV / 2);
+    const nx = (p[0] / this.w) * 2 - 1;
+    const ny = 1 - (p[1] / this.h) * 2;
+    const rd = normalize(add(add(this.fwd, scale(this.right, nx * th * (this.w / this.h))), scale(this.up, ny * th)));
+    const ro = cam.pos;
+    const F = app.frame;
+    const b1 = boxHit(ro, rd, [0, 0, 0], vol.extent);
+    const b2 = boxHit(toFrame(ro, app.O, F), [dot(rd, F[0]), dot(rd, F[1]), dot(rd, F[2])], app.crop.min, app.crop.max);
+    const tn = Math.max(b1[0], b2[0], 0);
+    const tf = Math.min(b1[1], b2[1]);
+    const step = vol.minSpacing * 0.5;
+    const seg = app.seg;
+    const segOn = !!seg.labels && seg.segments.some((g) => g.voxels > 0);
+    const { lo, hi } = app.vr;
+    for (let t = tn; t <= tf; t += step) {
+      const q = add(ro, scale(rd, t));
+      const v = vol.sample(q);
+      if (segOn) {
+        const l = seg.rawLabelAt(q[0], q[1], q[2]);
+        if (l === 0) {
+          if (app.showUnsegmented && v >= lo && v <= hi) return q;
+        } else {
+          const g = seg.segmentById(l);
+          if (g && g.visible && v >= seg.segmentLo(g)) return q;
+        }
+      } else if (v >= lo && v <= hi) return q;
+    }
+    return null;
+  }
+
   protected onDoubleClick() {
     this.fit();
   }
@@ -433,7 +698,7 @@ export class View3D extends View {
       const cam = this.camera();
       const base = JSON.stringify([
         vol.id, this.w, this.h, this.right, this.up, this.fwd, cam.pos, app.vr, app.crop, app.frame, app.O,
-        app.vr.mode === 'mip' ? app.wl : 0, app.implantsKey(),
+        app.vr.mode === 'mip' ? app.wl : 0, app.implantsKey(), app.segKey(),
       ]);
       if (base !== this.lastKey) {
         const now = performance.now();
@@ -521,6 +786,7 @@ export class View3D extends View {
     });
     gl.uniform1i(u.uNumCyl, parts.length);
     gl.uniform4fv(u.uCyl, cyl);
+    this.bindSegmentation();
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
@@ -543,6 +809,18 @@ export class View3D extends View {
     const thr = app.vr.mode === 'mip' ? `W ${Math.round(app.wl.width)} L ${Math.round(app.wl.center)}` : `${Math.round(app.vr.lo)} – ${Math.round(app.vr.hi)}`;
     drawLabel(o, `${modeName} · ${thr}`, this.w - 34, 16, '#9fb0c8', 'right');
     if (this.texFactor > 1) drawLabel(o, `rendered at 1/${this.texFactor} resolution`, this.w - 8, this.h - 10, '#9fb0c8', 'right');
+    if (this.segError) drawLabel(o, this.segError, this.w - 8, this.h - 28, '#ff8a8a', 'right');
+    const tool = app.segTool;
+    if (tool) {
+      const seg = app.activeSegment();
+      const hint =
+        tool === 'grow'
+          ? `Click ${seg ? seg.name : 'the structure'} to segment it (threshold ${Math.round(app.vr.lo)}–${Math.round(app.vr.hi)}) · drag = rotate · Esc = done`
+          : tool === 'cut'
+            ? 'Draw the cut in a slice or the panoramic'
+            : 'Trace the nerve on cross-sections or the panoramic';
+      drawLabel(o, hint, 70, this.h - 10, '#ffd34f');
+    }
     // orientation triad
     const cx = 34;
     const cy = this.h - 34;
@@ -565,4 +843,21 @@ export class View3D extends View {
       o.fillText(label, cx + x * 1.25 - 3, cy + y * 1.25 + 4);
     }
   }
+}
+
+/** Ray / axis-aligned box intersection: [t near, t far]. */
+function boxHit(ro: Vec3, rd: Vec3, bmin: Vec3, bmax: Vec3): [number, number] {
+  let tn = -Infinity;
+  let tf = Infinity;
+  for (let a = 0; a < 3; a++) {
+    if (Math.abs(rd[a]) < 1e-12) {
+      if (ro[a] < bmin[a] || ro[a] > bmax[a]) return [1, 0];
+      continue;
+    }
+    const t0 = (bmin[a] - ro[a]) / rd[a];
+    const t1 = (bmax[a] - ro[a]) / rd[a];
+    tn = Math.max(tn, Math.min(t0, t1));
+    tf = Math.min(tf, Math.max(t0, t1));
+  }
+  return [tn, tf];
 }

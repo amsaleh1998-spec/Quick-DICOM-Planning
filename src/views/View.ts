@@ -1,5 +1,8 @@
-import type { App } from '../app';
+import type { App, SegTool } from '../app';
 import type { Measurement } from '../app';
+import type { Nerve } from '../nerve';
+import type { NewCut } from '../segment';
+import { CUT_CSS, composeNerveSection, composeSegmentation } from './overlays';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, radiusAt } from '../implant';
 import { ImplantEditor } from './implantEdit';
 import { Vec3, add, cross, distToSegment2, dot, length, scale, sub } from '../math';
@@ -21,7 +24,7 @@ export interface ViewState {
 
 export const newViewState = (): ViewState => ({ scale: 0.3, panU: 0, panV: 0, fitted: false });
 
-type DragKind = 'none' | 'right' | 'pan' | 'left' | 'ruler';
+type DragKind = 'none' | 'right' | 'pan' | 'left' | 'ruler' | 'nerve';
 
 /**
  * Base class: two stacked canvases (image at <= CSS resolution, overlay at
@@ -55,6 +58,12 @@ export abstract class View {
   private rulerDrag: { m: Measurement; end: 'a' | 'b'; created: boolean } | null = null;
   /** time the last ruler was completed (ignore the dblclick of a fast double click) */
   private rulerDoneAt = 0;
+  /** nerve control point being dragged */
+  private nerveDrag: { nerve: Nerve; idx: number } | null = null;
+  /** mouse position while a segmentation tool is active (rubber band) */
+  private toolHover: Pt | null = null;
+  /** max distance (mm) from the slice at which nerve points are shown / editable */
+  protected nervePointDepth = 1.5;
   vs: ViewState;
 
   constructor(
@@ -144,6 +153,126 @@ export abstract class View {
   /** World point under the cursor for the status bar. */
   worldAt(_p: Pt): Vec3 | null {
     return null;
+  }
+
+  // ---- segmentation / nerve tools ---------------------------------------------
+
+  /** Segmentation tools handled by clicks in this view. */
+  protected supportsTool(_t: SegTool): boolean {
+    return false;
+  }
+  /** Screen position of a world point plus its distance from the view surface (mm). */
+  screenOf(_w: Vec3): [number, number, number] | null {
+    return null;
+  }
+  /** Build a separation cut from points clicked in this view. */
+  makeCut(_pts: Vec3[], _depth: number | null): NewCut | null {
+    return null;
+  }
+  /** New position of a dragged nerve point. */
+  protected nervePointAt(p: Pt, _old: Vec3): Vec3 | null {
+    return this.worldAt(p);
+  }
+
+  private hitNervePoint(p: Pt): { nerve: Nerve; idx: number } | null {
+    const n = this.app.activeNerve();
+    if (!n || !n.visible) return null;
+    for (let i = n.pts.length - 1; i >= 0; i--) {
+      const s = this.screenOf(n.pts[i]);
+      if (s && Math.abs(s[2]) <= this.nervePointDepth && Math.hypot(s[0] - p[0], s[1] - p[1]) < 8) return { nerve: n, idx: i };
+    }
+    return null;
+  }
+
+  /** Left click with a segmentation tool; returns true when a nerve point drag starts. */
+  private toolDown(p: Pt): boolean {
+    const app = this.app;
+    const w = this.worldAt(p);
+    switch (app.segTool) {
+      case 'grow':
+        if (w) app.growAt(w);
+        return false;
+      case 'cut':
+        if (w) app.addCutPoint(this, w);
+        return false;
+      case 'nerve': {
+        const hit = this.hitNervePoint(p);
+        if (hit) {
+          this.nerveDrag = hit;
+          return true;
+        }
+        const n = app.activeNerve();
+        if (!w || !n) return false;
+        const idx = app.addNervePoint(w);
+        this.nerveDrag = { nerve: n, idx };
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private toolDoubleClick(p: Pt) {
+    const app = this.app;
+    if (app.segTool === 'cut') {
+      // (duplicate points from the double click are already skipped when added)
+      app.finishCut();
+    } else if (app.segTool === 'nerve') {
+      const hit = this.hitNervePoint(p);
+      if (hit) app.deleteNervePoint(hit.nerve.id, hit.idx);
+    }
+  }
+
+  /** Cut being drawn, nerve control points and the tool hint. */
+  private drawToolOverlay(o: CanvasRenderingContext2D) {
+    const app = this.app;
+    const tool = app.segTool;
+    if (!tool || !this.supportsTool(tool)) return;
+    const d = app.cutDraft;
+    if (tool === 'cut' && d && d.view === this) {
+      const pts = d.pts.map((w) => this.screenOf(w)).filter((s): s is [number, number, number] => !!s);
+      o.save();
+      o.strokeStyle = CUT_CSS;
+      o.fillStyle = CUT_CSS;
+      o.lineWidth = 2;
+      o.setLineDash([6, 4]);
+      o.beginPath();
+      pts.forEach((s, i) => (i ? o.lineTo(s[0], s[1]) : o.moveTo(s[0], s[1])));
+      if (this.toolHover && pts.length) o.lineTo(this.toolHover[0], this.toolHover[1]);
+      o.stroke();
+      o.setLineDash([]);
+      for (const s of pts) {
+        o.beginPath();
+        o.arc(s[0], s[1], 3.5, 0, Math.PI * 2);
+        o.fill();
+      }
+      o.restore();
+    }
+    const n = app.activeNerve();
+    if (tool === 'nerve' && n) {
+      o.save();
+      for (const w of n.pts) {
+        const s = this.screenOf(w);
+        if (!s || Math.abs(s[2]) > this.nervePointDepth) continue;
+        o.beginPath();
+        o.arc(s[0], s[1], 4, 0, Math.PI * 2);
+        o.fillStyle = '#ffd60a';
+        o.fill();
+        o.strokeStyle = '#000';
+        o.lineWidth = 1.2;
+        o.stroke();
+      }
+      o.restore();
+    }
+    const seg = app.activeSegment();
+    const name = seg ? seg.name : 'the structure';
+    const [long, short] =
+      tool === 'grow'
+        ? [`Click ${name} to add it (threshold ${Math.round(app.vr.lo)}–${Math.round(app.vr.hi)}) · Esc = done`, `Click ${name} to add it`]
+        : tool === 'cut'
+          ? ['Cut: click points along the gap, crossing the contact · double-click / Enter = finish · Esc = cancel', 'Cut: click points · double-click = finish']
+          : [`${n ? n.name : 'Nerve'}: click the canal centre · drag a point to move it · double-click a point to delete · Esc = done`, 'Click the canal centre'];
+    o.font = '12px system-ui, sans-serif';
+    drawLabel(o, o.measureText(long).width < this.w - 24 ? long : short, 8, this.h - 28, '#ffd34f');
   }
 
   // ---- measurements ---------------------------------------------------------
@@ -324,6 +453,7 @@ export abstract class View {
     } else {
       this.drawOverlay(o);
       this.drawMeasurements(o);
+      this.drawToolOverlay(o);
     }
     this.drawTitle(o);
   }
@@ -360,6 +490,7 @@ export abstract class View {
       const button = IS_MAC && e.button === 2 && e.ctrlKey ? 0 : e.button;
       if (button === 2) this.drag = 'right';
       else if (button === 1 || (button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey && !e.metaKey)))) this.drag = 'pan';
+      else if (button === 0 && this.app.segTool && this.supportsTool(this.app.segTool)) this.drag = this.toolDown(p) ? 'nerve' : 'none';
       else if (button === 0 && this.app.ruler && this.measureKind) this.drag = this.rulerClick(p) ? 'ruler' : 'none';
       else if (button === 0 && this.measureKind && this.hitMeasureEnd(p)) {
         // edit an existing ruler end without the tool
@@ -396,6 +527,12 @@ export abstract class View {
           }
           break;
         }
+        case 'nerve': {
+          const d = this.nerveDrag;
+          const w = d && this.nervePointAt(p, d.nerve.pts[d.idx]);
+          if (d && w) this.app.moveNervePoint(d.nerve, d.idx, w);
+          break;
+        }
         case 'pan':
           this.vs.panU -= dx * this.vs.scale;
           this.vs.panV -= dy * this.vs.scale;
@@ -413,6 +550,12 @@ export abstract class View {
             if (w) pend.m.b = w;
             this.el.style.cursor = 'crosshair';
             app.requestRender();
+            break;
+          }
+          if (app.segTool && this.supportsTool(app.segTool)) {
+            this.toolHover = p;
+            this.el.style.cursor = app.segTool === 'nerve' && this.hitNervePoint(p) ? 'move' : 'crosshair';
+            if (app.cutDraft?.view === this) app.requestRender();
             break;
           }
           if (this.measureKind) {
@@ -441,6 +584,10 @@ export abstract class View {
         if (created && moved) this.finishMeasurement();
         this.app.changed();
       }
+      if (this.drag === 'nerve') {
+        this.nerveDrag = null;
+        this.app.changed();
+      }
       if (this.drag === 'left') {
         const p = this.pos(e);
         const moved = Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 3;
@@ -453,6 +600,10 @@ export abstract class View {
     c.addEventListener('pointercancel', end);
     c.addEventListener('pointerleave', () => {
       this.app.reportCursor(this, null);
+      if (this.toolHover) {
+        this.toolHover = null;
+        this.app.requestRender();
+      }
       if (this.app.hoverMeasurementId !== null) {
         this.app.hoverMeasurementId = null;
         this.app.requestRender();
@@ -501,6 +652,10 @@ export abstract class View {
     });
     c.addEventListener('dblclick', (e) => {
       if (!this.app.vol) return;
+      if (this.app.segTool && this.supportsTool(this.app.segTool)) {
+        this.toolDoubleClick(this.pos(e));
+        return;
+      }
       if (this.measureKind && !this.app.ruler && performance.now() - this.rulerDoneAt > 500) {
         if (this.deleteMeasurementAt(this.pos(e))) return;
       }
@@ -623,6 +778,21 @@ export abstract class PlaneView extends View {
     return s && Math.abs(s[2]) < 0.75 ? [s[0], s[1]] : null;
   }
 
+  protected supportsTool(_t: SegTool): boolean {
+    return true;
+  }
+
+  override screenOf(w: Vec3) {
+    return this.worldToScreen(w);
+  }
+
+  /** Cut drawn on this slice: the polyline extruded along the slice normal. */
+  override makeCut(pts: Vec3[], depth: number | null): NewCut | null {
+    const pl = this.currentPlane();
+    if (!pl) return null;
+    return { kind: 'plane', pts: pts.map((p) => [...p] as Vec3), u: pl.u, v: pl.v, n: cross(pl.u, pl.v), depth, viewName: this.title };
+  }
+
   /** Current plane including pan offsets (screen centre). */
   currentPlane(): Plane | null {
     const pl = this.plane();
@@ -669,19 +839,33 @@ export abstract class PlaneView extends View {
   }
 
   protected composeExtraKey() {
-    return this.app.implantsKey();
+    return this.app.implantsKey() + this.app.segKey();
   }
 
-  /** Rasterise exact implant/abutment intersections with the plane into the image. */
+  /** Segments, cut traces, implant/abutment and nerve intersections with the plane. */
   protected composePixels(rgba: Uint8ClampedArray, w: number, h: number) {
     const pl = this.currentPlane();
-    if (!pl || !this.app.implants.length) return;
-    const n = cross(pl.u, pl.v);
+    if (!pl) return;
     const k = 1 / this.imgScale;
     const pxmm = this.vs.scale * k;
     const p0 = this.screenToWorld([0.5 * k, 0.5 * k], pl)!;
     const du = scale(pl.u, pxmm);
     const dv = scale(pl.v, pxmm);
+    const crop = this.crop();
+    composeSegmentation(this.app, rgba, w, h, (i, j, out) => {
+      out[0] = p0[0] + du[0] * i + dv[0] * j;
+      out[1] = p0[1] + du[1] * i + dv[1] * j;
+      out[2] = p0[2] + du[2] * i + dv[2] * j;
+      return !crop || inCrop(crop, out);
+    });
+    this.composeImplants(rgba, w, h, pl, p0, du, dv, pxmm, k);
+    composeNerveSection(this.app, rgba, w, h, p0, du, dv, pxmm);
+  }
+
+  /** Rasterise exact implant/abutment intersections with the plane into the image. */
+  private composeImplants(rgba: Uint8ClampedArray, w: number, h: number, pl: Plane, p0: Vec3, du: Vec3, dv: Vec3, pxmm: number, k: number) {
+    if (!this.app.implants.length) return;
+    const n = cross(pl.u, pl.v);
     const edge = Math.max(0.12, pxmm * 1.3);
     for (const part of this.app.allParts()) {
       const r = part.radius;
@@ -791,6 +975,15 @@ export abstract class PlaneView extends View {
     this.el.style.cursor = c ?? '';
     return !!c;
   }
+}
+
+function inCrop(c: CropSpec, p: Vec3): boolean {
+  const q = sub(p, c.origin);
+  for (let a = 0; a < 3; a++) {
+    const f = dot(q, c.frame[a]);
+    if (f < c.min[a] || f > c.max[a]) return false;
+  }
+  return true;
 }
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, lh: number) {
