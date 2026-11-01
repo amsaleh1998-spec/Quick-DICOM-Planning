@@ -74,6 +74,13 @@ npm run build      # static build in dist/ (relative paths, can be hosted anywhe
 
 `node scripts/make-test-dicom.mjs <dir>` writes a small synthetic DICOM series for testing the loader.
 
+### Public deployment (GitHub Pages)
+
+`.github/workflows/deploy-pages.yml` builds the app and publishes it to GitHub Pages on every push to `main`
+(or manually from the Actions tab). One-time setup: repository **Settings → Pages → Build and deployment → Source:
+GitHub Actions**. The site is then served at `https://<owner>.github.io/Quick-DICOM-Planning/`. The app is fully
+static – scans are processed in the visitor's browser and never uploaded.
+
 ## Code layout
 
 | File | Purpose |
