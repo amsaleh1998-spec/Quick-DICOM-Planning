@@ -24,7 +24,9 @@
       </header>
 
       <main id="m-stage">
-        <div id="m-views"></div>
+        <div id="m-layout-mpr" class="layout m-layout hidden"></div>
+        <div id="m-layout-plan" class="layout m-layout hidden"></div>
+        <div id="m-layout-3d" class="layout m-layout hidden"></div>
         <div id="m-empty">
           <div class="m-card">
             <h1>Quick DICOM Planning</h1>
@@ -40,12 +42,24 @@
         <div id="m-toast" class="hidden"></div>
       </main>
 
-      <nav id="m-tabs" class="hidden" aria-label="Views">
-        <button data-v="axial">Axial</button>
-        <button data-v="coronal">Coronal</button>
-        <button data-v="sagittal">Sagittal</button>
-        <button data-v="pano">Pano</button>
-        <button data-v="section">Section</button>
+      <div id="m-tools" class="hidden">
+        <div class="m-tools-row" data-for="mpr">
+          <button id="m-rotate" class="m-chip" title="Drag around the centre of a view to tilt the other two planes">Rotate axes</button>
+          <button id="m-straighten" class="m-chip" title="Show the rotated planes axis-aligned">Straighten</button>
+          <button id="m-reset-rot" class="m-chip">Reset</button>
+          <span id="m-tilt" class="m-tools-info"></span>
+        </div>
+        <div class="m-tools-row" data-for="plan">
+          <button id="m-draw" class="m-chip m-chip-primary">Draw curve</button>
+          <button id="m-undo-pt" class="m-chip">Undo point</button>
+          <button id="m-clear-curve" class="m-chip">Clear curve</button>
+          <span id="m-plan-info" class="m-tools-info"></span>
+        </div>
+      </div>
+
+      <nav id="m-tabs" class="hidden" aria-label="Layouts">
+        <button data-v="mpr">MPR</button>
+        <button data-v="plan">Plan</button>
         <button data-v="3d">3D</button>
       </nav>
 

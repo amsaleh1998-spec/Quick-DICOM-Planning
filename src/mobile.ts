@@ -10,7 +10,6 @@ import { applyProjectState, readProject } from './project';
 import { setLabelGridBudget } from './segment';
 import { setUiPreference } from './uiMode';
 import { createPhantom } from './volume';
-import { View } from './views/View';
 import { View3D } from './views/View3D';
 
 // Phones have far less memory and GPU power than desktops.
@@ -29,47 +28,95 @@ app.input = 'mouse';
 // exposed for debugging / automated tests
 (window as unknown as { app: App }).app = app;
 
-// ---- views ---------------------------------------------------------------------
-type Tab = 'axial' | 'coronal' | 'sagittal' | 'pano' | 'section' | '3d';
-const VIEWS: Record<Tab, View> = {
-  axial: app.mprViews[0],
-  coronal: app.mprViews[1],
-  sagittal: app.mprViews[2],
-  pano: app.pano,
-  section: app.crossViews[1],
-  '3d': app.view3d,
-};
+// ---- layouts ---------------------------------------------------------------------
+/** MPR: 2×2 grid (axial, coronal, sagittal, 3D) · Plan: axial + panoramic + cross-sections · 3D: full screen */
+type Tab = 'mpr' | 'plan' | '3d';
+const LAYOUT: Record<Tab, HTMLElement> = { mpr: $('m-layout-mpr'), plan: $('m-layout-plan'), '3d': $('m-layout-3d') };
+const AREAS = ['ax', 'co', 'sa'];
+app.mprViews.forEach((v, i) => {
+  v.el.style.gridArea = AREAS[i];
+  LAYOUT.mpr.append(v.el);
+});
+app.planAxial.el.style.gridArea = 'pax';
+app.pano.el.style.gridArea = 'pano';
+app.crossViews.forEach((v, i) => {
+  v.el.style.gridArea = `cs${i + 1}`;
+  v.title = `CS ${i + 1}`; // narrow on a phone
+});
+LAYOUT.plan.append(app.planAxial.el, app.pano.el, ...app.crossViews.map((v) => v.el));
+app.view3d.el.style.gridArea = 'v3d';
+LAYOUT.mpr.append(app.view3d.el);
+
 const HINTS: Record<Tab, string> = {
-  axial: 'Swipe up/down to scroll · tap to move the crosshair · pinch to zoom · double-tap to fit',
-  coronal: 'Swipe up/down to scroll · tap to move the crosshair · pinch to zoom · double-tap to fit',
-  sagittal: 'Swipe up/down to scroll · tap to move the crosshair · pinch to zoom · double-tap to fit',
-  pano: 'Swipe left/right to move along the arch · up/down = buccal/lingual · tap to pick a spot',
-  section: 'Swipe to move along the arch · pinch to zoom · double-tap to fit',
+  mpr: 'Swipe in a view to scroll · tap to move the crosshair · pinch to zoom · ⤢ = full screen · “Rotate axes” to tilt the planes',
+  plan: 'Tap “Draw curve”, then tap along the arch in the axial view · swipe a cross-section to move along the arch',
   '3d': 'Drag to rotate · pinch to zoom · two fingers to move · double-tap to reset',
 };
-const host = $('m-views');
-for (const v of Object.values(VIEWS)) {
-  v.el.classList.add('hidden');
-  host.append(v.el);
-}
-let tab: Tab = 'axial';
+let tab: Tab = 'mpr';
 const hinted = new Set<Tab>();
 const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#m-tabs button'));
-const needsCurve = (t: Tab) => t === 'pano' || t === 'section';
+
+/** The 3D view lives in the MPR grid or alone in the 3D tab. */
+function place3d(target: HTMLElement) {
+  const el = app.view3d.el;
+  if (el.parentElement === target) return;
+  if (el.classList.contains('max')) {
+    el.classList.remove('max');
+    el.parentElement?.classList.remove('has-max');
+  }
+  target.append(el);
+}
 
 function setTab(t: Tab) {
-  if (needsCurve(t) && !app.curve) t = 'axial';
   tab = t;
-  for (const [k, v] of Object.entries(VIEWS)) v.el.classList.toggle('hidden', k !== t);
-  app.activeView = VIEWS[t];
+  place3d(t === '3d' ? LAYOUT['3d'] : LAYOUT.mpr);
+  for (const [k, el] of Object.entries(LAYOUT)) el.classList.toggle('hidden', k !== t);
+  if (t !== 'mpr' && app.mprTool === 'rotate') app.mprTool = 'navigate';
+  if (t === 'plan') app.setMode('plan');
+  else if (app.drawing) app.cancelDrawing();
+  app.activeView = t === 'plan' ? app.planAxial : t === '3d' ? app.view3d : app.mprViews[0];
   tabButtons.forEach((b) => b.classList.toggle('active', b.dataset.v === t));
+  $('m-tools').classList.toggle('hidden', t === '3d');
+  document.querySelectorAll<HTMLElement>('.m-tools-row').forEach((r) => r.classList.toggle('hidden', r.dataset.for !== t));
   if (!hinted.has(t)) {
     hinted.add(t);
     showHint(HINTS[t]);
   }
+  refresh();
   app.requestRender();
 }
 tabButtons.forEach((b) => (b.onclick = () => setTab(b.dataset.v as Tab)));
+
+// ---- MPR tools: rotate the planes -------------------------------------------------
+$('m-rotate').onclick = () => {
+  app.mprTool = app.mprTool === 'rotate' ? 'navigate' : 'rotate';
+  if (app.mprTool === 'rotate') showHint('Drag around the centre of a view to tilt the other two planes · tap “Rotate axes” again when done');
+  app.changed();
+};
+$('m-straighten').onclick = () => app.straightenViews();
+$('m-reset-rot').onclick = () => app.resetRotation();
+
+// ---- Plan tools: panoramic curve ----------------------------------------------------
+$('m-draw').onclick = () => {
+  if (app.drawing) {
+    if (app.drawing.length < 2) {
+      toast('Tap at least two points along the arch first.', true);
+      return;
+    }
+    app.finishCurve();
+    showHint('Swipe a cross-section to move along the arch · drag a curve point to adjust it · swipe the axial view to change its level');
+  } else {
+    app.startDrawing();
+    showHint('Tap along the arch in the axial view, from the patient’s right to left, then tap “Done”');
+  }
+};
+$('m-undo-pt').onclick = () => {
+  if (app.drawing?.length) {
+    app.drawing.pop();
+    app.changed();
+  }
+};
+$('m-clear-curve').onclick = () => app.clearCurve();
 
 // ---- messages / loading -----------------------------------------------------------
 let toastTimer = 0;
@@ -89,7 +136,6 @@ function showHint(msg: string) {
   clearTimeout(hintTimer);
   hintTimer = window.setTimeout(() => el.classList.add('hidden'), 4500);
 }
-$('m-hint').onclick = () => $('m-hint').classList.add('hidden');
 $('m-toast').onclick = () => $('m-toast').classList.add('hidden');
 
 function showLoading(text: string, f: number) {
@@ -106,8 +152,8 @@ function afterLoad() {
   $('m-empty').classList.add('hidden');
   $('m-tabs').classList.remove('hidden');
   $('m-settings').removeAttribute('disabled');
-  setTab(app.curve ? 'pano' : 'axial');
-  refresh();
+  app.mprTool = 'navigate';
+  setTab(app.curve ? 'plan' : 'mpr');
 }
 
 async function openProject(file: File) {
@@ -119,7 +165,7 @@ async function openProject(file: File) {
     app.setVolume(volume);
     applyProjectState(app, pf);
     // the desktop layout (maximized view, zoom per view) does not apply on a phone
-    host.classList.remove('has-max');
+    for (const el of Object.values(LAYOUT)) el.classList.remove('has-max');
     for (const v of app.views) v.el.classList.remove('max');
     app.fitAll();
     afterLoad();
@@ -236,7 +282,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach(
     (b.onclick = () => {
       app.view3d.setPreset(b.dataset.preset as 'front');
       closeSheets();
-      setTab('3d');
+      if (tab === 'plan') setTab('3d');
     }),
 );
 
@@ -248,7 +294,7 @@ function focusImplant(id: number) {
   app.X = imp.center;
   app.changed();
   closeSheets();
-  setTab(app.curve ? 'section' : 'axial');
+  setTab(app.curve ? 'plan' : 'mpr');
 }
 
 // ---- state -> UI ----------------------------------------------------------------------------
@@ -281,12 +327,22 @@ function refresh() {
   const vol = app.vol;
   const info = vol?.info;
   $('m-title').textContent = info ? (info.patientName ?? '').replace(/\^/g, ' ').trim() || info.seriesDescription || '' : '';
-  tabButtons.forEach((b) => {
-    const t = b.dataset.v as Tab;
-    b.classList.toggle('hidden', needsCurve(t) && !app.curve);
-  });
-  if (needsCurve(tab) && !app.curve && vol) setTab('axial');
   if (!vol) return;
+
+  // tool strips
+  $('m-rotate').classList.toggle('active', app.mprTool === 'rotate');
+  const tilt = Math.max(...[0, 1, 2].map((i) => app.viewTiltDeg(i)));
+  $('m-tilt').textContent = tilt > 0.05 ? `tilt ${tilt.toFixed(1)}°` : '';
+  const draw = $('m-draw');
+  draw.textContent = app.drawing ? 'Done' : app.curve ? 'Redraw curve' : 'Draw curve';
+  draw.classList.toggle('active', !!app.drawing);
+  $('m-undo-pt').classList.toggle('hidden', !app.drawing);
+  $('m-clear-curve').classList.toggle('hidden', !!app.drawing || !app.curve);
+  $('m-plan-info').textContent = app.drawing
+    ? `${app.drawing.length} point${app.drawing.length === 1 ? '' : 's'}`
+    : app.curve
+      ? `arch ${app.curve.length.toFixed(0)} mm`
+      : '';
 
   // image
   const range = Math.max(1, vol.max - vol.min);
