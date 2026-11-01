@@ -28,7 +28,16 @@ import { Pt, View, newViewState } from './views/View';
 
 export type Mode = 'mpr' | 'plan';
 export type MprTool = 'navigate' | 'rotate' | 'crop';
-export type Jaw = 'mandible' | 'maxilla';
+export type Jaw = 'upper' | 'lower';
+
+export interface Measurement {
+  id: number;
+  /** 'plane' rulers live on planar slices, 'pano' rulers on the panoramic surface */
+  kind: 'plane' | 'pano';
+  a: Vec3;
+  b: Vec3;
+}
+let nextMeasurementId = 1;
 export type RenderMode = 'surface' | 'translucent' | 'mip';
 
 export class App {
@@ -61,11 +70,15 @@ export class App {
   tangAngle = 0;
   implants: Implant[] = [];
   selectedId: number | null = null;
-  placing = false;
+  /** implant placement in progress (which jaw) */
+  placing: Jaw | null = null;
+  /** ruler tool active */
+  ruler = false;
+  measurements: Measurement[] = [];
+  /** what right-drag does */
+  rightDrag: 'zoom' | 'wl' = 'zoom';
   defaultDiameter = 4;
   defaultLength = 10;
-  /** decides the default apical direction of new implants */
-  jaw: Jaw = 'mandible';
   /** new implants copy the axis of the selected implant */
   placeParallel = true;
 
@@ -139,7 +152,8 @@ export class App {
     this.drawing = null;
     this.implants = [];
     this.selectedId = null;
-    this.placing = false;
+    this.placing = null;
+    this.measurements = [];
     this.s = 0;
     this.focusC = 0;
     this.panoOffset = 0;
@@ -265,6 +279,7 @@ export class App {
     const O2 = nv.center;
     const X2 = toNew(this.X);
     const implants = this.implants.map((imp) => ({ ...imp, center: toNew(imp.center), axis: normalize(dirToNew(imp.axis)) }));
+    const measurements = this.measurements.map((m) => ({ ...m, a: toNew(m.a), b: toNew(m.b) }));
     const ctrl = this.curve?.ctrl.map((p) => [p[0] - min[0] - O2[0], p[1] - min[1] - O2[1]] as Vec2);
     const focus = this.focusC - min[2] - O2[2];
     const { s, selectedId, wl } = this;
@@ -273,6 +288,7 @@ export class App {
     this.setVolume(nv);
     this.X = X2;
     this.implants = implants;
+    this.measurements = measurements;
     this.selectedId = selectedId;
     if (ctrl) this.curve = new ArchCurve(ctrl);
     this.s = s;
@@ -297,7 +313,7 @@ export class App {
 
   startDrawing() {
     this.drawing = [];
-    this.placing = false;
+    this.placing = null;
     this.changed();
   }
 
@@ -375,25 +391,33 @@ export class App {
     return { pivot, axis, h: normalize(add(scale(T, Math.cos(a)), scale(N, Math.sin(a)))) };
   }
 
-  startPlacing() {
-    this.placing = true;
+  startPlacing(jaw: Jaw) {
+    this.placing = jaw;
+    this.ruler = false;
     this.drawing = null;
     this.changed();
   }
 
-  /** Default apical direction for new implants (down in the mandible, up in the maxilla). */
-  apicalDirection(): Vec3 {
-    return this.jaw === 'mandible' ? neg(this.frame[2]) : this.frame[2];
+  /** Apical direction for an upper (apex up) or lower (apex down) implant. */
+  apicalDirection(jaw: Jaw): Vec3 {
+    return jaw === 'lower' ? neg(this.frame[2]) : this.frame[2];
   }
 
-  /** Place a new implant with its centre at w. */
+  /** Place a new implant of the jaw being placed with its centre at w. */
   placeImplantAt(w: Vec3) {
+    const jaw = this.placing ?? 'lower';
+    const apical = this.apicalDirection(jaw);
     const ref = this.selectedImplant();
-    const axis = this.placeParallel && ref ? ref.axis : this.apicalDirection();
+    let axis = apical;
+    let sameJaw = false;
+    if (this.placeParallel && ref) {
+      sameJaw = dot(ref.axis, apical) >= 0;
+      axis = sameJaw ? ref.axis : neg(ref.axis);
+    }
     const imp = createImplant(w, normalize(axis), this.defaultDiameter, this.defaultLength);
-    if (this.placeParallel && ref?.abutment) imp.abutment = { ...ref.abutment };
+    if (sameJaw && ref?.abutment) imp.abutment = { ...ref.abutment };
     this.implants.push(imp);
-    this.placing = false;
+    this.placing = null;
     this.tangAngle = 0;
     this.selectImplant(imp.id, true);
   }
@@ -521,12 +545,13 @@ export class App {
       for (let j = i + 1; j < this.implants.length; j++) {
         const a = this.implants[i];
         const b = this.implants[j];
+        if (this.implantJaw(a) !== this.implantJaw(b)) continue;
         const hasAb = !!(a.abutment || b.abutment);
         out.push({
           a,
           b,
           implant: this.implantAngle(a, b),
-          abutment: hasAb ? deg(Math.acos(clamp(dot(this.prostheticAxis(a), this.prostheticAxis(b)), -1, 1))) : null,
+          abutment: hasAb ? deg(Math.acos(clamp(Math.abs(dot(this.prostheticAxis(a), this.prostheticAxis(b))), 0, 1))) : null,
         });
       }
     }
@@ -536,6 +561,33 @@ export class App {
   implantsKey(): string {
     const hasAb = this.implants.some((i) => i.abutment);
     return JSON.stringify([this.implants, this.selectedId, hasAb ? [this.curve?.ctrl, this.frame] : 0]);
+  }
+
+  // ---- measurements -----------------------------------------------------------
+
+  addMeasurement(kind: 'plane' | 'pano', w: Vec3): Measurement {
+    const m: Measurement = { id: nextMeasurementId++, kind, a: w, b: w };
+    this.measurements.push(m);
+    return m;
+  }
+
+  deleteMeasurement(id: number) {
+    this.measurements = this.measurements.filter((m) => m.id !== id);
+    this.changed();
+  }
+
+  clearMeasurements() {
+    this.measurements = [];
+    this.changed();
+  }
+
+  setRuler(on: boolean) {
+    this.ruler = on;
+    if (on) {
+      this.placing = null;
+      this.drawing = null;
+    }
+    this.changed();
   }
 
   /** Toggle a view between its grid cell and filling the whole layout. */
@@ -554,9 +606,14 @@ export class App {
     return deg(Math.acos(clamp(Math.abs(dot(imp.axis, this.frame[2])), 0, 1)));
   }
 
-  /** Angle between two implants' axes (both point apically). */
+  /** Angle between two implants' axes. */
   implantAngle(a: Implant, b: Implant) {
-    return deg(Math.acos(clamp(dot(a.axis, b.axis), -1, 1)));
+    return deg(Math.acos(clamp(Math.abs(dot(a.axis, b.axis)), 0, 1)));
+  }
+
+  /** Upper implants have their apex pointing up. */
+  implantJaw(imp: Implant): Jaw {
+    return dot(imp.axis, this.frame[2]) >= 0 ? 'upper' : 'lower';
   }
 
   // ---- status -----------------------------------------------------------------

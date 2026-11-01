@@ -1,6 +1,8 @@
 import type { App } from '../app';
+import type { Measurement } from '../app';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant } from '../implant';
-import { Vec3, add, cross, dot, length, rotate, scale, sub } from '../math';
+import { ImplantEditor } from './implantEdit';
+import { Vec3, add, cross, distToSegment2, dot, length, scale, sub } from '../math';
 import { CropSpec, SlabSpec, samplePlane, windowToBytes } from '../render';
 
 export type Pt = [number, number];
@@ -17,7 +19,7 @@ export interface ViewState {
 
 export const newViewState = (): ViewState => ({ scale: 0.3, panU: 0, panV: 0, fitted: false });
 
-type DragKind = 'none' | 'wl' | 'pan' | 'left';
+type DragKind = 'none' | 'right' | 'pan' | 'left' | 'ruler';
 
 /**
  * Base class: two stacked canvases (image at <= CSS resolution, overlay at
@@ -46,6 +48,9 @@ export abstract class View {
   private downPos: Pt = [0, 0];
   /** Shift+left drag pans (disabled where Shift has another meaning). */
   protected shiftPans = true;
+  /** Which kind of measurements this view shows/creates (null = no ruler). */
+  protected measureKind: 'plane' | 'pano' | null = null;
+  private rulerDrag: { m: Measurement; end: 'a' | 'b'; created: boolean } | null = null;
   vs: ViewState;
 
   constructor(
@@ -129,6 +134,90 @@ export abstract class View {
     return null;
   }
 
+  // ---- measurements ---------------------------------------------------------
+
+  /** World point for a ruler end at screen point p. */
+  protected measureAt(p: Pt): Vec3 | null {
+    return this.worldAt(p);
+  }
+  /** Screen position of a ruler end, or null when it is not on this slice. */
+  protected measureScreen(_w: Vec3): Pt | null {
+    return null;
+  }
+  protected measureDistance(a: Vec3, b: Vec3): number {
+    return length(sub(a, b));
+  }
+
+  private visibleMeasurements(): { m: Measurement; a: Pt; b: Pt }[] {
+    if (!this.measureKind) return [];
+    const out: { m: Measurement; a: Pt; b: Pt }[] = [];
+    for (const m of this.app.measurements) {
+      if (m.kind !== this.measureKind) continue;
+      const a = this.measureScreen(m.a);
+      const b = this.measureScreen(m.b);
+      if (a && b) out.push({ m, a, b });
+    }
+    return out;
+  }
+
+  private drawMeasurements(o: CanvasRenderingContext2D) {
+    for (const { m, a, b } of this.visibleMeasurements()) {
+      const d = this.measureDistance(m.a, m.b);
+      o.save();
+      o.strokeStyle = 'rgba(0,0,0,0.7)';
+      o.lineWidth = 3.5;
+      o.beginPath();
+      o.moveTo(a[0], a[1]);
+      o.lineTo(b[0], b[1]);
+      o.stroke();
+      o.strokeStyle = '#ffe14d';
+      o.lineWidth = 1.5;
+      o.stroke();
+      // end ticks
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const l = Math.hypot(dx, dy) || 1;
+      const nx = (-dy / l) * 6;
+      const ny = (dx / l) * 6;
+      o.beginPath();
+      for (const q of [a, b]) {
+        o.moveTo(q[0] - nx, q[1] - ny);
+        o.lineTo(q[0] + nx, q[1] + ny);
+      }
+      o.stroke();
+      o.restore();
+      drawLabel(o, `${d.toFixed(1)} mm`, (a[0] + b[0]) / 2 + nx * 1.6, (a[1] + b[1]) / 2 + ny * 1.6 + 4, '#ffe14d', 'center');
+    }
+  }
+
+  private startRuler(p: Pt): boolean {
+    // grab an existing end point?
+    for (const v of this.visibleMeasurements()) {
+      for (const end of ['a', 'b'] as const) {
+        const q = v[end];
+        if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 8) {
+          this.rulerDrag = { m: v.m, end, created: false };
+          return true;
+        }
+      }
+    }
+    const w = this.measureAt(p);
+    if (!w) return false;
+    const m = this.app.addMeasurement(this.measureKind!, w);
+    this.rulerDrag = { m, end: 'b', created: true };
+    return true;
+  }
+
+  private deleteMeasurementAt(p: Pt): boolean {
+    for (const v of this.visibleMeasurements()) {
+      if (distToSegment2(p[0], p[1], v.a[0], v.a[1], v.b[0], v.b[1]) < 6) {
+        this.app.deleteMeasurement(v.m.id);
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ---- rendering ----------------------------------------------------------
 
   render() {
@@ -178,6 +267,7 @@ export abstract class View {
       }
     } else {
       this.drawOverlay(o);
+      this.drawMeasurements(o);
     }
     this.drawTitle(o);
   }
@@ -210,8 +300,9 @@ export abstract class View {
       this.last = p;
       this.downPos = p;
       this.app.activeView = this;
-      if (e.button === 2) this.drag = 'wl';
+      if (e.button === 2) this.drag = 'right';
       else if (e.button === 1 || (e.button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey)))) this.drag = 'pan';
+      else if (e.button === 0 && this.app.ruler && this.measureKind) this.drag = this.startRuler(p) ? 'ruler' : 'none';
       else if (e.button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
       if (this.drag !== 'none') {
         c.setPointerCapture(e.pointerId);
@@ -223,10 +314,24 @@ export abstract class View {
       const dx = p[0] - this.last[0];
       const dy = p[1] - this.last[1];
       switch (this.drag) {
-        case 'wl': {
-          const wl = this.app.wl;
-          const k = Math.max(1, wl.width) * 0.004;
-          this.app.setWindow(wl.center + dy * k, Math.max(1, wl.width + dx * k));
+        case 'right': {
+          if (this.app.rightDrag === 'zoom') {
+            // drag down = zoom in, up = zoom out, around the pressed point
+            this.zoomAt(this.downPos, Math.exp(-dy * 0.008));
+          } else {
+            const wl = this.app.wl;
+            const k = Math.max(1, wl.width) * 0.004;
+            this.app.setWindow(wl.center + dy * k, Math.max(1, wl.width + dx * k));
+          }
+          break;
+        }
+        case 'ruler': {
+          const r = this.rulerDrag;
+          const w = r && this.measureAt(p);
+          if (r && w) {
+            r.m[r.end] = w;
+            this.app.requestRender();
+          }
           break;
         }
         case 'pan':
@@ -238,13 +343,20 @@ export abstract class View {
           this.onLeftDrag(p, this.last, e);
           break;
         default:
-          this.onHover(p, e);
+          if (this.app.ruler && this.measureKind) this.el.style.cursor = 'crosshair';
+          else this.onHover(p, e);
       }
       this.last = p;
       this.app.activeView = this;
       this.app.reportCursor(this, p);
     });
     const end = (e: PointerEvent) => {
+      if (this.drag === 'ruler' && this.rulerDrag) {
+        const { m, created } = this.rulerDrag;
+        if (created && this.measureDistance(m.a, m.b) < 0.2) this.app.deleteMeasurement(m.id);
+        this.rulerDrag = null;
+        this.app.changed();
+      }
       if (this.drag === 'left') {
         const p = this.pos(e);
         const moved = Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 3;
@@ -274,6 +386,10 @@ export abstract class View {
     );
     c.addEventListener('dblclick', (e) => {
       if (!this.app.vol) return;
+      if (this.app.ruler && this.measureKind) {
+        this.deleteMeasurementAt(this.pos(e));
+        return;
+      }
       this.onDoubleClick(this.pos(e), e);
     });
   }
@@ -308,7 +424,33 @@ export abstract class PlaneView extends View {
   }
   /** Whether implants can be dragged in this view. */
   protected implantsEditable = false;
-  private implantDrag: { imp: Implant; mode: 'move' | 'rotate'; plane: Plane } | null = null;
+  protected measureKind: 'plane' | 'pano' | null = 'plane';
+  protected editor = new ImplantEditor(this.app, {
+    project: (w) => {
+      const s = this.worldToScreen(w)!;
+      return { x: s[0], y: s[1], depth: s[2] };
+    },
+    basis: () => {
+      const pl = this.currentPlane()!;
+      return { u: pl.u, v: pl.v, n: cross(pl.u, pl.v) };
+    },
+    scale: () => this.vs.scale,
+    radialAxial: (p, imp) => {
+      const q = sub(this.screenToWorld(p)!, imp.center);
+      const h = dot(q, imp.axis);
+      return { rad: length(sub(q, scale(imp.axis, h))), h };
+    },
+    hitBody: (p) => this.hitBody(p),
+    visible: (imp) => {
+      const s = this.worldToScreen(imp.center);
+      return !!s && Math.abs(s[2]) < imp.diameter / 2 + 1;
+    },
+  });
+
+  protected measureScreen(w: Vec3): Pt | null {
+    const s = this.worldToScreen(w);
+    return s && Math.abs(s[2]) < 0.75 ? [s[0], s[1]] : null;
+  }
 
   /** Current plane including pan offsets (screen centre). */
   currentPlane(): Plane | null {
@@ -418,101 +560,49 @@ export abstract class PlaneView extends View {
     }
   }
 
-  /** Draw the projected implant axis (dashed) for implants near the plane. */
+  /** Dashed implant axes and rotation handles. */
   protected drawImplantAxes(o: CanvasRenderingContext2D) {
-    const pl = this.currentPlane();
-    if (!pl) return;
-    for (const imp of this.app.implants) {
-      const a = this.worldToScreen(add(imp.center, scale(imp.axis, imp.length / 2)), pl)!;
-      const b = this.worldToScreen(add(imp.center, scale(imp.axis, -imp.length / 2)), pl)!;
-      const near = Math.min(Math.abs(a[2]), Math.abs(b[2])) < imp.length;
-      if (!near) continue;
-      const sel = imp.id === this.app.selectedId;
-      o.strokeStyle = sel ? 'rgba(255,184,28,0.9)' : 'rgba(64,214,128,0.7)';
-      o.setLineDash([4, 4]);
-      o.lineWidth = 1;
-      o.beginPath();
-      o.moveTo(a[0], a[1]);
-      o.lineTo(b[0], b[1]);
-      o.stroke();
-      o.setLineDash([]);
-    }
+    if (this.implantsEditable) this.editor.draw(o);
   }
 
   // ---- implant manipulation ----------------------------------------------
 
-  protected hitImplant(p: Pt): { imp: Implant; mode: 'move' | 'rotate' } | null {
+  private hitBody(p: Pt): Implant | null {
     const w = this.screenToWorld(p);
     if (!w) return null;
     const tol = 4 * this.vs.scale;
-    let best: { imp: Implant; mode: 'move' | 'rotate'; d: number } | null = null;
+    let best: { imp: Implant; d: number } | null = null;
     for (const part of this.app.allParts()) {
       const q = sub(w, part.center);
       const h = dot(q, part.axis);
       const rad = length(sub(q, scale(part.axis, h)));
       if (Math.abs(h) <= part.half + tol && rad <= part.radius + tol) {
-        let mode: 'move' | 'rotate' = 'move';
-        if (part.kind === 'implant') {
-          const capZone = Math.max(1.2, part.half * 0.4);
-          if (Math.abs(h) > part.half - capZone) mode = 'rotate';
-        }
         const d = rad + (part.kind === 'implant' ? 0 : 0.5);
-        if (!best || d < best.d) best = { imp: part.implant, mode, d };
+        if (!best || d < best.d) best = { imp: part.implant, d };
       }
     }
-    return best;
+    return best?.imp ?? null;
   }
 
   /** Returns true when an implant drag started. */
   protected startImplantDrag(p: Pt): boolean {
     if (!this.implantsEditable) return false;
-    const hit = this.hitImplant(p);
-    if (!hit) return false;
-    const pl = this.currentPlane()!;
-    this.implantDrag = { imp: hit.imp, mode: hit.mode, plane: pl };
-    this.app.selectImplant(hit.imp.id, false);
-    this.el.style.cursor = hit.mode === 'rotate' ? 'grabbing' : 'move';
-    return true;
-  }
-
-  protected get draggingImplant() {
-    return this.implantDrag !== null;
+    return this.editor.start(p);
   }
 
   protected dragImplant(p: Pt, last: Pt) {
-    const d = this.implantDrag;
-    if (!d) return false;
-    const pl = d.plane;
-    const s = this.vs.scale;
-    if (d.mode === 'move') {
-      const delta = add(scale(pl.u, (p[0] - last[0]) * s), scale(pl.v, (p[1] - last[1]) * s));
-      d.imp.center = add(d.imp.center, delta);
-    } else {
-      const c = this.worldToScreen(d.imp.center, pl)!;
-      const a0 = Math.atan2(last[1] - c[1], last[0] - c[0]);
-      const a1 = Math.atan2(p[1] - c[1], p[0] - c[0]);
-      let da = a1 - a0;
-      if (da > Math.PI) da -= 2 * Math.PI;
-      if (da < -Math.PI) da += 2 * Math.PI;
-      d.imp.axis = rotate(d.imp.axis, cross(pl.u, pl.v), da);
-    }
-    this.app.implantChanged(d.imp);
-    return true;
+    return this.editor.move(p, last);
   }
 
   protected endImplantDrag() {
-    if (!this.implantDrag) return false;
-    this.implantDrag = null;
-    this.el.style.cursor = '';
-    this.app.implantChanged(null, true);
-    return true;
+    return this.editor.end();
   }
 
   protected updateHoverCursor(p: Pt) {
     if (!this.implantsEditable) return false;
-    const hit = this.hitImplant(p);
-    this.el.style.cursor = hit ? (hit.mode === 'rotate' ? 'grab' : 'move') : '';
-    return !!hit;
+    const c = this.editor.hoverCursor(p);
+    this.el.style.cursor = c ?? '';
+    return !!c;
   }
 }
 

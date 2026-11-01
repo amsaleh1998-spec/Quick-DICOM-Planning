@@ -1,8 +1,9 @@
 import type { App } from '../app';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, Cylinder, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, platformOf } from '../implant';
-import { Vec2, Vec3, add, addScaled, cross, distToSegment2, dot, fromFrame, neg, normalize, rotate, scale, toFrame } from '../math';
+import { Vec2, Vec3, add, addScaled, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, toFrame } from '../math';
 import { CropSpec, SlabSpec, sampleLine } from '../render';
 import { Plane, PlaneView, Pt, View, ViewState, drawLabel } from './View';
+import { ImplantEditor, projectedRadialAxial } from './implantEdit';
 
 const CURVE_COLOR = '#4fb3ff';
 const CROSS_COLOR = '#c38cff';
@@ -467,11 +468,37 @@ export class TangView extends PlaneView {
 // ---------------------------------------------------------------------------
 
 export class PanoView extends View {
-  private implantDrag: { imp: Implant; mode: 'move' | 'rotate' } | null = null;
+  protected measureKind: 'plane' | 'pano' | null = 'pano';
+  private editor = new ImplantEditor(this.app, {
+    project: (w) => {
+      const pr = this.project(w);
+      return { x: pr.x, y: pr.y, depth: pr.off - this.app.panoOffset };
+    },
+    basis: (imp) => this.localBasis(imp),
+    scale: () => this.vs.scale,
+    radialAxial: (p, imp) => projectedRadialAxial(p, imp, (w) => this.project(w), this.vs.scale),
+    hitBody: (p) => this.hitBody(p),
+    visible: () => true,
+  });
 
   constructor(app: App) {
     super(app, 'Panoramic', CURVE_COLOR);
     this.maxPixels = 320_000;
+  }
+
+  protected measureScreen(w: Vec3): Pt | null {
+    if (!this.app.curve) return null;
+    const pr = this.project(w);
+    return Math.abs(pr.off - this.app.panoOffset) < 1 ? [pr.x, pr.y] : null;
+  }
+
+  /** Distance measured on the developed panoramic surface. */
+  protected measureDistance(a: Vec3, b: Vec3): number {
+    const pa = this.project(a);
+    const pb = this.project(b);
+    const ca = toFrame(a, this.app.O, this.app.frame)[2];
+    const cb = toFrame(b, this.app.O, this.app.frame)[2];
+    return Math.hypot(pa.s - pb.s, ca - cb);
   }
 
   protected emptyMessage() {
@@ -597,22 +624,16 @@ export class PanoView extends View {
     return { a, b };
   }
 
-  private hitImplant(p: Pt): { imp: Implant; mode: 'move' | 'rotate' } | null {
+  private hitBody(p: Pt): Implant | null {
     for (const part of this.app.allParts()) {
       const { a, b } = this.partEnds(part);
       const rpx = part.radius / this.vs.scale + 3;
-      const d = distToSegment2(p[0], p[1], a.x, a.y, b.x, b.y);
-      if (d <= rpx) {
-        if (part.kind !== 'implant') return { imp: part.implant, mode: 'move' };
-        const lpx = Math.hypot(a.x - b.x, a.y - b.y);
-        const da = Math.hypot(p[0] - a.x, p[1] - a.y);
-        const db = Math.hypot(p[0] - b.x, p[1] - b.y);
-        const zone = Math.max(6, lpx * 0.2);
-        return { imp: part.implant, mode: Math.min(da, db) < zone ? 'rotate' : 'move' };
-      }
+      if (distToSegment2(p[0], p[1], a.x, a.y, b.x, b.y) <= rpx) return part.implant;
     }
     return null;
   }
+
+  private draggingPos = false;
 
   protected onLeftDown(p: Pt): boolean {
     const app = this.app;
@@ -621,52 +642,37 @@ export class PanoView extends View {
       app.placeImplantAt(this.worldAt(p)!);
       return false;
     }
-    const hit = this.hitImplant(p);
-    if (hit) {
-      this.implantDrag = hit;
-      app.selectImplant(hit.imp.id, true);
+    const wasSelected = app.selectedId;
+    if (this.editor.start(p)) {
+      // snap the cross-sections to a newly selected implant
+      if (app.selectedId !== wasSelected) app.selectImplant(app.selectedId, true);
       return true;
     }
-    app.s = Math.max(0, Math.min(app.curve.length, this.sAt(p[0])));
-    app.focusC = this.cAt(p[1]);
-    app.changed();
+    this.draggingPos = true;
+    this.setPos(p);
     return true;
   }
 
-  protected onLeftDrag(p: Pt, last: Pt) {
+  private setPos(p: Pt) {
     const app = this.app;
-    const d = this.implantDrag;
-    if (!d) {
-      app.s = Math.max(0, Math.min(app.curve!.length, this.sAt(p[0])));
-      app.focusC = this.cAt(p[1]);
-      app.changed();
-      return;
-    }
-    const { u, v, n } = this.localBasis(d.imp);
-    const sc = this.vs.scale;
-    if (d.mode === 'move') {
-      d.imp.center = add(d.imp.center, add(scale(u, (p[0] - last[0]) * sc), scale(v, (p[1] - last[1]) * sc)));
-    } else {
-      const c = this.project(d.imp.center);
-      let da = Math.atan2(p[1] - c.y, p[0] - c.x) - Math.atan2(last[1] - c.y, last[0] - c.x);
-      if (da > Math.PI) da -= 2 * Math.PI;
-      if (da < -Math.PI) da += 2 * Math.PI;
-      d.imp.axis = rotate(d.imp.axis, n, da);
-    }
-    app.implantChanged(d.imp);
+    app.s = Math.max(0, Math.min(app.curve!.length, this.sAt(p[0])));
+    app.focusC = this.cAt(p[1]);
+    app.changed();
+  }
+
+  protected onLeftDrag(p: Pt, last: Pt) {
+    if (this.editor.move(p, last)) return;
+    if (this.draggingPos) this.setPos(p);
   }
 
   protected onLeftUp() {
-    if (this.implantDrag) {
-      this.implantDrag = null;
-      this.app.implantChanged(null, true);
-    }
+    this.editor.end();
+    this.draggingPos = false;
   }
 
   protected onHover(p: Pt) {
     if (!this.app.curve) return;
-    const hit = this.hitImplant(p);
-    this.el.style.cursor = hit ? (hit.mode === 'rotate' ? 'grab' : 'move') : this.app.placing ? 'crosshair' : 'col-resize';
+    this.el.style.cursor = this.editor.hoverCursor(p) ?? (this.app.placing ? 'crosshair' : 'col-resize');
   }
 
   protected onScroll(dir: number, _p: Pt, e: WheelEvent) {
@@ -739,6 +745,7 @@ export class PanoView extends View {
       const ymin = Math.min(a.y, b.y) - r * 0.3;
       if (!t || ymin < t.y) tops.set(imp.id, { x: (a.x + b.x) / 2, y: ymin });
     }
+    this.editor.draw(o);
     for (const imp of app.implants) {
       const t = tops.get(imp.id)!;
       const sel = imp.id === app.selectedId;
@@ -746,16 +753,21 @@ export class PanoView extends View {
       drawLabel(o, imp.name.replace('Implant ', '#'), t.x, t.y - 8, `rgb(${col[0]},${col[1]},${col[2]})`, 'center');
     }
     // angulation between neighbouring implants
-    const ordered = app.implants.map((imp) => ({ imp, x: this.project(imp.center).x })).sort((a, b) => a.x - b.x);
-    for (let i = 0; i + 1 < ordered.length; i++) {
-      const A = ordered[i].imp;
-      const B = ordered[i + 1].imp;
-      const ta = tops.get(A.id)!;
-      const tb = tops.get(B.id)!;
-      const ang = app.implantAngle(A, B);
-      const ab = A.abutment || B.abutment ? app.angleTable().find((r) => (r.a === A && r.b === B) || (r.a === B && r.b === A)) : null;
-      const text = `${ang.toFixed(1)}°` + (ab && ab.abutment !== null ? ` (MUA ${ab.abutment.toFixed(1)}°)` : '');
-      drawLabel(o, text, (ta.x + tb.x) / 2, Math.min(ta.y, tb.y) - 26, '#ffe08a', 'center');
+    for (const jaw of ['upper', 'lower'] as const) {
+      const ordered = app.implants
+        .filter((imp) => app.implantJaw(imp) === jaw)
+        .map((imp) => ({ imp, x: this.project(imp.center).x }))
+        .sort((a, b) => a.x - b.x);
+      for (let i = 0; i + 1 < ordered.length; i++) {
+        const A = ordered[i].imp;
+        const B = ordered[i + 1].imp;
+        const ta = tops.get(A.id)!;
+        const tb = tops.get(B.id)!;
+        const ang = app.implantAngle(A, B);
+        const ab = A.abutment || B.abutment ? app.angleTable().find((r) => (r.a === A && r.b === B) || (r.a === B && r.b === A)) : null;
+        const text = `${ang.toFixed(1)}°` + (ab && ab.abutment !== null ? ` (MUA ${ab.abutment.toFixed(1)}°)` : '');
+        drawLabel(o, text, (ta.x + tb.x) / 2, Math.min(ta.y, tb.y) - 26, '#ffe08a', 'center');
+      }
     }
     // tangential pivot
     const tp = app.tangentialPlane();

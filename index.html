@@ -19,6 +19,19 @@
           <button data-mode="mpr" class="active" role="tab">MPR / Reorient</button>
           <button data-mode="plan" role="tab">Implant planning</button>
         </div>
+        <div class="group">
+          <button id="btn-ruler" title="Measure distances on any slice (R). Drag to measure, drag an end to adjust, double-click a ruler to delete.">
+            <svg viewBox="0 0 16 16" width="13" height="13" style="vertical-align:-2px"><path d="M1.5 11.5l10-10 3 3-10 10z M4 9l1.5 1.5 M6 7l1 1 M8 5l1.5 1.5 M10 3l1 1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+            Ruler</button>
+          <button id="btn-clear-measure" title="Delete all measurements">Clear</button>
+        </div>
+        <div class="group">
+          <span class="muted small">Right-drag</span>
+          <div class="seg small" id="rd-seg">
+            <button data-rd="zoom" title="Right-drag down/up zooms in/out">Zoom</button>
+            <button data-rd="wl" title="Right-drag adjusts brightness / contrast">Brightness/contrast</button>
+          </div>
+        </div>
         <div class="group wl">
           <label>W <input id="ww" type="number" step="10" /></label>
           <label>L <input id="wc" type="number" step="10" /></label>
@@ -59,9 +72,10 @@
                 <li><b>Ctrl+Alt+drag</b> (or Rotate tool) – rotate the other planes around this view</li>
                 <li><b>Crop tool</b> – drag the blue box edges</li>
                 <li><b>Wheel</b> – scroll slices</li>
-                <li><b>Ctrl+wheel</b> – zoom · <b>Alt/middle drag</b> – pan</li>
+                <li><b>Ctrl+wheel</b> or <b>right drag</b> – zoom · <b>Alt/middle drag</b> – pan</li>
+                <li><b>R</b> – ruler on any slice</li>
                 <li><b>M</b> or <b>⤢</b> – maximize / restore view</li>
-                <li><b>Right drag</b> – window / level</li>
+                <li>Right drag can be switched to brightness/contrast in the toolbar</li>
               </ul>
             </details>
           </section>
@@ -81,11 +95,8 @@
 
             <h3>Implants</h3>
             <div class="row">
-              <button id="btn-add-implant" class="primary">Add implant</button>
-              <div class="seg small" id="jaw-seg" title="Default implant direction (apex down in the mandible, up in the maxilla)">
-                <button data-jaw="mandible">Mandible</button>
-                <button data-jaw="maxilla">Maxilla</button>
-              </div>
+              <button id="btn-add-upper" class="primary" title="Maxillary implant: apex points up, platform down">Add upper implant</button>
+              <button id="btn-add-lower" class="primary" title="Mandibular implant: apex points down, platform up">Add lower implant</button>
             </div>
             <label class="check small"><input id="place-parallel" type="checkbox" checked /> New implant parallel to the selected one</label>
             <div class="row small">
@@ -141,9 +152,10 @@
                 <li><b>Axial</b>: wheel = level, drag curve points, dbl-click curve = add / point = remove</li>
                 <li><b>Panoramic / cross-sections</b>: wheel = move along the curve, click = jump</li>
                 <li><b>Tangential</b>: wheel = rotate 360° (around the selected implant)</li>
-                <li><b>Implant</b>: drag body = move, drag near an end = tilt (bright band = platform)</li>
+                <li><b>Implant</b>: drag body = move · drag side outline = diameter · drag apical end = length</li>
+                <li><b>C / A handles</b> (selected implant): C rotates around the apex, A rotates around the platform</li>
                 <li><b>Esc</b> deselect / cancel · <b>Del</b> delete implant</li>
-                <li><b>Ctrl+wheel</b> zoom · <b>Shift/Alt/middle drag</b> pan · <b>Right drag</b> W/L · <b>M</b> maximize</li>
+                <li><b>Ctrl+wheel</b> or <b>right drag</b> zoom · <b>Shift/Alt/middle drag</b> pan · <b>M</b> maximize · <b>R</b> ruler</li>
               </ul>
             </details>
           </section>
