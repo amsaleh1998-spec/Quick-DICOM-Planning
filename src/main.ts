@@ -388,6 +388,13 @@ $('btn-parallel').onclick = () => {
 $('btn-flip').onclick = () => app.selectedId !== null && app.flipImplant(app.selectedId);
 
 // abutments
+const impAxis = $<HTMLInputElement>('imp-axis');
+impAxis.onchange = () => {
+  const imp = app.selectedImplant();
+  if (!imp) return;
+  imp.showProstheticAxis = impAxis.checked;
+  app.changed();
+};
 const abType = $<HTMLSelectElement>('ab-type');
 const abHeight = $<HTMLSelectElement>('ab-height');
 const abRot = $<HTMLInputElement>('ab-rot');
@@ -398,6 +405,7 @@ abType.onchange = () => {
   if (!imp) return;
   if (abType.value === 'none') imp.abutment = null;
   else {
+    if (!imp.abutment) imp.showProstheticAxis = true; // adding an MUA shows its axis (can be switched off)
     const angle = Number(abType.value);
     imp.abutment = { angle, gingivalHeight: imp.abutment?.gingivalHeight ?? Number(abHeight.value), rotation: imp.abutment?.rotation ?? 0 };
   }
@@ -604,6 +612,7 @@ function refreshUi() {
     if (others.some((o) => String(o.id) === prev)) parallelTo.value = prev;
     $('parallel-row').classList.toggle('hidden', !others.length);
     // abutment
+    impAxis.checked = sel.showProstheticAxis;
     abType.value = sel.abutment ? String(sel.abutment.angle) : 'none';
     abHeight.disabled = !sel.abutment;
     if (sel.abutment) abHeight.value = String(sel.abutment.gingivalHeight);

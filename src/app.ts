@@ -455,6 +455,7 @@ export class App {
     }
     const imp = createImplant(w, normalize(axis), this.defaultDiameter, this.defaultLength);
     if (sameJaw && ref?.abutment) imp.abutment = { ...ref.abutment };
+    if (sameJaw && ref) imp.showProstheticAxis = ref.showProstheticAxis;
     this.implants.push(imp);
     this.placing = null;
     this.tangAngle = 0;

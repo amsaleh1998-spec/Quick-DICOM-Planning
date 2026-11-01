@@ -34,6 +34,8 @@ export interface Implant {
   apicalDiameter: number | null;
   length: number;
   abutment: Abutment | null;
+  /** draw the Ø3 × 15 mm prosthetic axis (from the MUA top, or from the platform without an MUA) */
+  showProstheticAxis: boolean;
 }
 
 export const MIN_APICAL_DIAMETER = 1.5;
@@ -110,7 +112,7 @@ export function reserveImplantIds(maxId: number) {
 
 export function createImplant(center: Vec3, axis: Vec3, diameter = 4, length = 10): Implant {
   const id = nextId++;
-  return { id, name: `Implant ${id}`, center, axis, diameter, apicalDiameter: null, length, abutment: null };
+  return { id, name: `Implant ${id}`, center, axis, diameter, apicalDiameter: null, length, abutment: null, showProstheticAxis: false };
 }
 
 /** Centre of the implant platform (coronal end). */
@@ -146,10 +148,13 @@ export function implantParts(imp: Implant, abutmentDir: Vec3 | null): Cylinder[]
   const parts: Cylinder[] = [
     { center: imp.center, axis: imp.axis, radius: Math.max(r, ra), r0: r, r1: ra, half: imp.length / 2, kind: 'implant', implant: imp },
   ];
+  const up = neg(imp.axis);
+  const p = platformOf(imp);
+  // where the prosthetic axis starts and which way it points
+  let axisStart = p;
+  let axisDir = up;
   const ab = imp.abutment;
   if (ab) {
-    const up = neg(imp.axis);
-    const p = platformOf(imp);
     const gh = ab.gingivalHeight;
     // transmucosal collar: Ø3.5 at the implant -> Ø4.8 at the gingiva
     parts.push(cone(p, up, gh, MUA_BASE_DIAMETER / 2, MUA_DIAMETER / 2, 'abutment', imp));
@@ -157,10 +162,13 @@ export function implantParts(imp: Implant, abutmentDir: Vec3 | null): Cylinder[]
     const dir = abutmentDir ?? up;
     const gingiva = addScaled(p, up, gh);
     parts.push(cone(gingiva, dir, MUA_HEAD_HEIGHT, MUA_DIAMETER / 2, MUA_TOP_DIAMETER / 2, 'abutment', imp));
-    // prosthetic axis: Ø3, 15 mm from the top of the MUA
-    const top = addScaled(gingiva, dir, MUA_HEAD_HEIGHT);
+    axisStart = addScaled(gingiva, dir, MUA_HEAD_HEIGHT);
+    axisDir = dir;
+  }
+  if (imp.showProstheticAxis) {
+    // prosthetic axis: Ø3, 15 mm from the top of the MUA (or from the implant platform)
     const pr = PROSTHETIC_AXIS_DIAMETER / 2;
-    parts.push(cone(top, dir, PROSTHETIC_AXIS_LENGTH, pr, pr, 'prosthetic', imp));
+    parts.push(cone(axisStart, axisDir, PROSTHETIC_AXIS_LENGTH, pr, pr, 'prosthetic', imp));
   }
   return parts;
 }
