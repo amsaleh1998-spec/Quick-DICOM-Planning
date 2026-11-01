@@ -329,6 +329,10 @@ type Preset = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
 
 /** GPU ray-cast volume rendering with thresholds; implants are ray-traced cylinders. */
 export class View3D extends View {
+  /** max voxels of the 3D texture (lower on phones) */
+  static textureBudget = 48_000_000;
+  /** max rendered pixels per frame (lower on phones) */
+  static pixelBudget = 900_000;
   private glCanvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext | null = null;
   private prog: WebGLProgram | null = null;
@@ -502,7 +506,7 @@ export class View3D extends View {
     const dimsFor = (f: number): [number, number, number] => [Math.ceil(vol.nx / f), Math.ceil(vol.ny / f), Math.ceil(vol.nz / f)];
     while (true) {
       const d = dimsFor(f);
-      if (d[0] * d[1] * d[2] <= 48_000_000 && Math.max(...d) <= maxDim) break;
+      if (d[0] * d[1] * d[2] <= View3D.textureBudget && Math.max(...d) <= maxDim) break;
       f++;
     }
     const [tx, ty, tz] = dimsFor(f);
@@ -727,7 +731,7 @@ export class View3D extends View {
     const gl = this.gl!;
     const app = this.app;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    let ratio = Math.min(dpr, Math.sqrt(900_000 / Math.max(1, this.w * this.h)));
+    let ratio = Math.min(dpr, Math.sqrt(View3D.pixelBudget / Math.max(1, this.w * this.h)));
     if (this.draft) ratio *= 0.5;
     const W = Math.max(1, Math.round(this.w * ratio));
     const H = Math.max(1, Math.round(this.h * ratio));

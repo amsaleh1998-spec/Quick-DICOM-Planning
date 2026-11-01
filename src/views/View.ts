@@ -482,6 +482,10 @@ export abstract class View {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     c.addEventListener('pointerdown', (e) => {
       if (!this.app.vol) return;
+      if (this.app.touchUi && e.pointerType === 'touch') {
+        this.touchDown(e);
+        return;
+      }
       const p = this.pos(e);
       this.last = p;
       this.downPos = p;
@@ -503,6 +507,10 @@ export abstract class View {
       }
     });
     c.addEventListener('pointermove', (e) => {
+      if (this.touches.has(e.pointerId)) {
+        this.touchMove(e);
+        return;
+      }
       const p = this.pos(e);
       const dx = p[0] - this.last[0];
       const dy = p[1] - this.last[1];
@@ -575,6 +583,10 @@ export abstract class View {
       this.app.reportCursor(this, p);
     });
     const end = (e: PointerEvent) => {
+      if (this.touches.has(e.pointerId)) {
+        this.touchUp(e);
+        return;
+      }
       if (this.drag === 'ruler' && this.rulerDrag) {
         const { created } = this.rulerDrag;
         this.rulerDrag = null;
@@ -636,7 +648,8 @@ export abstract class View {
     const gesture = (name: string, fn: (e: Event & { scale: number; clientX: number; clientY: number }) => void) =>
       c.addEventListener(name, (e) => {
         e.preventDefault();
-        if (this.app.vol) fn(e as Event & { scale: number; clientX: number; clientY: number });
+        // the touch UI handles pinch itself (Safari also reports it as gesture events)
+        if (this.app.vol && !this.app.touchUi) fn(e as Event & { scale: number; clientX: number; clientY: number });
       });
     gesture('gesturestart', () => {
       this.gestureActive = true;
@@ -662,6 +675,105 @@ export abstract class View {
       if (this.app.ruler) return;
       this.onDoubleClick(this.pos(e), e);
     });
+  }
+
+  // ---- touch (phone UI) ---------------------------------------------------------
+
+  private touches = new Map<number, Pt>();
+  private touchStart: { p: Pt; t: number; moved: boolean } | null = null;
+  private pinch: { dist: number; c: Pt } | null = null;
+  private lastTapAt = 0;
+
+  private pinchState(): { dist: number; c: Pt } {
+    const [a, b] = [...this.touches.values()];
+    return { dist: Math.hypot(a[0] - b[0], a[1] - b[1]), c: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+  }
+
+  private touchDown(e: PointerEvent) {
+    e.preventDefault();
+    const p = this.pos(e);
+    this.ovCanvas.setPointerCapture(e.pointerId);
+    this.touches.set(e.pointerId, p);
+    this.app.activeView = this;
+    if (this.touches.size === 1) {
+      this.touchStart = { p, t: performance.now(), moved: false };
+      this.accX = 0;
+      this.accY = 0;
+    } else {
+      if (this.touchStart) this.touchStart.moved = true; // no tap once a second finger lands
+      if (this.touches.size === 2) this.pinch = this.pinchState();
+    }
+  }
+
+  /** One finger: scroll / orbit (like a trackpad swipe). Two fingers: pinch zoom + pan. */
+  private touchMove(e: PointerEvent) {
+    const prev = this.touches.get(e.pointerId)!;
+    const p = this.pos(e);
+    this.touches.set(e.pointerId, p);
+    if (this.touches.size >= 2) {
+      if (!this.pinch || this.touches.size > 2) return;
+      const s = this.pinchState();
+      if (s.dist > 10 && this.pinch.dist > 10) this.zoomAt(s.c, this.pinch.dist / s.dist);
+      this.vs.panU -= (s.c[0] - this.pinch.c[0]) * this.vs.scale;
+      this.vs.panV -= (s.c[1] - this.pinch.c[1]) * this.vs.scale;
+      this.pinch = s;
+      this.app.requestRender();
+      return;
+    }
+    const st = this.touchStart;
+    if (!st) return;
+    if (!st.moved) {
+      if (Math.hypot(p[0] - st.p[0], p[1] - st.p[1]) < 8) return;
+      st.moved = true;
+    }
+    const dx = p[0] - prev[0];
+    const dy = p[1] - prev[1];
+    // content follows the finger: feed the deltas like a natural-scrolling trackpad
+    if (this.onSwipe(-dx, -dy, p, noWheel())) return;
+    const STEP = 6; // px of finger travel per slice step
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (Math.sign(-dx) !== Math.sign(this.accX)) this.accX = 0;
+      this.accX -= dx;
+      while (Math.abs(this.accX) >= STEP) {
+        const dir = Math.sign(this.accX);
+        this.onScrollH(dir, p, noWheel());
+        this.accX -= dir * STEP;
+      }
+    } else {
+      if (Math.sign(-dy) !== Math.sign(this.accY)) this.accY = 0;
+      this.accY -= dy;
+      while (Math.abs(this.accY) >= STEP) {
+        const dir = Math.sign(this.accY);
+        this.onScroll(dir, p, noWheel());
+        this.accY -= dir * STEP;
+      }
+    }
+  }
+
+  /** Tap = click (e.g. move the crosshair there); double tap = fit the view. */
+  private touchUp(e: PointerEvent) {
+    const st = this.touchStart;
+    this.touches.delete(e.pointerId);
+    if (this.ovCanvas.hasPointerCapture(e.pointerId)) this.ovCanvas.releasePointerCapture(e.pointerId);
+    if (this.touches.size === 0) {
+      if (e.type === 'pointerup' && st && !st.moved && performance.now() - st.t < 450) {
+        const now = performance.now();
+        if (now - this.lastTapAt < 320) {
+          this.lastTapAt = 0;
+          this.vs.fitted = false;
+          this.app.requestRender();
+        } else {
+          this.lastTapAt = now;
+          if (this.onLeftDown(st.p, e)) this.onLeftUp(st.p, e, false);
+        }
+      }
+      this.touchStart = null;
+      this.pinch = null;
+    } else if (this.touches.size === 1) {
+      // continue with the remaining finger without a jump
+      this.pinch = null;
+      this.touchStart = { p: [...this.touches.values()][0], t: 0, moved: true };
+    } else if (this.touches.size === 2) this.pinch = this.pinchState();
   }
 
   // ---- trackpad --------------------------------------------------------------
@@ -984,6 +1096,12 @@ function inCrop(c: CropSpec, p: Vec3): boolean {
     if (f < c.min[a] || f > c.max[a]) return false;
   }
   return true;
+}
+
+let noWheelEvent: WheelEvent | null = null;
+/** Placeholder event (no modifier keys) for scroll handlers driven by touch. */
+function noWheel(): WheelEvent {
+  return (noWheelEvent ??= new WheelEvent('wheel'));
 }
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, lh: number) {

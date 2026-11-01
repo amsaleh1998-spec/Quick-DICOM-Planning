@@ -718,3 +718,13 @@ select {
 .warn {
   color: #ff8a5c;
 }
+
+a.btn-link {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
