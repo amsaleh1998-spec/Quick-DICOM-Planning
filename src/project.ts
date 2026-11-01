@@ -44,6 +44,7 @@ interface ProjectFile {
     implants: Implant[];
     selectedId: number | null;
     defaultDiameter: number;
+    defaultTapered?: boolean;
     defaultLength: number;
     placeParallel: boolean;
     vr: { mode: RenderMode; lo: number; hi: number };
@@ -104,6 +105,7 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       implants: app.implants,
       selectedId: app.selectedId,
       defaultDiameter: app.defaultDiameter,
+      defaultTapered: app.defaultTapered,
       defaultLength: app.defaultLength,
       placeParallel: app.placeParallel,
       vr: app.vr,
@@ -185,6 +187,7 @@ export function applyProjectState(app: App, file: ProjectFile) {
   reserveImplantIds(Math.max(0, ...app.implants.map((i) => i.id)));
   app.selectedId = st.selectedId;
   app.defaultDiameter = st.defaultDiameter;
+  app.defaultTapered = st.defaultTapered ?? true;
   app.defaultLength = st.defaultLength;
   app.placeParallel = st.placeParallel;
   app.vr = { ...st.vr };

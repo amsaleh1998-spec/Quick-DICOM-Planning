@@ -334,6 +334,8 @@ rdButtons.forEach(
 const defD = $<HTMLInputElement>('def-d');
 const defL = $<HTMLInputElement>('def-l');
 defD.onchange = () => (app.defaultDiameter = clampNum(defD.value, 2, 8, 4));
+const defTapered = $<HTMLInputElement>('def-tapered');
+defTapered.onchange = () => (app.defaultTapered = defTapered.checked);
 defL.onchange = () => (app.defaultLength = clampNum(defL.value, 4, 20, 10));
 const impName = $<HTMLInputElement>('imp-name');
 impName.oninput = () => {
@@ -631,6 +633,7 @@ function refreshUi() {
   spacing.value = String(app.crossSpacing);
   $('spacing-val').textContent = `${app.crossSpacing} mm`;
   if (document.activeElement !== defD) defD.value = String(app.defaultDiameter);
+  defTapered.checked = app.defaultTapered;
   if (document.activeElement !== defL) defL.value = String(app.defaultLength);
 
   // update the list in place (keeps elements alive so double-click works)

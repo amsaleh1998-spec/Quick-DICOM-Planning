@@ -1,5 +1,5 @@
 import { ArchCurve } from './curve';
-import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, setImplantAxis, setImplantLength } from './implant';
+import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, setApicalDiameter, setImplantAxis, setImplantLength } from './implant';
 import {
   Frame,
   Vec2,
@@ -110,6 +110,8 @@ export class App {
   /** pointing device: trackpad mode maps two-finger gestures to navigation */
   input: 'mouse' | 'trackpad' = loadInputPreference();
   defaultDiameter = 4;
+  /** new implants are tapered (apex 1 mm narrower than the platform) */
+  defaultTapered = true;
   defaultLength = 10;
   /** new implants copy the axis of the selected implant */
   placeParallel = true;
@@ -507,6 +509,7 @@ export class App {
       axis = sameJaw ? ref.axis : neg(ref.axis);
     }
     const imp = createImplant(w, normalize(axis), this.defaultDiameter, this.defaultLength);
+    if (this.defaultTapered) setApicalDiameter(imp, Math.round((imp.diameter - 1) * 10) / 10);
     if (sameJaw && ref?.abutment) imp.abutment = { ...ref.abutment };
     if (sameJaw && ref) imp.showProstheticAxis = ref.showProstheticAxis;
     this.implants.push(imp);
