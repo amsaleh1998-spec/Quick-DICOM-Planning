@@ -184,13 +184,27 @@ spacing.oninput = () => {
   app.crossSpacing = Number(spacing.value);
   app.changed();
 };
-$('btn-add-implant').onclick = () => {
+const placeButton = (jaw: Jaw) => () => {
   if (!app.vol) return;
-  if (app.placing) {
-    app.placing = false;
+  if (app.placing === jaw) {
+    app.placing = null;
     app.changed();
-  } else app.startPlacing();
+  } else app.startPlacing(jaw);
 };
+$('btn-add-upper').onclick = placeButton('upper');
+$('btn-add-lower').onclick = placeButton('lower');
+
+// ruler / right-drag behaviour
+$('btn-ruler').onclick = () => app.setRuler(!app.ruler);
+$('btn-clear-measure').onclick = () => app.clearMeasurements();
+const rdButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#rd-seg button'));
+rdButtons.forEach(
+  (b) =>
+    (b.onclick = () => {
+      app.rightDrag = b.dataset.rd as 'zoom' | 'wl';
+      app.changed();
+    }),
+);
 const defD = $<HTMLInputElement>('def-d');
 const defL = $<HTMLInputElement>('def-l');
 defD.onchange = () => (app.defaultDiameter = clampNum(defD.value, 2, 8, 4));
@@ -209,15 +223,7 @@ impL.oninput = () => {
   if (imp && impL.value) app.setLength(imp.id, clampNum(impL.value, 2, 30, imp.length));
 };
 
-// jaw / parallel placement
-const jawButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#jaw-seg button'));
-jawButtons.forEach(
-  (b) =>
-    (b.onclick = () => {
-      app.jaw = b.dataset.jaw as Jaw;
-      app.changed();
-    }),
-);
+// parallel placement
 const placeParallel = $<HTMLInputElement>('place-parallel');
 placeParallel.onchange = () => (app.placeParallel = placeParallel.checked);
 const parallelTo = $<HTMLSelectElement>('parallel-to');
@@ -310,8 +316,9 @@ window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).tagName === 'INPUT') return;
   if (e.key === 'Escape') {
     if (app.drawing) app.cancelDrawing();
+    else if (app.ruler) app.setRuler(false);
     else if (app.placing) {
-      app.placing = false;
+      app.placing = null;
       app.changed();
     } else app.selectImplant(null, false);
   } else if (e.key === 'Enter' && app.drawing) {
@@ -320,6 +327,8 @@ window.addEventListener('keydown', (e) => {
     app.deleteImplant(app.selectedId);
   } else if (e.key === 'f' || e.key === 'F') {
     app.fitAll();
+  } else if (e.key === 'r' || e.key === 'R') {
+    app.setRuler(!app.ruler);
   } else if ((e.key === 'm' || e.key === 'M') && app.activeView) {
     app.toggleMaximize(app.activeView);
   }
@@ -349,9 +358,14 @@ function refreshUi() {
   const draw = $('btn-draw-curve');
   draw.textContent = app.drawing ? 'Finish curve' : app.curve ? 'Redraw panoramic curve' : 'Draw panoramic curve';
   draw.classList.toggle('active', !!app.drawing);
-  const add = $('btn-add-implant');
-  add.textContent = app.placing ? 'Click in a view to place… (Esc)' : 'Add implant';
-  add.classList.toggle('active', app.placing);
+  for (const jaw of ['upper', 'lower'] as Jaw[]) {
+    const b = $(`btn-add-${jaw}`);
+    b.textContent = app.placing === jaw ? 'Click in a view… (Esc)' : `Add ${jaw} implant`;
+    b.classList.toggle('active', app.placing === jaw);
+  }
+  $('btn-ruler').classList.toggle('active', app.ruler);
+  $('btn-clear-measure').toggleAttribute('disabled', !app.measurements.length);
+  rdButtons.forEach((b) => b.classList.toggle('active', b.dataset.rd === app.rightDrag));
   slab.value = String(app.panoSlab);
   $('slab-val').textContent = `${app.panoSlab} mm`;
   spacing.value = String(app.crossSpacing);
@@ -394,7 +408,6 @@ function refreshUi() {
     if (sel.abutment && document.activeElement !== abRot) abRot.value = String(sel.abutment.rotation);
     $('ab-rot-val').textContent = sel.abutment ? `${sel.abutment.rotation}°` : '';
   }
-  jawButtons.forEach((b) => b.classList.toggle('active', b.dataset.jaw === app.jaw));
   placeParallel.checked = app.placeParallel;
 
   // angle table

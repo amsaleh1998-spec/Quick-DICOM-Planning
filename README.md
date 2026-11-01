@@ -31,17 +31,25 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - Three cross-sections perpendicular to the curve (adjustable spacing); wheel moves them along the curve.
 - Tangential view: a plane tangential to the curve that rotates 360° on mouse wheel.
   When an implant is selected the view pivots around the implant axis, keeping the implant vertical.
-- Implants are simple cylinders with a platform (coronal, shown as a bright band) and an apex. *Add implant* then click in
-  any planning view; the Mandible/Maxilla switch sets which way the apex points. Drag the body to move, drag near an end
-  to tilt (in the plane of that view). Changing the length keeps the platform fixed and only extends the apical part.
+- Implants are simple cylinders with a platform (coronal, shown as a bright band) and an apex, with a dashed line along
+  the axis. *Add upper implant* (apex up) or *Add lower implant* (apex down), then click in any planning view.
+- Editing in any planning view: drag the body to move; drag the side outline to change the diameter; drag the apical end
+  to change the length (the platform stays fixed). The selected implant has two rotation handles placed beyond its ends:
+  **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform.
 - New implants can be placed parallel to the selected one, and any implant can be made parallel to another.
-- Angulation: inclination of each implant, a pairwise angle table, and angles between neighbouring implants in the panoramic.
+- Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.
+
+**Measurements**
+- *Ruler* (toolbar or **R**): drag on any slice – MPR, axial, cross-sections, tangential, or the panoramic (distances on the
+  developed panoramic surface). Drag an end to adjust, double-click a ruler to delete, *Clear* removes all. A ruler shows on
+  the slice it was drawn on.
 - Abutments: generic Ø4.8 mm multi-unit abutments (straight, 17°, 30°) with 1–5 mm gingival height and adjustable
   rotation; *Auto-align* picks angulation + rotation that bring the abutment closest to vertical. Abutment-to-abutment
   angles are listed next to the implant angles.
 
-**Common mouse controls**: wheel = scroll / navigate · Ctrl+wheel = zoom · Shift+drag or middle-drag = pan ·
-Alt/middle-drag = pan (also Shift-drag outside the MPR) · right-drag = window/level · F = fit all views ·
+**Common mouse controls**: wheel = scroll / navigate · Ctrl+wheel or right-drag (down = in, up = out) = zoom;
+the toolbar switch makes right-drag adjust brightness/contrast instead · Shift+drag or middle-drag = pan ·
+Alt/middle-drag = pan (also Shift-drag outside the MPR) · F = fit all views ·
 M or the ⤢ button = maximize/restore a view · Esc = cancel / deselect · Del = delete selected implant.
 
 ## Development
@@ -68,6 +76,7 @@ npm run build      # static build in dist/ (relative paths, can be hosted anywhe
 | `src/views/PlanViews.ts` | Planning axial, panoramic, cross-section and tangential views |
 | `src/views/View3D.ts` | WebGL2 volume ray-caster with thresholds and ray-traced implants |
 | `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
+| `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles, diameter/length dragging |
 
 ## Limitations
 
