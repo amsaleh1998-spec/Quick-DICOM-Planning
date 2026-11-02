@@ -7,7 +7,10 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 
 **Import**
 - Open a DICOM series as files, as a folder, or by drag & drop (folders are searched recursively).
-- Uncompressed DICOM (implicit/explicit VR little endian), single- or multi-frame. File names don't matter: files
+- Uncompressed DICOM (implicit/explicit VR little endian) and compressed DICOM: **JPEG Lossless** (1.2.840.10008.1.2.4.57 /
+  .70, common for CBCT), **JPEG-LS** (.80 / .81), **JPEG 2000** (.90 / .91), **RLE** (1.2.840.10008.1.2.5) and **JPEG
+  Baseline** (.50) – single- or multi-frame, signed or unsigned. Compressed slices are decoded in parallel web workers
+  (the WASM decoders load only when needed). File names don't matter: files
   without a `.dcm` extension (e.g. `IM000001`) and "raw" files without the 128-byte preamble/DICM header are detected
   from their content; non-DICOM files in the folder (DICOMDIR, `._*`, `.DS_Store`, text, images …) are ignored. Slices are sorted by
   position and the volume is re-oriented to patient axes (LPS).
@@ -153,6 +156,8 @@ npm run build      # static build in dist/ (relative paths, can be hosted anywhe
 ```
 
 `node scripts/make-test-dicom.mjs <dir>` writes a small synthetic DICOM series for testing the loader.
+`python3 scripts/make-compressed-dicom.py <dir>` (python-gdcm, pydicom) turns it into compressed variants of every
+supported transfer syntax; the lossless ones must load with identical voxels.
 
 ### Public deployment (GitHub Pages)
 
@@ -165,6 +170,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 
 | File | Purpose |
 | --- | --- |
+| `src/codecs.ts`, `src/decodePool.ts`, `src/decodeWorker.ts` | Compressed DICOM decoders and the parallel decode workers |
 | `src/dicom.ts` | DICOM parsing (dicom-parser), series grouping, slice sorting, volume assembly |
 | `src/volume.ts` | Volume class, trilinear sampling, resampling (apply rotate/crop), demo phantom |
 | `src/render.ts` | CPU reslicing of planes/lines with optional slab (average/MIP) and crop |
@@ -185,7 +191,8 @@ static – scans are processed in the visitor's browser and never uploaded.
 
 ## Limitations
 
-- Compressed transfer syntaxes (JPEG, JPEG 2000, RLE) are not decoded – convert first, e.g. `gdcmconv --raw in.dcm out.dcm`.
+- Not decoded yet: JPEG Extended 12-bit (.51), HTJ2K, deflated transfer syntax and colour images – convert first, e.g.
+  `gdcmconv --raw in.dcm out.dcm`.
 - Very large volumes (> ~260 M voxels) are downsampled ×2 on load to fit in browser memory.
 - Segmentation labels use the same grid as the 3D texture (≤ 48 M voxels), so very large scans are segmented at reduced
   resolution. Segments cannot be exported (e.g. as STL) yet.
