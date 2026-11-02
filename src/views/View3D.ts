@@ -621,6 +621,46 @@ export class View3D extends View {
     this.zoomAt(p, Math.exp(dir * 0.12));
   }
 
+  // ---- 3Dconnexion SpaceMouse ("object mode": the model follows the cap) ----------
+
+  /** t / r in screen axes (X right, Y up, Z towards the user), ±1 = full deflection. */
+  spaceMotion(t: Vec3, r: Vec3, dt: number) {
+    if (!this.app.vol) return;
+    // pan: full deflection moves the model ~0.8 view heights per second
+    const pan = this.h * this.vs.scale * 0.8 * dt;
+    this.vs.panU -= t[0] * pan;
+    this.vs.panV += t[1] * pan;
+    // zoom: pulling the cap towards you brings the model closer
+    this.vs.scale = Math.min(5, Math.max(0.01, this.vs.scale * Math.exp(-t[2] * 1.6 * dt)));
+    // rotation: the model turns with the cap = the camera turns the other way around the target
+    const axis = add(add(scale(this.right, r[0]), scale(this.up, r[1])), scale(this.fwd, -r[2]));
+    const mag = Math.hypot(axis[0], axis[1], axis[2]);
+    if (mag > 1e-6) {
+      const a = normalize(axis);
+      const ang = -mag * 2.2 * dt; // ~125°/s at full deflection
+      const fr = reorthonormalize([rotate(this.right, a, ang), rotate(this.up, a, ang), rotate(this.fwd, a, ang)] as Frame);
+      this.right = fr[0];
+      this.up = fr[1];
+      this.fwd = neg(fr[2]);
+    }
+    this.app.requestRender();
+  }
+
+  private presetIdx = 0;
+  /** Left button: fit / reset · right button: next standard view. */
+  spaceButton(i: number) {
+    if (!this.app.vol) return;
+    if (i === 0) {
+      this.presetIdx = 0;
+      this.fit();
+    }
+    else {
+      const order: Preset[] = ['front', 'right', 'back', 'left', 'top', 'bottom'];
+      this.presetIdx = (this.presetIdx + 1) % order.length;
+      this.setPreset(order[this.presetIdx]);
+    }
+  }
+
   /** A click (no drag) with the grow tool picks the surface under the cursor as a seed. */
   protected onLeftUp(p: Pt, _e: PointerEvent, moved: boolean) {
     const app = this.app;
