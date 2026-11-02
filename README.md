@@ -141,6 +141,13 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - Pinch: zoom (Chrome/Firefox ctrl+wheel and Safari gesture events). ⌘ + swipe: pan. ⇧ + swipe: brightness/contrast.
 - Two-finger click-drag = right-drag. ⌥⌘ + drag rotates MPR planes (Control-click is treated as a modified click).
 
+**Every view**
+- Maximizing / restoring a view (or resizing the browser window) keeps its field of view, so the image scales with the
+  window instead of needing to be zoomed again.
+- A vertical scroll bar on the right of each 2D view: slice position (MPR), level (planning axial), position along the
+  arch (cross-sections), buccal/lingual slice position (panoramic, ±15 mm) and angle (tangential). Click to jump, drag
+  to scroll; down moves the same way as the mouse wheel. Works with touch on phones.
+
 **Common mouse controls**: wheel = scroll / navigate · Ctrl+wheel or right-drag (down = in, up = out) = zoom;
 the toolbar switch makes right-drag adjust brightness/contrast instead · Shift+drag or middle-drag = pan ·
 Alt/middle-drag = pan (also Shift-drag outside the MPR) · F = fit all views ·

@@ -529,3 +529,15 @@ body {
   padding: 5px 12px;
   font-size: 13px;
 }
+
+/* scroll bar: finger-sized */
+.m-layout .view-scroll {
+  top: 38px;
+  width: 16px;
+  right: 2px;
+  opacity: 0.8;
+}
+.m-layout .view-scroll:hover,
+.m-layout .view-scroll.dragging {
+  width: 18px;
+}

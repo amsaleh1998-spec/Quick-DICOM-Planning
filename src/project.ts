@@ -194,7 +194,10 @@ export function applyProjectState(app: App, file: ProjectFile) {
   app.setMeasurements(st.measurements ?? []);
   st.views.forEach((vs, i) => {
     const v = app.views[i];
-    if (v) Object.assign(v.vs, vs, { fitted: true });
+    if (v) {
+      Object.assign(v.vs, vs, { fitted: true });
+      v.syncSize(); // saved with another window size: keep the field of view
+    }
   });
   if (st.camera3d) app.view3d.setCamera(st.camera3d);
   for (const v of app.views) v.invalidate();
