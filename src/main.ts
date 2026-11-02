@@ -526,6 +526,7 @@ smInvTr.onchange = () => {
 refreshSpaceMouse();
 spaceMouse.autoConnect();
 
+$('btn-3d-reset').onclick = () => app.view3d.fit();
 $('btn-upright').onclick = () => app.selectedId !== null && app.uprightImplant(app.selectedId);
 $('btn-deselect').onclick = () => app.selectImplant(null, false);
 $('btn-delete').onclick = () => app.selectedId !== null && app.deleteImplant(app.selectedId);

@@ -109,9 +109,16 @@ body {
   height: 28px;
   opacity: 0.85;
 }
-.m-layout .max-btn svg {
+.m-layout .max-btn svg,
+.m-layout .view-reset-btn svg {
   width: 15px;
   height: 15px;
+}
+.m-layout .view-reset-btn {
+  right: 38px;
+  width: 30px;
+  height: 28px;
+  opacity: 0.85;
 }
 
 /* tool strip above the tabs */
