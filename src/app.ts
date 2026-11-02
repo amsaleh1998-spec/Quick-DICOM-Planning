@@ -139,6 +139,8 @@ export class App {
   showUnsegmented = true;
   /** tint segments in the 2D slices */
   showSegOverlay = true;
+  /** draw the blue panoramic-curve lines (axial curve, slab bounds, cross-section guides) */
+  showCurveLines = true;
   /** nerve points added in this session (for undo) */
   private nerveHistory: Vec3[] = [];
 
@@ -448,9 +450,10 @@ export class App {
     return this.s + (k - 1) * this.crossSpacing;
   }
 
-  moveAlongCurve(dir: number) {
+  /** Move the cross-sections along the curve by `step` mm (default: the cross-section spacing). */
+  moveAlongCurve(dir: number, step = this.crossSpacing) {
     if (!this.curve) return;
-    this.s = clamp(this.s + dir * this.crossSpacing, 0, this.curve.length);
+    this.s = clamp(this.s + dir * step, 0, this.curve.length);
     this.changed();
   }
 
