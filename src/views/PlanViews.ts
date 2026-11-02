@@ -57,7 +57,7 @@ export class PlanAxialView extends PlaneView {
   /** Touch: dragging starts on a curve control point (otherwise a swipe changes the level). */
   protected touchDragAt(p: Pt): boolean {
     const app = this.app;
-    if (app.drawing || app.placing || !app.curve) return false;
+    if (app.drawing || app.placing || !app.curve || !app.showCurveLines) return false;
     return app.curve.ctrl.some((c) => {
       const s = this.fromAB(c);
       return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
@@ -75,7 +75,7 @@ export class PlanAxialView extends PlaneView {
       app.changed();
       return false;
     }
-    if (app.curve) {
+    if (app.curve && app.showCurveLines) {
       const i = app.curve.ctrl.findIndex((c) => {
         const s = this.fromAB(c);
         return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
@@ -122,7 +122,7 @@ export class PlanAxialView extends PlaneView {
       return;
     }
     this.hover = null;
-    if (app.curve && app.curve.ctrl.some((c) => {
+    if (app.curve && app.showCurveLines && app.curve.ctrl.some((c) => {
       const s = this.fromAB(c);
       return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
     })) {
@@ -146,8 +146,8 @@ export class PlanAxialView extends PlaneView {
       app.finishCurve();
       return;
     }
-    // double-click on a control point removes it; on the curve inserts one
-    if (!app.curve) return;
+    // double-click on a control point removes it; on the curve inserts one (not while the curve is hidden)
+    if (!app.curve || !app.showCurveLines) return;
     const ctrl = app.curve.ctrl.slice();
     const i = ctrl.findIndex((c) => {
       const s = this.fromAB(c);
@@ -199,7 +199,7 @@ export class PlanAxialView extends PlaneView {
     const app = this.app;
     this.drawImplantAxes(o);
     const curve = app.curve;
-    if (curve) {
+    if (curve && app.showCurveLines) {
       const poly = curve.polyline();
       o.strokeStyle = CURVE_COLOR;
       o.lineWidth = 2;
@@ -250,7 +250,9 @@ export class PlanAxialView extends PlaneView {
         o.fill();
         o.stroke();
       }
-      // cross-section positions
+    }
+    if (curve) {
+      // cross-section positions (kept when the blue curve lines are hidden)
       for (let k = 0; k < 3; k++) {
         const s = app.crossS(k);
         const cp = curve.at(s);
@@ -264,10 +266,12 @@ export class PlanAxialView extends PlaneView {
         o.lineTo(b[0], b[1]);
         o.stroke();
       }
-      const sEnd = this.fromAB(curve.at(0).p);
-      const eEnd = this.fromAB(curve.at(curve.length).p);
-      drawLabel(o, 'R', sEnd[0] - 6, sEnd[1] + 18, CURVE_COLOR, 'center');
-      drawLabel(o, 'L', eEnd[0] + 6, eEnd[1] + 18, CURVE_COLOR, 'center');
+      if (app.showCurveLines) {
+        const sEnd = this.fromAB(curve.at(0).p);
+        const eEnd = this.fromAB(curve.at(curve.length).p);
+        drawLabel(o, 'R', sEnd[0] - 6, sEnd[1] + 18, CURVE_COLOR, 'center');
+        drawLabel(o, 'L', eEnd[0] + 6, eEnd[1] + 18, CURVE_COLOR, 'center');
+      }
     }
     // tangential plane trace
     const tp = app.tangentialPlane();
@@ -385,8 +389,9 @@ export class CrossView extends PlaneView {
   protected onHover(p: Pt) {
     if (!this.updateHoverCursor(p)) this.el.style.cursor = this.app.placing ? 'crosshair' : '';
   }
+  /** Each wheel notch moves the cross-sections exactly 1 mm along the curve. */
   protected onScroll(dir: number) {
-    this.app.moveAlongCurve(dir);
+    this.app.moveAlongCurve(dir, 1);
   }
 
   /** Scroll bar: position of the cross-sections along the curve (top = patient right end). */
@@ -409,6 +414,18 @@ export class CrossView extends PlaneView {
     const cp = app.curve!.at(app.crossS(this.index));
     const base = fromFrame([cp.p[0], cp.p[1], app.focusC], app.O, app.frame);
     const s = this.worldToScreen(base, pl)!;
+    if (app.showCurveLines) this.drawCurveGuides(o, s);
+    this.drawImplantAxes(o);
+    drawLabel(o, 'B', 8, this.h / 2 + 4, '#9fb0c8');
+    drawLabel(o, 'L', this.w - 8, this.h / 2 + 4, '#9fb0c8', 'right');
+    const sk = app.crossS(this.index);
+    drawLabel(o, `${sk.toFixed(1)} mm`, this.w - 34, 16, '#9fb0c8', 'right');
+    drawScaleBar(o, this.w, this.h, this.vs.scale);
+  }
+
+  /** Blue guides: curve position (vertical), axial level (horizontal), panoramic slab/slice band. */
+  private drawCurveGuides(o: CanvasRenderingContext2D, s: ArrayLike<number>) {
+    const app = this.app;
     o.strokeStyle = 'rgba(79,179,255,0.55)';
     o.setLineDash([4, 4]);
     o.lineWidth = 1;
@@ -432,12 +449,6 @@ export class CrossView extends PlaneView {
       o.lineTo(xOff(off), this.h);
       o.stroke();
     }
-    this.drawImplantAxes(o);
-    drawLabel(o, 'B', 8, this.h / 2 + 4, '#9fb0c8');
-    drawLabel(o, 'L', this.w - 8, this.h / 2 + 4, '#9fb0c8', 'right');
-    const sk = app.crossS(this.index);
-    drawLabel(o, `${sk.toFixed(1)} mm`, this.w - 34, 16, '#9fb0c8', 'right');
-    drawScaleBar(o, this.w, this.h, this.vs.scale);
   }
 }
 
