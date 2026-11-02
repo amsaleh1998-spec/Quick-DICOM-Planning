@@ -298,11 +298,6 @@ spacing.oninput = () => {
   app.crossSpacing = Number(spacing.value);
   app.changed();
 };
-const showCurveLines = $<HTMLInputElement>('show-curve-lines');
-showCurveLines.onchange = () => {
-  app.showCurveLines = showCurveLines.checked;
-  app.changed();
-};
 const placeButton = (jaw: Jaw) => () => {
   if (!app.vol) return;
   if (app.placing === jaw) {
@@ -694,7 +689,6 @@ function refreshUi() {
   $('pano-off').textContent = `${app.panoOffset > 0 ? '+' : ''}${app.panoOffset.toFixed(1)} mm ${app.panoOffset > 0 ? '(buccal)' : app.panoOffset < 0 ? '(lingual)' : ''}`;
   spacing.value = String(app.crossSpacing);
   $('spacing-val').textContent = `${app.crossSpacing} mm`;
-  showCurveLines.checked = app.showCurveLines;
   if (document.activeElement !== defD) defD.value = String(app.defaultDiameter);
   defTapered.checked = app.defaultTapered;
   if (document.activeElement !== defL) defL.value = String(app.defaultLength);
