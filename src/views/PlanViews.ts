@@ -21,6 +21,14 @@ export class PlanAxialView extends PlaneView {
   constructor(app: App) {
     super(app, 'Axial', '#e8524a');
     this.implantsEditable = true;
+    this.curveBtn = curveToggle(app, this.el, 'axial view', () => app.showCurveAxial, (v) => (app.showCurveAxial = v));
+  }
+
+  private curveBtn?: HTMLButtonElement;
+
+  override render() {
+    syncCurveToggle(this.curveBtn, this.app, this.app.showCurveAxial);
+    super.render();
   }
 
   protected plane(): Plane | null {
@@ -57,7 +65,7 @@ export class PlanAxialView extends PlaneView {
   /** Touch: dragging starts on a curve control point (otherwise a swipe changes the level). */
   protected touchDragAt(p: Pt): boolean {
     const app = this.app;
-    if (app.drawing || app.placing || !app.curve || !app.showCurveLines) return false;
+    if (app.drawing || app.placing || !app.curve || !app.showCurveAxial) return false;
     return app.curve.ctrl.some((c) => {
       const s = this.fromAB(c);
       return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
@@ -75,7 +83,7 @@ export class PlanAxialView extends PlaneView {
       app.changed();
       return false;
     }
-    if (app.curve && app.showCurveLines) {
+    if (app.curve && app.showCurveAxial) {
       const i = app.curve.ctrl.findIndex((c) => {
         const s = this.fromAB(c);
         return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
@@ -122,7 +130,7 @@ export class PlanAxialView extends PlaneView {
       return;
     }
     this.hover = null;
-    if (app.curve && app.showCurveLines && app.curve.ctrl.some((c) => {
+    if (app.curve && app.showCurveAxial && app.curve.ctrl.some((c) => {
       const s = this.fromAB(c);
       return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
     })) {
@@ -147,7 +155,7 @@ export class PlanAxialView extends PlaneView {
       return;
     }
     // double-click on a control point removes it; on the curve inserts one (not while the curve is hidden)
-    if (!app.curve || !app.showCurveLines) return;
+    if (!app.curve || !app.showCurveAxial) return;
     const ctrl = app.curve.ctrl.slice();
     const i = ctrl.findIndex((c) => {
       const s = this.fromAB(c);
@@ -199,7 +207,7 @@ export class PlanAxialView extends PlaneView {
     const app = this.app;
     this.drawImplantAxes(o);
     const curve = app.curve;
-    if (curve && app.showCurveLines) {
+    if (curve && app.showCurveAxial) {
       const poly = curve.polyline();
       o.strokeStyle = CURVE_COLOR;
       o.lineWidth = 2;
@@ -266,7 +274,7 @@ export class PlanAxialView extends PlaneView {
         o.lineTo(b[0], b[1]);
         o.stroke();
       }
-      if (app.showCurveLines) {
+      if (app.showCurveAxial) {
         const sEnd = this.fromAB(curve.at(0).p);
         const eEnd = this.fromAB(curve.at(curve.length).p);
         drawLabel(o, 'R', sEnd[0] - 6, sEnd[1] + 18, CURVE_COLOR, 'center');
@@ -326,6 +334,28 @@ export class PlanAxialView extends PlaneView {
   }
 }
 
+/** In-view button that shows / hides the blue panoramic-curve lines in that view only. */
+function curveToggle(app: App, el: HTMLElement, where: string, get: () => boolean, set: (v: boolean) => void) {
+  const b = document.createElement('button');
+  b.className = 'view-toggle';
+  b.textContent = 'Curve';
+  b.title = `Show / hide the blue panoramic-curve lines in the ${where}`;
+  b.onclick = (e) => {
+    e.stopPropagation();
+    set(!get());
+    b.blur();
+    app.changed();
+  };
+  el.append(b);
+  return b;
+}
+
+function syncCurveToggle(b: HTMLButtonElement | undefined, app: App, on: boolean) {
+  if (!b) return;
+  b.classList.toggle('active', on);
+  b.style.display = app.curve ? '' : 'none';
+}
+
 // ---------------------------------------------------------------------------
 // Cross-sections (perpendicular to the curve)
 // ---------------------------------------------------------------------------
@@ -338,6 +368,14 @@ export class CrossView extends PlaneView {
   ) {
     super(app, `Cross-section ${index + 1}`, index === 1 ? '#ffffff' : CROSS_COLOR, vs);
     this.implantsEditable = true;
+    this.curveBtn = curveToggle(app, this.el, 'cross-sections', () => app.showCurveCross, (v) => (app.showCurveCross = v));
+  }
+
+  private curveBtn?: HTMLButtonElement;
+
+  override render() {
+    syncCurveToggle(this.curveBtn, this.app, this.app.showCurveCross);
+    super.render();
   }
 
   protected emptyMessage() {
@@ -414,7 +452,7 @@ export class CrossView extends PlaneView {
     const cp = app.curve!.at(app.crossS(this.index));
     const base = fromFrame([cp.p[0], cp.p[1], app.focusC], app.O, app.frame);
     const s = this.worldToScreen(base, pl)!;
-    if (app.showCurveLines) this.drawCurveGuides(o, s);
+    if (app.showCurveCross) this.drawCurveGuides(o, s);
     this.drawImplantAxes(o);
     drawLabel(o, 'B', 8, this.h / 2 + 4, '#9fb0c8');
     drawLabel(o, 'L', this.w - 8, this.h / 2 + 4, '#9fb0c8', 'right');

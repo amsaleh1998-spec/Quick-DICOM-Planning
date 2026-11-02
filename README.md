@@ -75,8 +75,8 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   thicknesses; switch in the sidebar or inside the panoramic view). The mouse wheel in the panoramic moves the slice
   position buccal (up) / lingual (down); Alt+wheel moves the cross-sections along the curve. *Center* puts it back on the curve.
 - Three cross-sections perpendicular to the curve (adjustable spacing); each wheel notch moves them exactly 1 mm along
-  the curve. *Show blue curve lines* (off by default) shows the blue curve, slab boundaries and cross-section guide lines;
-  turn it on to edit the curve points.
+  the curve. The *Curve* button in the axial view shows / hides the blue curve there (curve points can only be
+  edited while it is shown); the *Curve* button in the cross-sections shows / hides their blue guide lines.
 - Tangential view: a plane tangential to the curve that rotates 360° on mouse wheel.
   When an implant is selected the view pivots around the implant axis, keeping the implant vertical.
 - Implants are simple cylinders with a platform (coronal, shown as a bright band) and an apex, with a dashed line along
