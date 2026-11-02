@@ -40,9 +40,12 @@
           <button id="btn-save-project" title="Save the CBCT, implants and the current views to a project file (Ctrl+S)">Save project</button>
           <button id="btn-open-project" title="Continue a saved project (.qdp.zip)">Open project</button>
         </div>
-        <div class="tabs" role="tablist">
-          <button data-mode="mpr" class="active" role="tab">MPR / Reorient</button>
-          <button data-mode="plan" role="tab">Implant planning</button>
+        <div class="mode-switch">
+          <span class="mode-label">Mode</span>
+          <div class="tabs" role="tablist">
+            <button data-mode="mpr" class="active" role="tab" title="Step 1 – reorient and crop the scan (key 1)"><span class="step">1</span>MPR / Reorient</button>
+            <button data-mode="plan" role="tab" title="Step 2 – panoramic curve, cross-sections and implants (key 2)"><span class="step">2</span>Implant planning</button>
+          </div>
         </div>
         <div class="group">
           <button id="btn-ruler" title="Measure on any slice (R): click the first point, then the second. Drag a ruler end to adjust it; hover a ruler and press Delete (or double-click it) to remove it.">
@@ -84,6 +87,11 @@
           </section>
 
           <section id="panel-mpr" class="panel">
+            <div class="mode-banner">
+              <div class="mode-banner-title"><span class="step">1</span>MPR / Reorient</div>
+              <div class="muted small">Straighten and crop the scan here, then switch to implant planning.</div>
+              <button class="primary mode-go" data-goto="plan" title="Switch to implant planning (key 2)">Next: Implant planning →</button>
+            </div>
             <h3>MPR tools</h3>
             <div class="seg" id="mpr-tools">
               <button data-tool="navigate" class="active">Navigate</button>
@@ -111,12 +119,17 @@
                 <li><b>Ctrl+wheel</b> or <b>right drag</b> – zoom · <b>Alt/middle drag</b> – pan</li>
                 <li><b>R</b> – ruler: click start, click end; drag ends to edit, Del removes the hovered ruler</li>
                 <li><b>M</b> or <b>⤢</b> – maximize / restore view</li>
+                <li><b>1</b> / <b>2</b> – switch between MPR / Reorient and Implant planning</li>
                 <li>Right drag can be switched to brightness/contrast in the toolbar</li>
               </ul>
             </details>
           </section>
 
           <section id="panel-plan" class="panel hidden">
+            <div class="mode-banner">
+              <div class="mode-banner-title"><span class="step">2</span>Implant planning</div>
+              <button class="mode-go" data-goto="mpr" title="Back to reorienting / cropping the scan (key 1)">← Back to MPR / Reorient</button>
+            </div>
             <h3>Panoramic curve</h3>
             <div class="row">
               <button id="btn-draw-curve" class="primary">Draw panoramic curve</button>
