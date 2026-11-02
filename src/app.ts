@@ -107,6 +107,8 @@ export class App {
   hoverMeasurementId: number | null = null;
   /** what right-drag does */
   rightDrag: 'zoom' | 'wl' = 'zoom';
+  /** mouse-wheel events are ignored until then (the SpaceMouse driver also emits wheel events) */
+  wheelBlockedUntil = 0;
   /** simplified phone UI: touch gestures instead of mouse interactions */
   touchUi = false;
   /** pointing device: trackpad mode maps two-finger gestures to navigation */

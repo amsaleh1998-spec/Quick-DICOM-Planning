@@ -58,6 +58,8 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - Object mode – the model follows the cap: tilt / twist = rotate (any axis), push sideways = pan, pull up / push down =
   zoom. Left button = fit / reset, right button = next standard view (front, right, back, left, top, bottom).
 - Speed slider and *Invert rotation* / *Invert pan / zoom*, remembered in the browser.
+- The 3Dconnexion driver also turns cap motion into mouse-wheel scrolling/zooming for browsers; those wheel events are
+  ignored while the cap is moved, so the two inputs do not fight. Motion is lightly smoothed.
 
 **Implant planning**
 - Axial view: draw the panoramic curve (click along the arch from patient right to left, double-click/Enter to finish).

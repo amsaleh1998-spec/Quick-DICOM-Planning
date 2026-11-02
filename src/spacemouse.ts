@@ -62,6 +62,12 @@ export class SpaceMouse {
   settings: SpaceMouseSettings = { speed: 1, invertRotation: false, invertTranslation: false };
   /** UI refresh hook (connection changes) */
   onChange: () => void = () => {};
+  /**
+   * Called while the cap is moved. The 3Dconnexion driver also turns cap motion
+   * into mouse-wheel scrolling / Ctrl+wheel zooming for browsers, which the app
+   * ignores meanwhile (otherwise both inputs fight and the view jitters).
+   */
+  onActivity: () => void = () => {};
 
   private device: HIDDeviceLike | null = null;
   /** latest raw device axes (HID convention: x right, y towards user, z down) */
@@ -70,6 +76,12 @@ export class SpaceMouse {
   private gamepadIndex: number | null = null;
   private loopRunning = false;
   private lastTime = 0;
+  /** smoothed motion (screen axes) */
+  private smT: Vec3 = [0, 0, 0];
+  private smR: Vec3 = [0, 0, 0];
+  /** devices with our report listener (never attach twice) */
+  private listening = new WeakSet<object>();
+  private opening: Promise<boolean> | null = null;
 
   constructor(private target: SpaceMouseTarget) {
     try {
@@ -146,7 +158,17 @@ export class SpaceMouse {
     if (d?.opened) await d.close().catch(() => {});
   }
 
-  private async open(d: HIDDeviceLike): Promise<boolean> {
+  /** One open at a time (auto-connect, the connect event and a click can overlap). */
+  private open(d: HIDDeviceLike): Promise<boolean> {
+    const prev = this.opening ?? Promise.resolve(false);
+    const p = prev.then(() => this.openNow(d));
+    this.opening = p.finally(() => {
+      if (this.opening === p) this.opening = null;
+    });
+    return p;
+  }
+
+  private async openNow(d: HIDDeviceLike): Promise<boolean> {
     if (this.device === d) return true;
     // only the multi-axis collection (receivers also expose keyboard/mouse interfaces)
     if (d.collections.length && !d.collections.some((c) => c.usagePage === MULTI_AXIS.usagePage && c.usage === MULTI_AXIS.usage)) return false;
@@ -160,7 +182,12 @@ export class SpaceMouse {
     this.device = d;
     this.via = 'hid';
     this.name = d.productName || 'SpaceMouse';
-    d.addEventListener('inputreport', (e) => this.onReport(e as HIDInputReportEventLike));
+    if (!this.listening.has(d)) {
+      this.listening.add(d);
+      d.addEventListener('inputreport', (e) => {
+        if (d === this.device) this.onReport(e as HIDInputReportEventLike);
+      });
+    }
     this.onChange();
     return true;
   }
@@ -170,6 +197,8 @@ export class SpaceMouse {
     this.via = this.gamepadIndex !== null ? 'gamepad' : null;
     this.name = this.via ? this.name : '';
     this.raw = { t: [0, 0, 0], r: [0, 0, 0] };
+    this.smT = [0, 0, 0];
+    this.smR = [0, 0, 0];
     this.onChange();
   }
 
@@ -189,6 +218,7 @@ export class SpaceMouse {
       for (let k = 0; k < Math.min(4, d.byteLength); k++) b |= d.getUint8(k) << (8 * k);
       this.pressed(b);
     }
+    if (this.raw.t.some((v) => v !== 0) || this.raw.r.some((v) => v !== 0)) this.onActivity();
     this.startLoop();
   }
 
@@ -252,9 +282,21 @@ export class SpaceMouse {
     const sr = this.settings.invertRotation ? -1 : 1;
     const t: Vec3 = [st * n(x), st * n(-z), st * n(y)];
     const r: Vec3 = [sr * n(rx), sr * n(-rz), sr * n(ry)];
-    const active = t.some((v) => v !== 0) || r.some((v) => v !== 0);
-    if (active && dt > 0) this.target.spaceMotion(t, r, dt * this.settings.speed);
-    if (active || this.gamepadIndex !== null) requestAnimationFrame(this.tick);
+    // light smoothing (~40 ms) evens out noisy / unevenly timed reports
+    const a = dt > 0 ? 1 - Math.exp(-dt / 0.04) : 0;
+    let any = false;
+    for (let i = 0; i < 3; i++) {
+      this.smT[i] += (t[i] - this.smT[i]) * a;
+      this.smR[i] += (r[i] - this.smR[i]) * a;
+      if (t[i] === 0 && Math.abs(this.smT[i]) < 0.003) this.smT[i] = 0;
+      if (r[i] === 0 && Math.abs(this.smR[i]) < 0.003) this.smR[i] = 0;
+      any ||= this.smT[i] !== 0 || this.smR[i] !== 0;
+    }
+    if (any && dt > 0) {
+      this.onActivity();
+      this.target.spaceMotion([...this.smT] as Vec3, [...this.smR] as Vec3, dt * this.settings.speed);
+    }
+    if (any || this.gamepadIndex !== null) requestAnimationFrame(this.tick);
     else this.loopRunning = false;
   };
 }
