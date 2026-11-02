@@ -227,7 +227,14 @@ void viewport;
 
 // mode tabs
 const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.tabs button'));
+// pulse the "Implant planning" tab once after the first volume loads, until it has been opened
+let planOpened = false;
+let planNudged = false;
 function setMode(m: Mode) {
+  if (m === 'plan') {
+    planOpened = true;
+    tabButtons.forEach((b) => b.classList.remove('nudge'));
+  }
   tabButtons.forEach((b) => b.classList.toggle('active', b.dataset.mode === m));
   mprLayout.classList.toggle('hidden', m !== 'mpr');
   planLayout.classList.toggle('hidden', m !== 'plan');
@@ -237,6 +244,7 @@ function setMode(m: Mode) {
   app.setMode(m);
 }
 tabButtons.forEach((b) => (b.onclick = () => setMode(b.dataset.mode as Mode)));
+document.querySelectorAll<HTMLButtonElement>('[data-goto]').forEach((b) => (b.onclick = () => setMode(b.dataset.goto as Mode)));
 
 // window / level
 const ww = $<HTMLInputElement>('ww');
@@ -296,11 +304,6 @@ const panoModeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(
 panoModeButtons.forEach((b) => (b.onclick = () => app.setPanoMode(b.dataset.pm as 'slab' | 'slice')));
 spacing.oninput = () => {
   app.crossSpacing = Number(spacing.value);
-  app.changed();
-};
-const showCurveLines = $<HTMLInputElement>('show-curve-lines');
-showCurveLines.onchange = () => {
-  app.showCurveLines = showCurveLines.checked;
   app.changed();
 };
 const placeButton = (jaw: Jaw) => () => {
@@ -646,6 +649,8 @@ window.addEventListener('keydown', (e) => {
     app.setRuler(!app.ruler);
   } else if ((e.key === 'm' || e.key === 'M') && app.activeView) {
     app.toggleMaximize(app.activeView);
+  } else if ((e.key === '1' || e.key === '2') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    setMode(e.key === '1' ? 'mpr' : 'plan');
   }
 });
 
@@ -654,6 +659,10 @@ const implantList = $('implant-list');
 const listItems = new Map<number, HTMLLIElement>();
 function refreshUi() {
   const vol = app.vol;
+  if (vol && !planOpened && !planNudged && app.mode === 'mpr') {
+    planNudged = true;
+    tabButtons.find((b) => b.dataset.mode === 'plan')?.classList.add('nudge');
+  }
   $('vol-info').innerHTML = vol
     ? [
         vol.info.patientName ? `<div>${escapeHtml(vol.info.patientName.replace(/\^/g, ' '))}</div>` : '',
@@ -694,7 +703,6 @@ function refreshUi() {
   $('pano-off').textContent = `${app.panoOffset > 0 ? '+' : ''}${app.panoOffset.toFixed(1)} mm ${app.panoOffset > 0 ? '(buccal)' : app.panoOffset < 0 ? '(lingual)' : ''}`;
   spacing.value = String(app.crossSpacing);
   $('spacing-val').textContent = `${app.crossSpacing} mm`;
-  showCurveLines.checked = app.showCurveLines;
   if (document.activeElement !== defD) defD.value = String(app.defaultDiameter);
   defTapered.checked = app.defaultTapered;
   if (document.activeElement !== defL) defL.value = String(app.defaultLength);

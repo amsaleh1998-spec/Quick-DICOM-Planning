@@ -61,7 +61,8 @@ interface ProjectFile {
     activeNerveId?: number | null;
     showUnsegmented?: boolean;
     showSegOverlay?: boolean;
-    showCurveLines?: boolean;
+    showCurveAxial?: boolean;
+    showCurveCross?: boolean;
     cutDepth?: number | null;
   };
 }
@@ -121,7 +122,8 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       activeNerveId: app.activeNerveId,
       showUnsegmented: app.showUnsegmented,
       showSegOverlay: app.showSegOverlay,
-      showCurveLines: app.showCurveLines,
+      showCurveAxial: app.showCurveAxial,
+      showCurveCross: app.showCurveCross,
       cutDepth: app.cutDepth,
     },
   };
@@ -207,7 +209,8 @@ export function applyProjectState(app: App, file: ProjectFile) {
   if (mv && !mv.el.classList.contains('max')) app.toggleMaximize(mv);
   app.showUnsegmented = st.showUnsegmented ?? true;
   app.showSegOverlay = st.showSegOverlay ?? true;
-  app.showCurveLines = st.showCurveLines ?? false;
+  app.showCurveAxial = st.showCurveAxial ?? true;
+  app.showCurveCross = st.showCurveCross ?? true;
   app.cutDepth = st.cutDepth ?? null;
   app.activeSegId = st.activeSegId ?? null;
   app.activeNerveId = st.activeNerveId ?? null;
