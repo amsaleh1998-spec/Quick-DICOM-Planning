@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, PROSTHETIC_COLOR } from '../implant';
 import { NERVE_COLOR, nervePath } from '../nerve';
-import { Frame, Vec3, add, cross, dot, fromFrame, neg, normalize, reorthonormalize, rotate, scale, toFrame } from '../math';
+import { Frame, Vec3, add, cross, dot, fromFrame, neg, normalize, reorthonormalize, rotate, scale, sub, toFrame } from '../math';
 import { Volume } from '../volume';
 import { Pt, View, drawLabel } from './View';
 
@@ -373,6 +373,14 @@ export class View3D extends View {
     }
     if (!this.gl) this.error = 'WebGL2 is not available in this browser – 3D rendering disabled.';
     else this.initGl();
+    // reset button next to the maximize button
+    const reset = document.createElement('button');
+    reset.className = 'view-reset-btn';
+    reset.title = 'Reset view: initial position and rotation centre (double-click also works)';
+    reset.innerHTML =
+      '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M3.2 6.2A5 5 0 1 1 3 9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M2.6 2.6v3.8h3.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    reset.onclick = () => this.fit();
+    this.el.append(reset);
   }
 
   private initGl() {
@@ -573,11 +581,92 @@ export class View3D extends View {
   fit() {
     const app = this.app;
     if (!app.vol) return;
+    this.pivotFlashUntil = 0;
     const { min, max } = app.crop;
     this.target = fromFrame([(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2], app.O, app.frame);
     const diag = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
     this.vs.scale = (diag * 0.7) / Math.max(1, Math.min(this.w, this.h));
     this.setPreset('front');
+  }
+
+  // ---- rotation centre ----------------------------------------------------------
+
+  /** show the rotation-centre marker until then (ms) */
+  private pivotFlashUntil = 0;
+  private orbiting = false;
+
+  /** Middle-click on a surface: that point becomes the centre of rotation (the view does not move). */
+  protected onMiddleClick(p: Pt) {
+    const w = this.pickSurface(p);
+    if (!w) {
+      this.app.onStatus('No surface under the cursor – middle-click on the model to set the rotation centre.', true);
+      return;
+    }
+    this.setPivot(w);
+    this.app.onStatus('Rotation centre set · Reset view (⟲ in the 3D view, or double-click) restores the initial view.');
+  }
+
+  /**
+   * Make P the orbit pivot while keeping the camera exactly where it is: the
+   * target moves to P, the pan offsets take up the sideways difference and the
+   * zoom (distance) takes up the depth difference.
+   */
+  setPivot(P: Vec3) {
+    const cam = this.camera();
+    const tanHalf = Math.tan(FOV / 2);
+    const dist = (this.h * this.vs.scale) / 2 / tanHalf;
+    const d = sub(cam.target, P);
+    const depth = dist - dot(d, this.fwd); // distance of P in front of the camera
+    if (depth <= 1e-3) return;
+    this.target = P;
+    this.vs.panU = dot(d, this.right);
+    this.vs.panV = -dot(d, this.up);
+    this.vs.scale = (depth * 2 * tanHalf) / Math.max(1, this.h);
+    this.flashPivot(1500);
+  }
+
+  private flashPivot(ms: number) {
+    const until = performance.now() + ms;
+    if (until <= this.pivotFlashUntil) return;
+    this.pivotFlashUntil = until;
+    this.app.requestRender();
+    window.setTimeout(() => this.app.requestRender(), ms + 20);
+  }
+
+  /** Screen position of a world point (null when behind the camera). */
+  private projectPoint(w: Vec3): Pt | null {
+    const cam = this.camera();
+    const q = sub(w, cam.pos);
+    const z = dot(q, this.fwd);
+    if (z <= 1e-6) return null;
+    const th = Math.tan(FOV / 2);
+    return [(this.w / 2) * (1 + dot(q, this.right) / (z * th * (this.w / Math.max(1, this.h)))), (this.h / 2) * (1 - dot(q, this.up) / (z * th))];
+  }
+
+  private drawPivot(o: CanvasRenderingContext2D) {
+    if (!this.orbiting && performance.now() > this.pivotFlashUntil) return;
+    const s = this.projectPoint(this.target);
+    if (!s) return;
+    o.save();
+    o.strokeStyle = 'rgba(0,0,0,0.7)';
+    o.lineWidth = 4;
+    o.beginPath();
+    o.arc(s[0], s[1], 7, 0, Math.PI * 2);
+    o.stroke();
+    o.strokeStyle = '#ff9f1c';
+    o.lineWidth = 2;
+    o.stroke();
+    o.beginPath();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      o.moveTo(s[0] + dx * 10, s[1] + dy * 10);
+      o.lineTo(s[0] + dx * 15, s[1] + dy * 15);
+    }
+    o.stroke();
+    o.fillStyle = '#fff';
+    o.beginPath();
+    o.arc(s[0], s[1], 2, 0, Math.PI * 2);
+    o.fill();
+    o.restore();
   }
 
   private camera() {
@@ -587,6 +676,7 @@ export class View3D extends View {
   }
 
   protected onLeftDown(): boolean {
+    this.orbiting = true;
     return true;
   }
 
@@ -636,6 +726,7 @@ export class View3D extends View {
     const axis = add(add(scale(this.right, r[0]), scale(this.up, r[1])), scale(this.fwd, -r[2]));
     const mag = Math.hypot(axis[0], axis[1], axis[2]);
     if (mag > 1e-6) {
+      this.flashPivot(400);
       const a = normalize(axis);
       const ang = -mag * 2.2 * dt; // ~125°/s at full deflection
       const fr = reorthonormalize([rotate(this.right, a, ang), rotate(this.up, a, ang), rotate(this.fwd, a, ang)] as Frame);
@@ -664,6 +755,8 @@ export class View3D extends View {
   /** A click (no drag) with the grow tool picks the surface under the cursor as a seed. */
   protected onLeftUp(p: Pt, _e: PointerEvent, moved: boolean) {
     const app = this.app;
+    this.orbiting = false;
+    this.app.requestRender();
     if (moved || app.segTool !== 'grow') return;
     const w = this.pickSurface(p);
     if (w) app.growAt(w);
@@ -851,7 +944,8 @@ export class View3D extends View {
     }
     const modeName = { surface: 'Surface', translucent: 'Translucent', mip: 'MIP' }[app.vr.mode];
     const thr = app.vr.mode === 'mip' ? `W ${Math.round(app.wl.width)} L ${Math.round(app.wl.center)}` : `${Math.round(app.vr.lo)} – ${Math.round(app.vr.hi)}`;
-    drawLabel(o, `${modeName} · ${thr}`, this.w - 34, 16, '#9fb0c8', 'right');
+    drawLabel(o, `${modeName} · ${thr}`, this.w - 62, 16, '#9fb0c8', 'right');
+    this.drawPivot(o);
     if (this.texFactor > 1) drawLabel(o, `rendered at 1/${this.texFactor} resolution`, this.w - 8, this.h - 10, '#9fb0c8', 'right');
     if (this.segError) drawLabel(o, this.segError, this.w - 8, this.h - 28, '#ff8a8a', 'right');
     const tool = app.segTool;
