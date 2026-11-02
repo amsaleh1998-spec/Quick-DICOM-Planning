@@ -530,6 +530,13 @@ body {
   font-size: 13px;
 }
 
+.m-layout .view-toggle {
+  top: 26px;
+  left: 8px;
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
 /* scroll bar: finger-sized */
 .m-layout .view-scroll {
   top: 38px;
