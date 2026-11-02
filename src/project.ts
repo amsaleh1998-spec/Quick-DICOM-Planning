@@ -207,7 +207,7 @@ export function applyProjectState(app: App, file: ProjectFile) {
   if (mv && !mv.el.classList.contains('max')) app.toggleMaximize(mv);
   app.showUnsegmented = st.showUnsegmented ?? true;
   app.showSegOverlay = st.showSegOverlay ?? true;
-  app.showCurveLines = st.showCurveLines ?? true;
+  app.showCurveLines = st.showCurveLines ?? false;
   app.cutDepth = st.cutDepth ?? null;
   app.activeSegId = st.activeSegId ?? null;
   app.activeNerveId = st.activeNerveId ?? null;
