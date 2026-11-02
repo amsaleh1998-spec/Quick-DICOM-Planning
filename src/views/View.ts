@@ -353,7 +353,7 @@ export abstract class View {
       if (v.m === this.app.pendingMeasurement?.m) continue;
       for (const end of ['a', 'b'] as const) {
         const q = v[end];
-        if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 8) return { m: v.m, end };
+        if (Math.hypot(q[0] - p[0], q[1] - p[1]) < (this.app.touchUi ? 18 : 8)) return { m: v.m, end };
       }
     }
     return null;
@@ -362,7 +362,7 @@ export abstract class View {
   private hitMeasureLine(p: Pt): Measurement | null {
     for (const v of this.visibleMeasurements()) {
       if (v.m === this.app.pendingMeasurement?.m) continue;
-      if (distToSegment2(p[0], p[1], v.a[0], v.a[1], v.b[0], v.b[1]) < 6) return v.m;
+      if (distToSegment2(p[0], p[1], v.a[0], v.a[1], v.b[0], v.b[1]) < (this.app.touchUi ? 14 : 6)) return v.m;
     }
     return null;
   }
@@ -689,7 +689,8 @@ export abstract class View {
   // ---- touch (phone UI) ---------------------------------------------------------
 
   private touches = new Map<number, Pt>();
-  private touchStart: { p: Pt; t: number; moved: boolean; drag: boolean } | null = null;
+  /** drag: left-drag semantics · ruler: measuring / moving a ruler end */
+  private touchStart: { p: Pt; t: number; moved: boolean; drag: boolean; ruler: boolean } | null = null;
   private pinch: { dist: number; c: Pt } | null = null;
   private lastTapAt = 0;
 
@@ -705,8 +706,16 @@ export abstract class View {
     this.touches.set(e.pointerId, p);
     this.app.activeView = this;
     if (this.touches.size === 1) {
-      const drag = this.touchDragAt(p) && this.onLeftDown(p, e);
-      this.touchStart = { p, t: performance.now(), moved: false, drag };
+      // ruler tool: drag from start to end (or tap start, then end); a ruler end can always be dragged
+      const ruler = !!this.measureKind && (this.app.ruler || !!this.hitMeasureEnd(p));
+      if (ruler) {
+        this.downPos = p;
+        const end = this.app.ruler ? null : this.hitMeasureEnd(p);
+        if (end) this.rulerDrag = { ...end, created: false };
+        else if (!this.rulerClick(p)) this.rulerDrag = null; // second tap finished a ruler
+      }
+      const drag = !ruler && this.touchDragAt(p) && this.onLeftDown(p, e);
+      this.touchStart = { p, t: performance.now(), moved: false, drag, ruler };
       this.accX = 0;
       this.accY = 0;
     } else {
@@ -717,6 +726,8 @@ export abstract class View {
           st.drag = false;
           this.onLeftUp(p, e, true);
         }
+        // pinching mid-measurement: keep the start point, finish with a tap later
+        this.rulerDrag = null;
       }
       if (this.touches.size === 2) this.pinch = this.pinchState();
     }
@@ -739,6 +750,15 @@ export abstract class View {
     }
     const st = this.touchStart;
     if (!st) return;
+    if (st.ruler) {
+      const r = this.rulerDrag;
+      const w = r && this.measureAt(p);
+      if (r && w) {
+        r.m[r.end] = w;
+        this.app.requestRender();
+      }
+      return;
+    }
     if (st.drag) {
       if (Math.hypot(p[0] - st.p[0], p[1] - st.p[1]) > 3) st.moved = true;
       this.onLeftDrag(p, prev, e);
@@ -778,17 +798,29 @@ export abstract class View {
     this.touches.delete(e.pointerId);
     if (this.ovCanvas.hasPointerCapture(e.pointerId)) this.ovCanvas.releasePointerCapture(e.pointerId);
     if (this.touches.size === 0) {
-      if (st?.drag) this.onLeftUp(this.pos(e), e, st.moved);
+      if (st?.ruler) {
+        const r = this.rulerDrag;
+        this.rulerDrag = null;
+        const p = this.pos(e);
+        // drag-release measures in one go; a plain tap waits for the second tap
+        if (r?.created && Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 6) this.finishMeasurement();
+        this.app.changed();
+      } else if (st?.drag) this.onLeftUp(this.pos(e), e, st.moved);
       else if (e.type === 'pointerup' && st && !st.moved && performance.now() - st.t < 450) {
         const now = performance.now();
         // (no double-tap fit while tapping out a curve)
         if (now - this.lastTapAt < 320 && !this.app.drawing) {
           this.lastTapAt = 0;
-          this.vs.fitted = false;
+          // double-tap on a ruler deletes it, elsewhere fits the view
+          const m = this.measureKind ? this.hitMeasureLine(st.p) : null;
+          if (m) this.app.deleteMeasurement(m.id);
+          else this.vs.fitted = false;
           this.app.requestRender();
         } else {
           this.lastTapAt = now;
-          if (this.onLeftDown(st.p, e)) this.onLeftUp(st.p, e, false);
+          // a tap on a ruler does nothing (a second tap deletes it)
+          const onRuler = this.measureKind && this.hitMeasureLine(st.p);
+          if (!onRuler && this.onLeftDown(st.p, e)) this.onLeftUp(st.p, e, false);
         }
       }
       this.touchStart = null;
@@ -796,7 +828,7 @@ export abstract class View {
     } else if (this.touches.size === 1) {
       // continue with the remaining finger without a jump
       this.pinch = null;
-      this.touchStart = { p: [...this.touches.values()][0], t: 0, moved: true, drag: false };
+      this.touchStart = { p: [...this.touches.values()][0], t: 0, moved: true, drag: false, ruler: false };
     } else if (this.touches.size === 2) this.pinch = this.pinchState();
   }
 

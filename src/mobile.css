@@ -16,6 +16,8 @@ body {
   inset: 0;
   display: grid;
   grid-template-rows: auto 1fr auto auto;
+  /* never let a wide tool strip widen the page (it scrolls sideways instead) */
+  grid-template-columns: minmax(0, 1fr);
   background: var(--bg);
 }
 
@@ -114,6 +116,7 @@ body {
 
 /* tool strip above the tabs */
 #m-tools {
+  min-width: 0;
   background: var(--panel);
   border-top: 1px solid var(--border);
   padding: 6px calc(env(safe-area-inset-right) + 10px) 6px calc(env(safe-area-inset-left) + 10px);
@@ -124,8 +127,16 @@ body {
   gap: 6px;
   overflow-x: auto;
 }
+.m-tools-row {
+  scrollbar-width: none;
+}
+.m-tools-row::-webkit-scrollbar {
+  display: none;
+}
 .m-tools-row .m-chip {
   flex: 0 0 auto;
+  min-height: 36px;
+  padding: 4px 12px;
 }
 .m-chip.active {
   background: var(--accent);
