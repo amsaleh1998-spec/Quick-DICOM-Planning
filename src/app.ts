@@ -140,7 +140,7 @@ export class App {
   /** tint segments in the 2D slices */
   showSegOverlay = true;
   /** draw the blue panoramic-curve lines (axial curve, slab bounds, cross-section guides) */
-  showCurveLines = true;
+  showCurveLines = false;
   /** nerve points added in this session (for undo) */
   private nerveHistory: Vec3[] = [];
 
