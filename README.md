@@ -76,7 +76,7 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   position buccal (up) / lingual (down); Alt+wheel moves the cross-sections along the curve. *Center* puts it back on the curve.
 - Three cross-sections perpendicular to the curve (adjustable spacing); each wheel notch moves them exactly 1 mm along
   the curve. The *Curve* button in the axial view shows / hides the blue curve there (curve points can only be
-  edited while it is shown); the *Curve* button in the cross-sections shows / hides their blue guide lines.
+  edited while it is shown); the *Curve* button in the cross-sections shows / hides their blue guide lines (hidden by default).
 - Tangential view: a plane tangential to the curve that rotates 360° on mouse wheel.
   When an implant is selected the view pivots around the implant axis, keeping the implant vertical.
 - Implants are simple cylinders with a platform (coronal, shown as a bright band) and an apex, with a dashed line along
