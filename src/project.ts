@@ -210,7 +210,7 @@ export function applyProjectState(app: App, file: ProjectFile) {
   app.showUnsegmented = st.showUnsegmented ?? true;
   app.showSegOverlay = st.showSegOverlay ?? true;
   app.showCurveAxial = st.showCurveAxial ?? true;
-  app.showCurveCross = st.showCurveCross ?? true;
+  app.showCurveCross = st.showCurveCross ?? false;
   app.cutDepth = st.cutDepth ?? null;
   app.activeSegId = st.activeSegId ?? null;
   app.activeNerveId = st.activeNerveId ?? null;
