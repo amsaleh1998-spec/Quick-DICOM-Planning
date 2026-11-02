@@ -6,6 +6,8 @@ import { defineConfig } from 'vite';
 // simplified phone version (index.html redirects phones to it).
 export default defineConfig({
   base: './',
+  // decode workers lazy-load their WASM codecs (needs ES-module workers)
+  worker: { format: 'es' },
   build: {
     rollupOptions: {
       input: {
