@@ -635,6 +635,8 @@ export abstract class View {
         if (!this.app.vol) return;
         e.preventDefault();
         if (this.gestureActive) return; // Safari pinch is handled by the gesture events
+        // synthetic scroll/zoom from the SpaceMouse driver while the cap is moved
+        if (performance.now() < this.app.wheelBlockedUntil) return;
         const p = this.pos(e);
         const trackpad = this.app.input === 'trackpad';
         if (e.ctrlKey || (e.metaKey && !trackpad)) {
