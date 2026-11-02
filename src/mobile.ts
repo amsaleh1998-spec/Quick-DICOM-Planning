@@ -69,6 +69,7 @@ function place3d(target: HTMLElement) {
 
 function setTab(t: Tab) {
   tab = t;
+  app.cancelPendingMeasurement();
   place3d(t === '3d' ? LAYOUT['3d'] : LAYOUT.mpr);
   for (const [k, el] of Object.entries(LAYOUT)) el.classList.toggle('hidden', k !== t);
   if (t !== 'mpr' && app.mprTool === 'rotate') app.mprTool = 'navigate';
@@ -90,6 +91,7 @@ tabButtons.forEach((b) => (b.onclick = () => setTab(b.dataset.v as Tab)));
 // ---- MPR tools: rotate the planes -------------------------------------------------
 $('m-rotate').onclick = () => {
   app.mprTool = app.mprTool === 'rotate' ? 'navigate' : 'rotate';
+  if (app.mprTool === 'rotate') app.setRuler(false);
   if (app.mprTool === 'rotate') showHint('Drag around the centre of a view to tilt the other two planes · tap “Rotate axes” again when done');
   app.changed();
 };
@@ -106,6 +108,7 @@ $('m-draw').onclick = () => {
     app.finishCurve();
     showHint('Swipe a cross-section to move along the arch · drag a curve point to adjust it · swipe the axial view to change its level');
   } else {
+    app.setRuler(false);
     app.startDrawing();
     showHint('Tap along the arch in the axial view, from the patient’s right to left, then tap “Done”');
   }
@@ -117,6 +120,18 @@ $('m-undo-pt').onclick = () => {
   }
 };
 $('m-clear-curve').onclick = () => app.clearCurve();
+
+// ---- ruler (both tool strips) ---------------------------------------------------------
+document.querySelectorAll<HTMLButtonElement>('.m-ruler').forEach(
+  (b) =>
+    (b.onclick = () => {
+      const on = !app.ruler;
+      if (on) app.mprTool = 'navigate';
+      app.setRuler(on);
+      if (on) showHint('Drag from the start to the end point (or tap the start, then the end) · drag a ruler end to adjust · double-tap a ruler to delete it');
+    }),
+);
+document.querySelectorAll<HTMLButtonElement>('.m-clear-rulers').forEach((b) => (b.onclick = () => app.clearMeasurements()));
 
 // ---- messages / loading -----------------------------------------------------------
 let toastTimer = 0;
@@ -331,6 +346,8 @@ function refresh() {
 
   // tool strips
   $('m-rotate').classList.toggle('active', app.mprTool === 'rotate');
+  document.querySelectorAll('.m-ruler').forEach((b) => b.classList.toggle('active', app.ruler));
+  document.querySelectorAll('.m-clear-rulers').forEach((b) => b.classList.toggle('hidden', !app.measurements.length));
   const tilt = Math.max(...[0, 1, 2].map((i) => app.viewTiltDeg(i)));
   $('m-tilt').textContent = tilt > 0.05 ? `tilt ${tilt.toFixed(1)}°` : '';
   const draw = $('m-draw');

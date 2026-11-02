@@ -88,6 +88,9 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - **Plan** tab: axial, panoramic and three cross-sections. *Draw curve*, tap along the arch (patient right → left),
   *Undo point*, *Done*; drag a curve point to adjust it, *Clear curve* to start over.
 - **3D** tab: the 3D view full screen.
+- **Ruler** (MPR and Plan toolbars): drag from the start to the end point, or tap the start, then the end – in any slice
+  or the panoramic. Drag a ruler end to adjust it, double-tap a ruler to delete it, *Clear rulers* removes all.
+  Measurements are shared with the desktop version through project files.
 - Touch: swipe to scroll slices (panoramic: left/right along the arch, up/down buccal/lingual; cross-sections: along the
   arch; axial planning view: level), tap to move the crosshair / pick a position, pinch to zoom, two fingers to pan,
   double-tap to fit. 3D: drag to rotate.
