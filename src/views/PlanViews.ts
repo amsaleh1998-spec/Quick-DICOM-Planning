@@ -3,7 +3,7 @@ import type { NewCut } from '../segment';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, Cylinder, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, platformOf } from '../implant';
 import { Vec2, Vec3, add, addScaled, clamp, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, toFrame } from '../math';
 import { CropSpec, SlabSpec, sampleLine } from '../render';
-import { Plane, PlaneView, Pt, View, ViewState, drawLabel } from './View';
+import { Plane, PlaneView, Pt, ScrollInfo, View, ViewState, drawLabel } from './View';
 import { ImplantEditor, projectedRadialAxial } from './implantEdit';
 import { composeSegmentation, drawNervesProjected } from './overlays';
 
@@ -181,6 +181,17 @@ export class PlanAxialView extends PlaneView {
 
   protected onScroll(dir: number) {
     this.app.focusC -= dir * this.app.vol!.minSpacing * 2;
+    this.app.changed();
+  }
+
+  /** Scroll bar: axial level within the crop box (top = superior). */
+  protected scrollInfo(): ScrollInfo | null {
+    const { min, max } = this.app.crop;
+    return { top: max[2], bottom: min[2], value: this.app.focusC };
+  }
+
+  protected setScroll(v: number) {
+    this.app.focusC = v;
     this.app.changed();
   }
 
@@ -378,6 +389,19 @@ export class CrossView extends PlaneView {
     this.app.moveAlongCurve(dir);
   }
 
+  /** Scroll bar: position of the cross-sections along the curve (top = patient right end). */
+  protected scrollInfo(): ScrollInfo | null {
+    const c = this.app.curve;
+    return c ? { top: 0, bottom: c.length, value: this.app.s } : null;
+  }
+
+  protected setScroll(v: number) {
+    const c = this.app.curve;
+    if (!c) return;
+    this.app.s = clamp(v, 0, c.length);
+    this.app.changed();
+  }
+
   protected drawOverlay(o: CanvasRenderingContext2D) {
     const app = this.app;
     const pl = this.currentPlane()!;
@@ -478,6 +502,16 @@ export class TangView extends PlaneView {
     const app = this.app;
     app.tangAngle = (app.tangAngle + dir * 5 + 360) % 360;
     app.changed();
+  }
+
+  /** Scroll bar: rotation angle 0–360°. */
+  protected scrollInfo(): ScrollInfo | null {
+    return this.plane() ? { top: 0, bottom: 360, value: this.app.tangAngle } : null;
+  }
+
+  protected setScroll(v: number) {
+    this.app.tangAngle = Math.round(clamp(v, 0, 359.9));
+    this.app.changed();
   }
 
   protected drawOverlay(o: CanvasRenderingContext2D) {
@@ -832,6 +866,16 @@ export class PanoView extends View {
     }
     // wheel up = buccal, wheel down = lingual (moves the panoramic slice position)
     this.app.panoOffset = Math.round((this.app.panoOffset - dir * 0.5) * 10) / 10;
+    this.app.changed();
+  }
+
+  /** Scroll bar: panoramic slice position, ±15 mm (top = buccal). */
+  protected scrollInfo(): ScrollInfo | null {
+    return this.app.curve ? { top: 15, bottom: -15, value: this.app.panoOffset } : null;
+  }
+
+  protected setScroll(v: number) {
+    this.app.panoOffset = Math.round(clamp(v, -15, 15) * 2) / 2;
     this.app.changed();
   }
 

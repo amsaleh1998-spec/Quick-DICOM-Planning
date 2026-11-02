@@ -20,6 +20,18 @@ export interface ViewState {
   panU: number;
   panV: number;
   fitted: boolean;
+  /**
+   * min(width, height) in px the scale belongs to: when the view is resized
+   * (maximize / restore / window) the scale follows, so the same anatomy fills it.
+   */
+  sizeRef?: number;
+}
+
+/** Vertical scroll bar of a view: value range from the top to the bottom of the bar. */
+export interface ScrollInfo {
+  top: number;
+  bottom: number;
+  value: number;
 }
 
 export const newViewState = (): ViewState => ({ scale: 0.3, panU: 0, panV: 0, fitted: false });
@@ -88,7 +100,14 @@ export abstract class View {
     maxBtn.innerHTML =
       '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
     maxBtn.onclick = () => this.app.toggleMaximize(this);
-    this.el.append(this.imgCanvas, this.ovCanvas, maxBtn);
+    // vertical scroll bar (slice position etc.); hidden for views without one
+    this.sbar = document.createElement('div');
+    this.sbar.className = 'view-scroll hidden';
+    this.sthumb = document.createElement('div');
+    this.sthumb.className = 'view-scroll-thumb';
+    this.sbar.append(this.sthumb);
+    this.bindScrollbar();
+    this.el.append(this.imgCanvas, this.ovCanvas, maxBtn, this.sbar);
     this.imgCtx = this.imgCanvas.getContext('2d')!;
     this.ovCtx = this.ovCanvas.getContext('2d')!;
     new ResizeObserver(() => this.resize()).observe(this.el);
@@ -106,6 +125,7 @@ export abstract class View {
     if (w === this.w && h === this.h) return;
     this.w = w;
     this.h = h;
+    this.syncSize();
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.ovCanvas.width = Math.max(1, Math.round(w * this.dpr));
     this.ovCanvas.height = Math.max(1, Math.round(h * this.dpr));
@@ -117,6 +137,83 @@ export abstract class View {
     this.imageData = null;
     this.valuesKey = '';
     this.app.requestRender();
+  }
+
+  /** Keep the field of view when the view size changes (maximize, restore, window resize). */
+  syncSize() {
+    if (!this.w || !this.h) return; // hidden
+    const b = Math.min(this.w, this.h);
+    const vs = this.vs;
+    if (vs.fitted && vs.sizeRef && Math.abs(vs.sizeRef - b) > 0.5) vs.scale = Math.min(5, Math.max(0.005, (vs.scale * vs.sizeRef) / b));
+    vs.sizeRef = b;
+  }
+
+  // ---- vertical scroll bar ------------------------------------------------------
+
+  private sbar: HTMLDivElement;
+  private sthumb: HTMLDivElement;
+  private sbarDrag: { grab: number } | null = null;
+  private static readonly THUMB = 30;
+
+  /** Range and value shown by the scroll bar (null = no scroll bar). */
+  protected scrollInfo(): ScrollInfo | null {
+    return null;
+  }
+  /** Scroll bar moved to value v. */
+  protected setScroll(_v: number): void {}
+
+  private bindScrollbar() {
+    const bar = this.sbar;
+    const fromY = (clientY: number) => {
+      const info = this.scrollInfo();
+      if (!info) return;
+      const r = bar.getBoundingClientRect();
+      const span = Math.max(1, r.height - View.THUMB);
+      const f = Math.min(1, Math.max(0, (clientY - r.top - View.THUMB / 2 - (this.sbarDrag?.grab ?? 0)) / span));
+      this.setScroll(info.top + f * (info.bottom - info.top));
+    };
+    bar.addEventListener('pointerdown', (e) => {
+      if (!this.app.vol) return;
+      e.preventDefault();
+      e.stopPropagation();
+      bar.setPointerCapture(e.pointerId);
+      // grabbing the thumb keeps its offset; clicking the track jumps there
+      const t = this.sthumb.getBoundingClientRect();
+      const onThumb = e.clientY >= t.top && e.clientY <= t.bottom;
+      this.sbarDrag = { grab: onThumb ? e.clientY - (t.top + t.height / 2) : 0 };
+      bar.classList.add('dragging');
+      fromY(e.clientY);
+    });
+    bar.addEventListener('pointermove', (e) => {
+      if (this.sbarDrag) fromY(e.clientY);
+    });
+    const end = (e: PointerEvent) => {
+      this.sbarDrag = null;
+      bar.classList.remove('dragging');
+      if (bar.hasPointerCapture(e.pointerId)) bar.releasePointerCapture(e.pointerId);
+    };
+    bar.addEventListener('pointerup', end);
+    bar.addEventListener('pointercancel', end);
+    bar.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        const dir = Math.sign(e.deltaY);
+        if (dir && this.app.vol) this.onScroll(dir, [this.w / 2, this.h / 2], e);
+      },
+      { passive: false },
+    );
+  }
+
+  /** Position the thumb (called on every render). */
+  protected updateScrollbar() {
+    const info = this.app.vol ? this.scrollInfo() : null;
+    this.sbar.classList.toggle('hidden', !info);
+    if (!info) return;
+    const span = info.bottom - info.top;
+    const f = span ? Math.min(1, Math.max(0, (info.value - info.top) / span)) : 0;
+    const track = Math.max(0, this.sbar.clientHeight - View.THUMB);
+    this.sthumb.style.transform = `translateY(${(f * track).toFixed(1)}px)`;
   }
 
   // ---- to implement -------------------------------------------------------
@@ -468,6 +565,7 @@ export abstract class View {
       this.drawToolOverlay(o);
     }
     this.drawTitle(o);
+    this.updateScrollbar();
   }
 
   protected drawTitle(o: CanvasRenderingContext2D) {
