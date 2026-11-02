@@ -476,6 +476,9 @@ document.querySelectorAll<HTMLButtonElement>('.presets button').forEach(
 );
 // ---- 3Dconnexion SpaceMouse --------------------------------------------------------
 const spaceMouse = new SpaceMouse(app.view3d);
+// the 3Dconnexion driver also scrolls/zooms with the cap: ignore wheel events meanwhile
+spaceMouse.onActivity = () => (app.wheelBlockedUntil = performance.now() + 300);
+(window as unknown as { spaceMouse: SpaceMouse }).spaceMouse = spaceMouse; // debugging / tests
 const smButton = $<HTMLButtonElement>('btn-spacemouse');
 const smSpeed = $<HTMLInputElement>('sm-speed');
 const smInvRot = $<HTMLInputElement>('sm-inv-rot');
