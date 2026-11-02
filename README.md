@@ -52,6 +52,13 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - While tracing, drag a point to move it, double-click a point to delete it, *Undo point* takes back the last one.
 - Implants report their surface-to-surface distance to each nerve; closer than 2 mm is flagged (⚠ in the list).
 
+**3Dconnexion SpaceMouse** (3D render panel)
+- *Connect SpaceMouse* once (Chrome / Edge, via WebHID: wired, wireless and Universal Receiver models); afterwards it
+  reconnects automatically. Browsers without WebHID are supported only if they expose the device as a game controller.
+- Object mode – the model follows the cap: tilt / twist = rotate (any axis), push sideways = pan, pull up / push down =
+  zoom. Left button = fit / reset, right button = next standard view (front, right, back, left, top, bottom).
+- Speed slider and *Invert rotation* / *Invert pan / zoom*, remembered in the browser.
+
 **Implant planning**
 - Axial view: draw the panoramic curve (click along the arch from patient right to left, double-click/Enter to finish).
   Drag control points to edit, double-click the curve to insert a point, double-click a point to remove it.
@@ -165,6 +172,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/nerve.ts` | Nerve canal model: point insertion, smooth centre line, implant-to-nerve distance |
 | `mobile.html`, `src/mobile.ts`, `src/mobile.css` | Phone UI: MPR / Plan / 3D layouts, touch gestures, settings sheet |
 | `src/uiMode.ts` | Phone detection and the desktop/mobile preference (mirrored inline in `index.html`) |
+| `src/spacemouse.ts` | 3Dconnexion SpaceMouse input (WebHID reports, game-controller fallback) |
 | `src/views/overlays.ts` | 2D overlays: segment tint/outlines, cut traces, nerve tube sections and projections |
 | `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
 | `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles, diameter/length dragging |
