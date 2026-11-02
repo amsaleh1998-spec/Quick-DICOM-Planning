@@ -49,6 +49,8 @@ export abstract class View {
   private imageData: ImageData | null = null;
   protected maxPixels = 450_000;
   private drag: DragKind = 'none';
+  /** the current pan drag was started with the middle button */
+  private middleDown = false;
   private last: Pt = [0, 0];
   private downPos: Pt = [0, 0];
   /** Shift+left drag pans (disabled where Shift has another meaning). */
@@ -153,6 +155,8 @@ export abstract class View {
     return false;
   }
   protected onDoubleClick(_p: Pt, _e: MouseEvent): void {}
+  /** Middle button pressed and released without moving (a middle drag pans). */
+  protected onMiddleClick(_p: Pt): void {}
   /** Touch UI: a one-finger touch starting at p drags (like a left drag) instead of scrolling. */
   protected touchDragAt(_p: Pt): boolean {
     return false;
@@ -500,6 +504,7 @@ export abstract class View {
       this.app.activeView = this;
       // macOS: Control+click arrives as a right click – treat it as a modified left click
       const button = IS_MAC && e.button === 2 && e.ctrlKey ? 0 : e.button;
+      this.middleDown = button === 1;
       if (button === 2) this.drag = 'right';
       else if (button === 1 || (button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey && !e.metaKey)))) this.drag = 'pan';
       else if (button === 0 && this.app.segTool && this.supportsTool(this.app.segTool)) this.drag = this.toolDown(p) ? 'nerve' : 'none';
@@ -613,6 +618,11 @@ export abstract class View {
         const moved = Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 3;
         this.onLeftUp(p, e, moved);
       }
+      if (this.drag === 'pan' && this.middleDown && e.type === 'pointerup') {
+        const p = this.pos(e);
+        if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= 3) this.onMiddleClick(p);
+      }
+      this.middleDown = false;
       this.drag = 'none';
       if (c.hasPointerCapture(e.pointerId)) c.releasePointerCapture(e.pointerId);
     };

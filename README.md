@@ -25,6 +25,10 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 **3D render** (WebGL2, in both layouts)
 - GPU ray-casting with adjustable lower/upper thresholds: *Surface* (shaded iso-surface), *Translucent* and *MIP*.
 - Automatic bone threshold from the histogram, view presets (front/back/left/right/top/bottom), drag to orbit.
+- **Middle-click** any surface to make that point the centre of rotation (the view does not jump; mouse orbit, zoom and
+  the SpaceMouse then pivot around it; a marker shows the centre while rotating). Middle-drag still pans.
+- **Reset view** (⟲ in the 3D view, the 3D panel button, or double-click) restores the initial position and the
+  rotation centre.
 - Implants and abutments are drawn in 3D; the crop box clips the rendering (e.g. to hide the opposing jaw).
 
 **Segmentation** (3D render panel → *Segmentation*; works in both layouts)
