@@ -1,6 +1,6 @@
 import type { App } from '../app';
 import { Vec3, add, addScaled, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, sub, toFrame } from '../math';
-import { Plane, PlaneView, Pt, drawLabel, orientationLabel } from './View';
+import { Plane, PlaneView, Pt, ScrollInfo, drawLabel, orientationLabel } from './View';
 
 export const MPR_COLORS = ['#e8524a', '#58c95a', '#e8c547'];
 export const MPR_NAMES = ['Axial', 'Coronal', 'Sagittal'];
@@ -141,6 +141,27 @@ export class MprView extends PlaneView {
     const w = this.screenToWorld(p);
     if (!w) return;
     this.app.X = w;
+    this.app.changed();
+  }
+
+  /** Scroll bar: slice position along this view's normal, across the whole volume (down = like wheel down). */
+  protected scrollInfo(): ScrollInfo | null {
+    const vol = this.app.vol;
+    if (!vol) return null;
+    const n = this.basis().n;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const c of vol.corners()) {
+      const d = dot(sub(c, this.app.O), n);
+      lo = Math.min(lo, d);
+      hi = Math.max(hi, d);
+    }
+    return { top: hi, bottom: lo, value: dot(sub(this.app.X, this.app.O), n) };
+  }
+
+  protected setScroll(v: number) {
+    const n = this.basis().n;
+    this.app.X = addScaled(this.app.X, n, v - dot(sub(this.app.X, this.app.O), n));
     this.app.changed();
   }
 
