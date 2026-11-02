@@ -3,6 +3,7 @@ import { MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronal
 import { NERVE_SAFETY_MM, nerveLength } from './nerve';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
+import { SpaceMouse } from './spacemouse';
 import { isPhone } from './uiMode';
 
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
@@ -473,6 +474,55 @@ $('btn-vr-auto').onclick = () => {
 document.querySelectorAll<HTMLButtonElement>('.presets button').forEach(
   (b) => (b.onclick = () => app.view3d.setPreset(b.dataset.preset as 'front')),
 );
+// ---- 3Dconnexion SpaceMouse --------------------------------------------------------
+const spaceMouse = new SpaceMouse(app.view3d);
+const smButton = $<HTMLButtonElement>('btn-spacemouse');
+const smSpeed = $<HTMLInputElement>('sm-speed');
+const smInvRot = $<HTMLInputElement>('sm-inv-rot');
+const smInvTr = $<HTMLInputElement>('sm-inv-tr');
+function refreshSpaceMouse() {
+  const on = !!spaceMouse.name;
+  smButton.textContent = on && spaceMouse.via === 'hid' ? 'Disconnect' : 'Connect SpaceMouse';
+  smButton.classList.toggle('hidden', !spaceMouse.supported);
+  $('sm-status').textContent = on
+    ? `${spaceMouse.name}${spaceMouse.via === 'gamepad' ? ' (game controller)' : ''}`
+    : spaceMouse.supported
+      ? ''
+      : 'Use Chrome or Edge to connect one (other browsers only if they expose it as a game controller).';
+  $('sm-settings').classList.toggle('hidden', !on);
+  smSpeed.value = String(spaceMouse.settings.speed);
+  $('sm-speed-val').textContent = `${spaceMouse.settings.speed.toFixed(1)}×`;
+  smInvRot.checked = spaceMouse.settings.invertRotation;
+  smInvTr.checked = spaceMouse.settings.invertTranslation;
+}
+spaceMouse.onChange = () => {
+  refreshSpaceMouse();
+  if (spaceMouse.name) setStatus(`SpaceMouse connected: ${spaceMouse.name}`);
+};
+smButton.onclick = async () => {
+  if (spaceMouse.via === 'hid') {
+    await spaceMouse.disconnect();
+    return;
+  }
+  const err = await spaceMouse.connect();
+  if (err) setStatus(err, true);
+};
+smSpeed.oninput = () => {
+  spaceMouse.settings.speed = Number(smSpeed.value);
+  spaceMouse.saveSettings();
+  refreshSpaceMouse();
+};
+smInvRot.onchange = () => {
+  spaceMouse.settings.invertRotation = smInvRot.checked;
+  spaceMouse.saveSettings();
+};
+smInvTr.onchange = () => {
+  spaceMouse.settings.invertTranslation = smInvTr.checked;
+  spaceMouse.saveSettings();
+};
+refreshSpaceMouse();
+spaceMouse.autoConnect();
+
 $('btn-upright').onclick = () => app.selectedId !== null && app.uprightImplant(app.selectedId);
 $('btn-deselect').onclick = () => app.selectImplant(null, false);
 $('btn-delete').onclick = () => app.selectedId !== null && app.deleteImplant(app.selectedId);

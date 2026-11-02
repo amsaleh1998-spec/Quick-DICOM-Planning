@@ -247,6 +247,19 @@
               <button data-preset="bottom">Bottom</button>
             </div>
             <div class="muted small">Drag = rotate · wheel = zoom · Alt/Shift drag = pan · double-click = reset. The crop box also clips the 3D view.</div>
+            <h4>3Dconnexion SpaceMouse</h4>
+            <div class="row">
+              <button id="btn-spacemouse" title="Connect a 3Dconnexion SpaceMouse (Chrome or Edge). Afterwards it reconnects automatically.">Connect SpaceMouse</button>
+              <span id="sm-status" class="muted small"></span>
+            </div>
+            <div id="sm-settings" class="hidden">
+              <label class="slider">Speed <span id="sm-speed-val"></span>
+                <input id="sm-speed" type="range" min="0.2" max="3" step="0.1" />
+              </label>
+              <label class="check small"><input id="sm-inv-rot" type="checkbox" /> Invert rotation</label>
+              <label class="check small"><input id="sm-inv-tr" type="checkbox" /> Invert pan / zoom</label>
+              <div class="muted small">The model follows the cap: tilt/twist = rotate, push sideways = pan, pull up / push down = zoom. Left button = fit, right button = next view.</div>
+            </div>
           </section>
 
           <section id="panel-seg" class="panel">
