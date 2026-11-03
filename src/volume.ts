@@ -253,14 +253,16 @@ export async function resampleVolume(
 }
 
 /**
- * Synthetic CBCT-like mandible phantom (with a missing first molar and a
- * slightly tilted occlusal plane) so the app can be tried without data.
+ * Synthetic CBCT-like phantom so the app can be tried without data: a mandible
+ * (missing lower-left first molar, mandibular canals) and a maxilla with a
+ * palate whose teeth touch the lower teeth in occlusion, on a slightly tilted
+ * occlusal plane.
  */
 export function createPhantom(): Volume {
   const sp = 0.35;
   const nx = 300;
   const ny = 270;
-  const nz = 190;
+  const nz = 262;
   const data = new Int16Array(nx * ny * nz);
 
   // Dental arch: parabola in the axial plane (mm).
@@ -338,6 +340,9 @@ export function createPhantom(): Volume {
   };
 
   const crest = 38;
+  // maxilla: crest of the upper alveolar process; upper crowns reach down to the lower ones
+  const uCrest = crest + 18;
+  const archEndY = yFront + k * 31 * 31;
   for (let kz = 0; kz < nz; kz++) {
     for (let j = 0; j < ny; j++) {
       const y = j * sp;
@@ -349,7 +354,8 @@ export function createPhantom(): Volume {
         const sa = pos[j * nx + i];
         let v = -1000;
         const endFade = sa < 1.5 || sa > archLen - 1.5;
-        if (!endFade && Math.abs(d) < 14 && z > 4 && z < 52) v = 40; // soft tissue
+        if (!endFade && Math.abs(d) < 14 && z > 4 && z < uCrest + 30) v = 40; // soft tissue
+        if (d < 0 && y < archEndY && z > uCrest + 6 && z < uCrest + 20) v = 40; // tongue / palate soft tissue
         if (!endFade) {
           // Mandibular body: rounded box in (d, z).
           const hw = 5.5 - Math.max(0, z - 30) * 0.12;
@@ -388,6 +394,40 @@ export function createPhantom(): Volume {
             }
           }
         }
+        if (!endFade && z > uCrest - 10) {
+          // Maxillary alveolar process (upper arch ~1 mm more buccal), widening upwards.
+          const ud = d - 1;
+          const uhw = 5.5 + Math.max(0, z - uCrest - 6) * 0.18;
+          const uz1 = uCrest + 24;
+          const nd = Math.abs(ud) / uhw;
+          const nzc = (z - (uCrest + uz1) / 2) / ((uz1 - uCrest) / 2);
+          const r = Math.pow(Math.pow(nd, 4) + Math.pow(Math.abs(nzc), 4), 0.25);
+          if (r < 1) {
+            const shell = (1 - r) * Math.min(uhw, (uz1 - uCrest) / 2);
+            v = shell < 1.2 ? 1700 : 700;
+          }
+          // Upper teeth (all present), crowns pointing down onto the lower teeth.
+          for (let t = 0; t < teeth.length + 1; t++) {
+            const tc = t < teeth.length ? teeth[t] : { s: sMid + widths.slice(0, 5).reduce((a, w) => a + w + 0.4, 0) + 10.5 / 2, w: 10.5 };
+            const ds = sa - tc.s;
+            const rw = tc.w / 2;
+            if (Math.abs(ds) > rw) continue;
+            if (z > uCrest - 9 && z < uCrest + 13) {
+              const rr = Math.hypot(ds / rw, ud / 4.4);
+              if (z <= uCrest) {
+                const bulge = 1 - Math.pow((uCrest - z - 3) / 6.5, 2) * 0.35;
+                if (rr < 0.95 * bulge) v = rr > 0.95 * bulge - 0.28 ? 2900 : 2100;
+                if (rr < 0.25 && z > uCrest - 4) v = 350;
+              } else {
+                const taper = 0.75 - (z - uCrest) * 0.035;
+                if (rr < taper) v = rr < 0.18 ? 350 : 2050;
+                else if (rr < taper + 0.08) v = 200;
+              }
+            }
+          }
+        }
+        // Hard palate between the arms of the upper arch.
+        if (d < -4 && y < archEndY && z > uCrest + 14 && z < uCrest + 18) v = Math.abs(z - uCrest - 16) > 1.1 ? 1600 : 650;
         data[row + i] = v + Math.round(rnd() * 45);
       }
     }

@@ -1,9 +1,12 @@
 import { App, Jaw, Mode, MprTool, RenderMode, saveInputPreference } from './app';
 import { MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronalDiameter } from './implant';
+import { NERVE_SAFETY_MM, nerveLength } from './nerve';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
 import { formatDicomDate, formatPatientName, joinPersonName, splitPersonName } from './dicomMeta';
 import { showTagViewer } from './tagViewer';
+import { SpaceMouse } from './spacemouse';
+import { isPhone } from './uiMode';
 
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
 import { createPhantom } from './volume';
@@ -56,6 +59,8 @@ function showLoading(text: string, f: number) {
   $('loading-bar').style.width = `${Math.round(f * 100)}%`;
 }
 const hideLoading = () => loading.classList.add('hidden');
+app.onStatus = (msg, error) => setStatus(msg, error);
+app.onBusy = (text) => (text ? showLoading(text, 0.6) : hideLoading());
 
 async function loadFiles(files: File[]) {
   if (!files.length) return;
@@ -190,7 +195,7 @@ $('btn-demo').onclick = async () => {
   await new Promise((r) => setTimeout(r, 30));
   try {
     app.setVolume(createPhantom());
-    setStatus('Demo phantom loaded – the occlusal plane is tilted a few degrees; try Ctrl+Alt+drag in the sagittal view.');
+    setStatus('Demo phantom loaded (mandible + maxilla in occlusion) – the occlusal plane is tilted a few degrees; try Ctrl+Alt+drag in the sagittal view.');
   } finally {
     hideLoading();
   }
@@ -224,7 +229,14 @@ void viewport;
 
 // mode tabs
 const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.tabs button'));
+// pulse the "Implant planning" tab once after the first volume loads, until it has been opened
+let planOpened = false;
+let planNudged = false;
 function setMode(m: Mode) {
+  if (m === 'plan') {
+    planOpened = true;
+    tabButtons.forEach((b) => b.classList.remove('nudge'));
+  }
   tabButtons.forEach((b) => b.classList.toggle('active', b.dataset.mode === m));
   mprLayout.classList.toggle('hidden', m !== 'mpr');
   planLayout.classList.toggle('hidden', m !== 'plan');
@@ -234,6 +246,7 @@ function setMode(m: Mode) {
   app.setMode(m);
 }
 tabButtons.forEach((b) => (b.onclick = () => setMode(b.dataset.mode as Mode)));
+document.querySelectorAll<HTMLButtonElement>('[data-goto]').forEach((b) => (b.onclick = () => setMode(b.dataset.goto as Mode)));
 
 // window / level
 const ww = $<HTMLInputElement>('ww');
@@ -314,6 +327,8 @@ function setInput(v: 'mouse' | 'trackpad') {
 }
 inputButtons.forEach((b) => (b.onclick = () => setInput(b.dataset.input as 'mouse' | 'trackpad')));
 $('btn-trackpad-guide').onclick = () => showTrackpadGuide();
+// phone user on the full version: offer the way back
+$('btn-mobile').classList.toggle('hidden', !isPhone());
 initTrackpadGuide(setInput, () => app.input);
 // Keep pinch / ctrl+wheel from zooming the whole page (and Safari's page pinch)
 window.addEventListener('wheel', (e) => e.ctrlKey && e.preventDefault(), { passive: false });
@@ -333,6 +348,8 @@ rdButtons.forEach(
 const defD = $<HTMLInputElement>('def-d');
 const defL = $<HTMLInputElement>('def-l');
 defD.onchange = () => (app.defaultDiameter = clampNum(defD.value, 2, 8, 4));
+const defTapered = $<HTMLInputElement>('def-tapered');
+defTapered.onchange = () => (app.defaultTapered = defTapered.checked);
 defL.onchange = () => (app.defaultLength = clampNum(defL.value, 4, 20, 10));
 const impName = $<HTMLInputElement>('imp-name');
 impName.oninput = () => {
@@ -467,9 +484,132 @@ $('btn-vr-auto').onclick = () => {
 document.querySelectorAll<HTMLButtonElement>('.presets button').forEach(
   (b) => (b.onclick = () => app.view3d.setPreset(b.dataset.preset as 'front')),
 );
+// ---- 3Dconnexion SpaceMouse --------------------------------------------------------
+const spaceMouse = new SpaceMouse(app.view3d);
+// the 3Dconnexion driver also scrolls/zooms with the cap: ignore wheel events meanwhile
+spaceMouse.onActivity = () => (app.wheelBlockedUntil = performance.now() + 300);
+(window as unknown as { spaceMouse: SpaceMouse }).spaceMouse = spaceMouse; // debugging / tests
+const smButton = $<HTMLButtonElement>('btn-spacemouse');
+const smSpeed = $<HTMLInputElement>('sm-speed');
+const smInvRot = $<HTMLInputElement>('sm-inv-rot');
+const smInvTr = $<HTMLInputElement>('sm-inv-tr');
+function refreshSpaceMouse() {
+  const on = !!spaceMouse.name;
+  smButton.textContent = on && spaceMouse.via === 'hid' ? 'Disconnect' : 'Connect SpaceMouse';
+  smButton.classList.toggle('hidden', !spaceMouse.supported);
+  $('sm-status').textContent = on
+    ? `${spaceMouse.name}${spaceMouse.via === 'gamepad' ? ' (game controller)' : ''}`
+    : spaceMouse.supported
+      ? ''
+      : 'Use Chrome or Edge to connect one (other browsers only if they expose it as a game controller).';
+  $('sm-settings').classList.toggle('hidden', !on);
+  smSpeed.value = String(spaceMouse.settings.speed);
+  $('sm-speed-val').textContent = `${spaceMouse.settings.speed.toFixed(1)}×`;
+  smInvRot.checked = spaceMouse.settings.invertRotation;
+  smInvTr.checked = spaceMouse.settings.invertTranslation;
+}
+spaceMouse.onChange = () => {
+  refreshSpaceMouse();
+  if (spaceMouse.name) setStatus(`SpaceMouse connected: ${spaceMouse.name}`);
+};
+smButton.onclick = async () => {
+  if (spaceMouse.via === 'hid') {
+    await spaceMouse.disconnect();
+    return;
+  }
+  const err = await spaceMouse.connect();
+  if (err) setStatus(err, true);
+};
+smSpeed.oninput = () => {
+  spaceMouse.settings.speed = Number(smSpeed.value);
+  spaceMouse.saveSettings();
+  refreshSpaceMouse();
+};
+smInvRot.onchange = () => {
+  spaceMouse.settings.invertRotation = smInvRot.checked;
+  spaceMouse.saveSettings();
+};
+smInvTr.onchange = () => {
+  spaceMouse.settings.invertTranslation = smInvTr.checked;
+  spaceMouse.saveSettings();
+};
+refreshSpaceMouse();
+spaceMouse.autoConnect();
+
+$('btn-3d-reset').onclick = () => app.view3d.fit();
 $('btn-upright').onclick = () => app.selectedId !== null && app.uprightImplant(app.selectedId);
 $('btn-deselect').onclick = () => app.selectImplant(null, false);
 $('btn-delete').onclick = () => app.selectedId !== null && app.deleteImplant(app.selectedId);
+
+// ---- segmentation panel -------------------------------------------------------
+document.querySelectorAll<HTMLButtonElement>('[data-seg-preset]').forEach(
+  (b) => (b.onclick = () => app.newSegment(Number(b.dataset.segPreset))),
+);
+const segName = $<HTMLInputElement>('seg-name');
+const segColor = $<HTMLInputElement>('seg-color');
+segName.oninput = () => {
+  const s = app.activeSegment();
+  if (s) {
+    s.name = segName.value.slice(0, 40);
+    app.changed();
+  }
+};
+segName.onblur = () => {
+  const s = app.activeSegment();
+  if (s && !s.name.trim()) {
+    s.name = `Segment ${s.id}`;
+    app.changed();
+  }
+};
+segName.onkeydown = (e) => {
+  if (e.key === 'Enter' || e.key === 'Escape') segName.blur();
+};
+segColor.oninput = () => {
+  const s = app.activeSegment();
+  if (!s) return;
+  const h = segColor.value;
+  s.color = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  app.changed();
+};
+$('btn-seg-grow').onclick = () => app.setSegTool(app.segTool === 'grow' ? null : 'grow');
+$('btn-seg-regrow').onclick = () => app.activeSegId !== null && app.regrowSegment(app.activeSegId);
+$('btn-seg-undo').onclick = () => app.activeSegId !== null && app.undoSegmentClick(app.activeSegId);
+$('btn-seg-clear').onclick = () => app.activeSegId !== null && app.clearSegment(app.activeSegId);
+$('btn-seg-delete').onclick = () => app.activeSegId !== null && app.deleteSegment(app.activeSegId);
+const segShowUnseg = $<HTMLInputElement>('seg-show-unseg');
+const segShow2d = $<HTMLInputElement>('seg-show-2d');
+segShowUnseg.onchange = () => {
+  app.showUnsegmented = segShowUnseg.checked;
+  app.changed();
+};
+segShow2d.onchange = () => {
+  app.showSegOverlay = segShow2d.checked;
+  app.changed();
+};
+$('btn-cut').onclick = () => (app.segTool === 'cut' ? app.setSegTool(null) : app.startCut());
+const cutDepth = $<HTMLSelectElement>('cut-depth');
+cutDepth.onchange = () => {
+  app.cutDepth = cutDepth.value ? Number(cutDepth.value) : null;
+  app.changed();
+};
+$('btn-nerve-right').onclick = () => app.traceNerve('right');
+$('btn-nerve-left').onclick = () => app.traceNerve('left');
+const nerveD = $<HTMLInputElement>('nerve-d');
+nerveD.oninput = () => {
+  const n = app.activeNerve();
+  if (n && nerveD.value) {
+    n.diameter = clampNum(nerveD.value, 0.5, 8, n.diameter);
+    app.changed();
+  }
+};
+$('btn-nerve-trace').onclick = () => {
+  const n = app.activeNerve();
+  if (!n) return;
+  if (app.segTool === 'nerve') app.setSegTool(null);
+  else app.traceNerve(n.side);
+};
+$('btn-nerve-undo').onclick = () => app.undoNervePoint();
+$('btn-nerve-delete').onclick = () => app.activeNerveId !== null && app.deleteNerve(app.activeNerveId);
 
 function clampNum(v: string, lo: number, hi: number, fallback: number) {
   const n = Number(v);
@@ -484,6 +624,14 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if ((e.target as HTMLElement).tagName === 'INPUT') return;
+  if (e.key === 'Enter' && app.segTool === 'cut' && app.cutDraft) {
+    app.finishCut();
+    return;
+  }
+  if (e.key === 'Escape' && app.segTool) {
+    app.setSegTool(null);
+    return;
+  }
   if (e.key === 'Escape') {
     if (app.drawing) app.cancelDrawing();
     else if (app.ruler) app.setRuler(false);
@@ -503,6 +651,8 @@ window.addEventListener('keydown', (e) => {
     app.setRuler(!app.ruler);
   } else if ((e.key === 'm' || e.key === 'M') && app.activeView) {
     app.toggleMaximize(app.activeView);
+  } else if ((e.key === '1' || e.key === '2') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    setMode(e.key === '1' ? 'mpr' : 'plan');
   }
 });
 
@@ -552,6 +702,10 @@ function refreshUi() {
   }
   updatePatientBadge();
 
+  if (vol && !planOpened && !planNudged && app.mode === 'mpr') {
+    planNudged = true;
+    tabButtons.find((b) => b.dataset.mode === 'plan')?.classList.add('nudge');
+  }
   $('vol-info').innerHTML = vol
     ? [
         info!.seriesDescription ? `<div>${escapeHtml(info!.seriesDescription)}</div>` : '',
@@ -599,6 +753,7 @@ function refreshUi() {
   spacing.value = String(app.crossSpacing);
   $('spacing-val').textContent = `${app.crossSpacing} mm`;
   if (document.activeElement !== defD) defD.value = String(app.defaultDiameter);
+  defTapered.checked = app.defaultTapered;
   if (document.activeElement !== defL) defL.value = String(app.defaultLength);
 
   // update the list in place (keeps elements alive so double-click works)
@@ -624,7 +779,9 @@ function refreshUi() {
     }
     const ab = imp.abutment ? ` · MUA ${imp.abutment.angle}°/${imp.abutment.gingivalHeight}` : '';
     const dia = isTapered(imp) ? `Ø${imp.diameter.toFixed(1)}→${apicalDiameterOf(imp).toFixed(1)}` : `Ø${imp.diameter.toFixed(1)}`;
-    const html = `<span>${escapeHtml(imp.name)}</span><span class="dim">${dia} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
+    const near = app.nerveDistances(imp).some((x) => x.d < NERVE_SAFETY_MM);
+    const warn = near ? ' <span class="warn" title="Closer than 2 mm to the nerve">⚠</span>' : '';
+    const html = `<span>${escapeHtml(imp.name)}${warn}</span><span class="dim">${dia} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
     if (li.innerHTML !== html) li.innerHTML = html;
     li.className = imp.id === app.selectedId ? 'sel' : '';
     if (implantList.children[idx] !== li) implantList.insertBefore(li, implantList.children[idx] ?? null);
@@ -654,7 +811,13 @@ function refreshUi() {
       const t = (Math.acos(Math.min(1, Math.abs(d[0] * app.frame[2][0] + d[1] * app.frame[2][1] + d[2] * app.frame[2][2]))) * 180) / Math.PI;
       lines.push(`Abutment axis ${t.toFixed(1)}° from vertical`);
     }
-    $('imp-info').innerHTML = lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
+    const nerveLines = app.nerveDistances(sel).map(
+      ({ nerve, d }) =>
+        `<div class="${d < NERVE_SAFETY_MM ? 'warn' : ''}">${escapeHtml(nerve.name)}: ${d <= 0 ? 'touches the nerve!' : `${d.toFixed(1)} mm`}${
+          d > 0 && d < NERVE_SAFETY_MM ? ` (&lt; ${NERVE_SAFETY_MM} mm)` : ''
+        }</div>`,
+    );
+    $('imp-info').innerHTML = lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('') + nerveLines.join('');
     // parallel-to options
     const prev = parallelTo.value;
     parallelTo.innerHTML = others.map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('');
@@ -699,6 +862,115 @@ function refreshUi() {
   if (document.activeElement !== vrHi) vrHi.value = String(app.vr.hi);
   if (document.activeElement !== vrLoNum) vrLoNum.value = String(Math.round(app.vr.lo));
   if (document.activeElement !== vrHiNum) vrHiNum.value = String(Math.round(app.vr.hi));
+
+  refreshSegUi();
+}
+
+const segList = $('seg-list');
+const cutList = $('cut-list');
+const nerveList = $('nerve-list');
+const rgbCss = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
+const toHex = (c: [number, number, number]) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+
+/** Rebuild a small list only when its content changed (keeps clicks working). */
+function setList(el: HTMLElement, items: { key: string; html: string; sel: boolean; onClick: () => void; onButton?: (name: string) => void }[]) {
+  const key = JSON.stringify(items.map((i) => [i.key, i.html, i.sel]));
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  el.innerHTML = '';
+  for (const it of items) {
+    const li = document.createElement('li');
+    li.innerHTML = it.html;
+    li.className = it.sel ? 'sel' : '';
+    li.onclick = (e) => {
+      const btn = (e.target as HTMLElement).closest('button');
+      if (btn && it.onButton) {
+        e.stopPropagation();
+        it.onButton(btn.dataset.act ?? '');
+      } else it.onClick();
+    };
+    el.append(li);
+  }
+}
+
+function refreshSegUi() {
+  const seg = app.seg;
+  const tool = app.segTool;
+  setList(
+    segList,
+    seg.segments.map((g) => {
+      const cm3 = (g.voxels * seg.voxelVolume) / 1000;
+      const info = g.seeds.length ? `${cm3.toFixed(2)} cm³` : 'empty – click it';
+      return {
+        key: String(g.id),
+        sel: g.id === app.activeSegId,
+        html: `<span class="swatch" style="background:${rgbCss(g.color)}"></span><span class="name">${escapeHtml(g.name)}</span><span class="dim">${info}</span><button data-act="eye" class="${g.visible ? '' : 'off'}" title="Show / hide">${g.visible ? 'Hide' : 'Show'}</button>`,
+        onClick: () => app.selectSegment(g.id),
+        onButton: () => app.setSegmentVisible(g.id, !g.visible),
+      };
+    }),
+  );
+  const s = app.activeSegment();
+  $('seg-edit').classList.toggle('hidden', !s);
+  if (s) {
+    if (document.activeElement !== segName) segName.value = s.name;
+    if (document.activeElement !== segColor) segColor.value = toHex(s.color);
+    const grow = $('btn-seg-grow');
+    grow.classList.toggle('active', tool === 'grow');
+    grow.textContent = tool === 'grow' ? 'Clicking… (Esc)' : 'Click to add';
+    const thr = s.seeds.length ? `${Math.round(Math.min(...s.seeds.map((d) => d.lo)))}–${Math.round(Math.max(...s.seeds.map((d) => d.hi)))}` : '–';
+    $('seg-info').textContent = `${s.seeds.length} click${s.seeds.length === 1 ? '' : 's'} · threshold ${thr} · ${((s.voxels * seg.voxelVolume) / 1000).toFixed(2)} cm³`;
+    $('btn-seg-regrow').toggleAttribute('disabled', !s.seeds.length);
+    $('btn-seg-undo').toggleAttribute('disabled', !s.seeds.length);
+  }
+  segShowUnseg.checked = app.showUnsegmented;
+  segShow2d.checked = app.showSegOverlay;
+  const cutBtn = $('btn-cut');
+  cutBtn.classList.toggle('active', tool === 'cut');
+  cutBtn.textContent = tool === 'cut' ? 'Drawing… (Esc)' : 'Draw cut';
+  cutDepth.value = app.cutDepth === null ? '' : String(app.cutDepth);
+  setList(
+    cutList,
+    seg.cuts.map((c, i) => ({
+      key: String(c.id),
+      sel: false,
+      html: `<span class="swatch" style="background:rgb(255,122,40)"></span><span class="name">Cut ${i + 1} · ${c.kind === 'pano' ? 'panoramic' : escapeHtml(c.viewName)}</span><span class="dim">${c.depth === null ? 'whole' : `±${c.depth} mm`}</span><button data-act="del" title="Delete this cut">✕</button>`,
+      onClick: () => {},
+      onButton: () => app.deleteCut(c.id),
+    })),
+  );
+  setList(
+    nerveList,
+    app.nerves.map((n) => ({
+      key: String(n.id),
+      sel: n.id === app.activeNerveId,
+      html: `<span class="swatch" style="background:#ffd60a"></span><span class="name">${escapeHtml(n.name)}</span><span class="dim">${n.pts.length} pts${n.pts.length >= 2 ? ` · ${nerveLength(n).toFixed(0)} mm` : ''}</span><button data-act="eye" class="${n.visible ? '' : 'off'}" title="Show / hide">${n.visible ? 'Hide' : 'Show'}</button>`,
+      onClick: () => app.selectNerve(n.id),
+      onButton: () => {
+        n.visible = !n.visible;
+        app.changed();
+      },
+    })),
+  );
+  for (const side of ['right', 'left'] as const) {
+    const b = $(`btn-nerve-${side}`);
+    const active = tool === 'nerve' && app.activeNerve()?.side === side;
+    b.classList.toggle('active', active);
+    b.textContent = active ? 'Tracing… (Esc)' : `${app.nerves.some((n) => n.side === side) ? 'Edit' : 'Trace'} ${side} nerve`;
+  }
+  const n = app.activeNerve();
+  $('nerve-edit').classList.toggle('hidden', !n);
+  if (n) {
+    if (document.activeElement !== nerveD) nerveD.value = n.diameter.toFixed(1);
+    const tr = $('btn-nerve-trace');
+    tr.classList.toggle('active', tool === 'nerve');
+    tr.textContent = tool === 'nerve' ? 'Done' : 'Add points';
+    $('nerve-info').textContent =
+      n.pts.length < 2 ? 'Click at least two points along the canal.' : `${n.pts.length} points · ${nerveLength(n).toFixed(1)} mm long`;
+    $('btn-nerve-undo').toggleAttribute('disabled', !n.pts.length);
+  }
+  for (const id of ['btn-cut', 'btn-nerve-right', 'btn-nerve-left']) $(id).toggleAttribute('disabled', !app.vol);
+  document.querySelectorAll<HTMLButtonElement>('[data-seg-preset]').forEach((b) => b.toggleAttribute('disabled', !app.vol));
 }
 app.onStateChange = refreshUi;
 

@@ -1,5 +1,8 @@
-import type { App } from '../app';
+import type { App, SegTool } from '../app';
 import type { Measurement } from '../app';
+import type { Nerve } from '../nerve';
+import type { NewCut } from '../segment';
+import { CUT_CSS, composeNerveSection, composeSegmentation } from './overlays';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, radiusAt } from '../implant';
 import { ImplantEditor } from './implantEdit';
 import { Vec3, add, cross, distToSegment2, dot, length, scale, sub } from '../math';
@@ -17,11 +20,23 @@ export interface ViewState {
   panU: number;
   panV: number;
   fitted: boolean;
+  /**
+   * min(width, height) in px the scale belongs to: when the view is resized
+   * (maximize / restore / window) the scale follows, so the same anatomy fills it.
+   */
+  sizeRef?: number;
+}
+
+/** Vertical scroll bar of a view: value range from the top to the bottom of the bar. */
+export interface ScrollInfo {
+  top: number;
+  bottom: number;
+  value: number;
 }
 
 export const newViewState = (): ViewState => ({ scale: 0.3, panU: 0, panV: 0, fitted: false });
 
-type DragKind = 'none' | 'right' | 'pan' | 'left' | 'ruler';
+type DragKind = 'none' | 'right' | 'pan' | 'left' | 'ruler' | 'nerve';
 
 /**
  * Base class: two stacked canvases (image at <= CSS resolution, overlay at
@@ -46,6 +61,8 @@ export abstract class View {
   private imageData: ImageData | null = null;
   protected maxPixels = 450_000;
   private drag: DragKind = 'none';
+  /** the current pan drag was started with the middle button */
+  private middleDown = false;
   private last: Pt = [0, 0];
   private downPos: Pt = [0, 0];
   /** Shift+left drag pans (disabled where Shift has another meaning). */
@@ -55,6 +72,12 @@ export abstract class View {
   private rulerDrag: { m: Measurement; end: 'a' | 'b'; created: boolean } | null = null;
   /** time the last ruler was completed (ignore the dblclick of a fast double click) */
   private rulerDoneAt = 0;
+  /** nerve control point being dragged */
+  private nerveDrag: { nerve: Nerve; idx: number } | null = null;
+  /** mouse position while a segmentation tool is active (rubber band) */
+  private toolHover: Pt | null = null;
+  /** max distance (mm) from the slice at which nerve points are shown / editable */
+  protected nervePointDepth = 1.5;
   vs: ViewState;
 
   constructor(
@@ -77,7 +100,14 @@ export abstract class View {
     maxBtn.innerHTML =
       '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
     maxBtn.onclick = () => this.app.toggleMaximize(this);
-    this.el.append(this.imgCanvas, this.ovCanvas, maxBtn);
+    // vertical scroll bar (slice position etc.); hidden for views without one
+    this.sbar = document.createElement('div');
+    this.sbar.className = 'view-scroll hidden';
+    this.sthumb = document.createElement('div');
+    this.sthumb.className = 'view-scroll-thumb';
+    this.sbar.append(this.sthumb);
+    this.bindScrollbar();
+    this.el.append(this.imgCanvas, this.ovCanvas, maxBtn, this.sbar);
     this.imgCtx = this.imgCanvas.getContext('2d')!;
     this.ovCtx = this.ovCanvas.getContext('2d')!;
     new ResizeObserver(() => this.resize()).observe(this.el);
@@ -95,6 +125,7 @@ export abstract class View {
     if (w === this.w && h === this.h) return;
     this.w = w;
     this.h = h;
+    this.syncSize();
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.ovCanvas.width = Math.max(1, Math.round(w * this.dpr));
     this.ovCanvas.height = Math.max(1, Math.round(h * this.dpr));
@@ -106,6 +137,83 @@ export abstract class View {
     this.imageData = null;
     this.valuesKey = '';
     this.app.requestRender();
+  }
+
+  /** Keep the field of view when the view size changes (maximize, restore, window resize). */
+  syncSize() {
+    if (!this.w || !this.h) return; // hidden
+    const b = Math.min(this.w, this.h);
+    const vs = this.vs;
+    if (vs.fitted && vs.sizeRef && Math.abs(vs.sizeRef - b) > 0.5) vs.scale = Math.min(5, Math.max(0.005, (vs.scale * vs.sizeRef) / b));
+    vs.sizeRef = b;
+  }
+
+  // ---- vertical scroll bar ------------------------------------------------------
+
+  private sbar: HTMLDivElement;
+  private sthumb: HTMLDivElement;
+  private sbarDrag: { grab: number } | null = null;
+  private static readonly THUMB = 30;
+
+  /** Range and value shown by the scroll bar (null = no scroll bar). */
+  protected scrollInfo(): ScrollInfo | null {
+    return null;
+  }
+  /** Scroll bar moved to value v. */
+  protected setScroll(_v: number): void {}
+
+  private bindScrollbar() {
+    const bar = this.sbar;
+    const fromY = (clientY: number) => {
+      const info = this.scrollInfo();
+      if (!info) return;
+      const r = bar.getBoundingClientRect();
+      const span = Math.max(1, r.height - View.THUMB);
+      const f = Math.min(1, Math.max(0, (clientY - r.top - View.THUMB / 2 - (this.sbarDrag?.grab ?? 0)) / span));
+      this.setScroll(info.top + f * (info.bottom - info.top));
+    };
+    bar.addEventListener('pointerdown', (e) => {
+      if (!this.app.vol) return;
+      e.preventDefault();
+      e.stopPropagation();
+      bar.setPointerCapture(e.pointerId);
+      // grabbing the thumb keeps its offset; clicking the track jumps there
+      const t = this.sthumb.getBoundingClientRect();
+      const onThumb = e.clientY >= t.top && e.clientY <= t.bottom;
+      this.sbarDrag = { grab: onThumb ? e.clientY - (t.top + t.height / 2) : 0 };
+      bar.classList.add('dragging');
+      fromY(e.clientY);
+    });
+    bar.addEventListener('pointermove', (e) => {
+      if (this.sbarDrag) fromY(e.clientY);
+    });
+    const end = (e: PointerEvent) => {
+      this.sbarDrag = null;
+      bar.classList.remove('dragging');
+      if (bar.hasPointerCapture(e.pointerId)) bar.releasePointerCapture(e.pointerId);
+    };
+    bar.addEventListener('pointerup', end);
+    bar.addEventListener('pointercancel', end);
+    bar.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        const dir = Math.sign(e.deltaY);
+        if (dir && this.app.vol) this.onScroll(dir, [this.w / 2, this.h / 2], e);
+      },
+      { passive: false },
+    );
+  }
+
+  /** Position the thumb (called on every render). */
+  protected updateScrollbar() {
+    const info = this.app.vol ? this.scrollInfo() : null;
+    this.sbar.classList.toggle('hidden', !info);
+    if (!info) return;
+    const span = info.bottom - info.top;
+    const f = span ? Math.min(1, Math.max(0, (info.value - info.top) / span)) : 0;
+    const track = Math.max(0, this.sbar.clientHeight - View.THUMB);
+    this.sthumb.style.transform = `translateY(${(f * track).toFixed(1)}px)`;
   }
 
   // ---- to implement -------------------------------------------------------
@@ -135,15 +243,145 @@ export abstract class View {
   protected onScrollH(dir: number, p: Pt, e: WheelEvent): void {
     this.onScroll(dir, p, e);
   }
+  /** Horizontal one-finger swipe step in the touch UI (dir > 0 = finger moved left). */
+  protected onTouchScrollH(dir: number, p: Pt): void {
+    this.onScrollH(dir, p, noWheel());
+  }
   /** Continuous trackpad swipe (px); return true when handled (e.g. 3D orbit). */
   protected onSwipe(_dx: number, _dy: number, _p: Pt, _e: WheelEvent): boolean {
     return false;
   }
   protected onDoubleClick(_p: Pt, _e: MouseEvent): void {}
+  /** Middle button pressed and released without moving (a middle drag pans). */
+  protected onMiddleClick(_p: Pt): void {}
+  /** Touch UI: a one-finger touch starting at p drags (like a left drag) instead of scrolling. */
+  protected touchDragAt(_p: Pt): boolean {
+    return false;
+  }
   protected onHover(_p: Pt, _e: PointerEvent): void {}
   /** World point under the cursor for the status bar. */
   worldAt(_p: Pt): Vec3 | null {
     return null;
+  }
+
+  // ---- segmentation / nerve tools ---------------------------------------------
+
+  /** Segmentation tools handled by clicks in this view. */
+  protected supportsTool(_t: SegTool): boolean {
+    return false;
+  }
+  /** Screen position of a world point plus its distance from the view surface (mm). */
+  screenOf(_w: Vec3): [number, number, number] | null {
+    return null;
+  }
+  /** Build a separation cut from points clicked in this view. */
+  makeCut(_pts: Vec3[], _depth: number | null): NewCut | null {
+    return null;
+  }
+  /** New position of a dragged nerve point. */
+  protected nervePointAt(p: Pt, _old: Vec3): Vec3 | null {
+    return this.worldAt(p);
+  }
+
+  private hitNervePoint(p: Pt): { nerve: Nerve; idx: number } | null {
+    const n = this.app.activeNerve();
+    if (!n || !n.visible) return null;
+    for (let i = n.pts.length - 1; i >= 0; i--) {
+      const s = this.screenOf(n.pts[i]);
+      if (s && Math.abs(s[2]) <= this.nervePointDepth && Math.hypot(s[0] - p[0], s[1] - p[1]) < 8) return { nerve: n, idx: i };
+    }
+    return null;
+  }
+
+  /** Left click with a segmentation tool; returns true when a nerve point drag starts. */
+  private toolDown(p: Pt): boolean {
+    const app = this.app;
+    const w = this.worldAt(p);
+    switch (app.segTool) {
+      case 'grow':
+        if (w) app.growAt(w);
+        return false;
+      case 'cut':
+        if (w) app.addCutPoint(this, w);
+        return false;
+      case 'nerve': {
+        const hit = this.hitNervePoint(p);
+        if (hit) {
+          this.nerveDrag = hit;
+          return true;
+        }
+        const n = app.activeNerve();
+        if (!w || !n) return false;
+        const idx = app.addNervePoint(w);
+        this.nerveDrag = { nerve: n, idx };
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private toolDoubleClick(p: Pt) {
+    const app = this.app;
+    if (app.segTool === 'cut') {
+      // (duplicate points from the double click are already skipped when added)
+      app.finishCut();
+    } else if (app.segTool === 'nerve') {
+      const hit = this.hitNervePoint(p);
+      if (hit) app.deleteNervePoint(hit.nerve.id, hit.idx);
+    }
+  }
+
+  /** Cut being drawn, nerve control points and the tool hint. */
+  private drawToolOverlay(o: CanvasRenderingContext2D) {
+    const app = this.app;
+    const tool = app.segTool;
+    if (!tool || !this.supportsTool(tool)) return;
+    const d = app.cutDraft;
+    if (tool === 'cut' && d && d.view === this) {
+      const pts = d.pts.map((w) => this.screenOf(w)).filter((s): s is [number, number, number] => !!s);
+      o.save();
+      o.strokeStyle = CUT_CSS;
+      o.fillStyle = CUT_CSS;
+      o.lineWidth = 2;
+      o.setLineDash([6, 4]);
+      o.beginPath();
+      pts.forEach((s, i) => (i ? o.lineTo(s[0], s[1]) : o.moveTo(s[0], s[1])));
+      if (this.toolHover && pts.length) o.lineTo(this.toolHover[0], this.toolHover[1]);
+      o.stroke();
+      o.setLineDash([]);
+      for (const s of pts) {
+        o.beginPath();
+        o.arc(s[0], s[1], 3.5, 0, Math.PI * 2);
+        o.fill();
+      }
+      o.restore();
+    }
+    const n = app.activeNerve();
+    if (tool === 'nerve' && n) {
+      o.save();
+      for (const w of n.pts) {
+        const s = this.screenOf(w);
+        if (!s || Math.abs(s[2]) > this.nervePointDepth) continue;
+        o.beginPath();
+        o.arc(s[0], s[1], 4, 0, Math.PI * 2);
+        o.fillStyle = '#ffd60a';
+        o.fill();
+        o.strokeStyle = '#000';
+        o.lineWidth = 1.2;
+        o.stroke();
+      }
+      o.restore();
+    }
+    const seg = app.activeSegment();
+    const name = seg ? seg.name : 'the structure';
+    const [long, short] =
+      tool === 'grow'
+        ? [`Click ${name} to add it (threshold ${Math.round(app.vr.lo)}–${Math.round(app.vr.hi)}) · Esc = done`, `Click ${name} to add it`]
+        : tool === 'cut'
+          ? ['Cut: click points along the gap, crossing the contact · double-click / Enter = finish · Esc = cancel', 'Cut: click points · double-click = finish']
+          : [`${n ? n.name : 'Nerve'}: click the canal centre · drag a point to move it · double-click a point to delete · Esc = done`, 'Click the canal centre'];
+    o.font = '12px system-ui, sans-serif';
+    drawLabel(o, o.measureText(long).width < this.w - 24 ? long : short, 8, this.h - 28, '#ffd34f');
   }
 
   // ---- measurements ---------------------------------------------------------
@@ -216,7 +454,7 @@ export abstract class View {
       if (v.m === this.app.pendingMeasurement?.m) continue;
       for (const end of ['a', 'b'] as const) {
         const q = v[end];
-        if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 8) return { m: v.m, end };
+        if (Math.hypot(q[0] - p[0], q[1] - p[1]) < (this.app.touchUi ? 18 : 8)) return { m: v.m, end };
       }
     }
     return null;
@@ -225,7 +463,7 @@ export abstract class View {
   private hitMeasureLine(p: Pt): Measurement | null {
     for (const v of this.visibleMeasurements()) {
       if (v.m === this.app.pendingMeasurement?.m) continue;
-      if (distToSegment2(p[0], p[1], v.a[0], v.a[1], v.b[0], v.b[1]) < 6) return v.m;
+      if (distToSegment2(p[0], p[1], v.a[0], v.a[1], v.b[0], v.b[1]) < (this.app.touchUi ? 14 : 6)) return v.m;
     }
     return null;
   }
@@ -324,8 +562,10 @@ export abstract class View {
     } else {
       this.drawOverlay(o);
       this.drawMeasurements(o);
+      this.drawToolOverlay(o);
     }
     this.drawTitle(o);
+    this.updateScrollbar();
   }
 
   protected drawTitle(o: CanvasRenderingContext2D) {
@@ -352,14 +592,20 @@ export abstract class View {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     c.addEventListener('pointerdown', (e) => {
       if (!this.app.vol) return;
+      if (this.app.touchUi && e.pointerType === 'touch') {
+        this.touchDown(e);
+        return;
+      }
       const p = this.pos(e);
       this.last = p;
       this.downPos = p;
       this.app.activeView = this;
       // macOS: Control+click arrives as a right click – treat it as a modified left click
       const button = IS_MAC && e.button === 2 && e.ctrlKey ? 0 : e.button;
+      this.middleDown = button === 1;
       if (button === 2) this.drag = 'right';
       else if (button === 1 || (button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey && !e.metaKey)))) this.drag = 'pan';
+      else if (button === 0 && this.app.segTool && this.supportsTool(this.app.segTool)) this.drag = this.toolDown(p) ? 'nerve' : 'none';
       else if (button === 0 && this.app.ruler && this.measureKind) this.drag = this.rulerClick(p) ? 'ruler' : 'none';
       else if (button === 0 && this.measureKind && this.hitMeasureEnd(p)) {
         // edit an existing ruler end without the tool
@@ -372,6 +618,10 @@ export abstract class View {
       }
     });
     c.addEventListener('pointermove', (e) => {
+      if (this.touches.has(e.pointerId)) {
+        this.touchMove(e);
+        return;
+      }
       const p = this.pos(e);
       const dx = p[0] - this.last[0];
       const dy = p[1] - this.last[1];
@@ -396,6 +646,12 @@ export abstract class View {
           }
           break;
         }
+        case 'nerve': {
+          const d = this.nerveDrag;
+          const w = d && this.nervePointAt(p, d.nerve.pts[d.idx]);
+          if (d && w) this.app.moveNervePoint(d.nerve, d.idx, w);
+          break;
+        }
         case 'pan':
           this.vs.panU -= dx * this.vs.scale;
           this.vs.panV -= dy * this.vs.scale;
@@ -415,6 +671,12 @@ export abstract class View {
             app.requestRender();
             break;
           }
+          if (app.segTool && this.supportsTool(app.segTool)) {
+            this.toolHover = p;
+            this.el.style.cursor = app.segTool === 'nerve' && this.hitNervePoint(p) ? 'move' : 'crosshair';
+            if (app.cutDraft?.view === this) app.requestRender();
+            break;
+          }
           if (this.measureKind) {
             const hover = this.hitMeasureLine(p)?.id ?? null;
             if (hover !== app.hoverMeasurementId) {
@@ -432,6 +694,10 @@ export abstract class View {
       this.app.reportCursor(this, p);
     });
     const end = (e: PointerEvent) => {
+      if (this.touches.has(e.pointerId)) {
+        this.touchUp(e);
+        return;
+      }
       if (this.drag === 'ruler' && this.rulerDrag) {
         const { created } = this.rulerDrag;
         this.rulerDrag = null;
@@ -441,11 +707,20 @@ export abstract class View {
         if (created && moved) this.finishMeasurement();
         this.app.changed();
       }
+      if (this.drag === 'nerve') {
+        this.nerveDrag = null;
+        this.app.changed();
+      }
       if (this.drag === 'left') {
         const p = this.pos(e);
         const moved = Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 3;
         this.onLeftUp(p, e, moved);
       }
+      if (this.drag === 'pan' && this.middleDown && e.type === 'pointerup') {
+        const p = this.pos(e);
+        if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= 3) this.onMiddleClick(p);
+      }
+      this.middleDown = false;
       this.drag = 'none';
       if (c.hasPointerCapture(e.pointerId)) c.releasePointerCapture(e.pointerId);
     };
@@ -453,6 +728,10 @@ export abstract class View {
     c.addEventListener('pointercancel', end);
     c.addEventListener('pointerleave', () => {
       this.app.reportCursor(this, null);
+      if (this.toolHover) {
+        this.toolHover = null;
+        this.app.requestRender();
+      }
       if (this.app.hoverMeasurementId !== null) {
         this.app.hoverMeasurementId = null;
         this.app.requestRender();
@@ -464,6 +743,8 @@ export abstract class View {
         if (!this.app.vol) return;
         e.preventDefault();
         if (this.gestureActive) return; // Safari pinch is handled by the gesture events
+        // synthetic scroll/zoom from the SpaceMouse driver while the cap is moved
+        if (performance.now() < this.app.wheelBlockedUntil) return;
         const p = this.pos(e);
         const trackpad = this.app.input === 'trackpad';
         if (e.ctrlKey || (e.metaKey && !trackpad)) {
@@ -485,7 +766,8 @@ export abstract class View {
     const gesture = (name: string, fn: (e: Event & { scale: number; clientX: number; clientY: number }) => void) =>
       c.addEventListener(name, (e) => {
         e.preventDefault();
-        if (this.app.vol) fn(e as Event & { scale: number; clientX: number; clientY: number });
+        // the touch UI handles pinch itself (Safari also reports it as gesture events)
+        if (this.app.vol && !this.app.touchUi) fn(e as Event & { scale: number; clientX: number; clientY: number });
       });
     gesture('gesturestart', () => {
       this.gestureActive = true;
@@ -500,13 +782,164 @@ export abstract class View {
       this.gestureActive = false;
     });
     c.addEventListener('dblclick', (e) => {
-      if (!this.app.vol) return;
+      // the touch UI has its own double-tap; browsers also turn quick taps into dblclick
+      if (!this.app.vol || this.app.touchUi) return;
+      if (this.app.segTool && this.supportsTool(this.app.segTool)) {
+        this.toolDoubleClick(this.pos(e));
+        return;
+      }
       if (this.measureKind && !this.app.ruler && performance.now() - this.rulerDoneAt > 500) {
         if (this.deleteMeasurementAt(this.pos(e))) return;
       }
       if (this.app.ruler) return;
       this.onDoubleClick(this.pos(e), e);
     });
+  }
+
+  // ---- touch (phone UI) ---------------------------------------------------------
+
+  private touches = new Map<number, Pt>();
+  /** drag: left-drag semantics · ruler: measuring / moving a ruler end */
+  private touchStart: { p: Pt; t: number; moved: boolean; drag: boolean; ruler: boolean } | null = null;
+  private pinch: { dist: number; c: Pt } | null = null;
+  private lastTapAt = 0;
+
+  private pinchState(): { dist: number; c: Pt } {
+    const [a, b] = [...this.touches.values()];
+    return { dist: Math.hypot(a[0] - b[0], a[1] - b[1]), c: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+  }
+
+  private touchDown(e: PointerEvent) {
+    e.preventDefault();
+    const p = this.pos(e);
+    this.ovCanvas.setPointerCapture(e.pointerId);
+    this.touches.set(e.pointerId, p);
+    this.app.activeView = this;
+    if (this.touches.size === 1) {
+      // ruler tool: drag from start to end (or tap start, then end); a ruler end can always be dragged
+      const ruler = !!this.measureKind && (this.app.ruler || !!this.hitMeasureEnd(p));
+      if (ruler) {
+        this.downPos = p;
+        const end = this.app.ruler ? null : this.hitMeasureEnd(p);
+        if (end) this.rulerDrag = { ...end, created: false };
+        else if (!this.rulerClick(p)) this.rulerDrag = null; // second tap finished a ruler
+      }
+      const drag = !ruler && this.touchDragAt(p) && this.onLeftDown(p, e);
+      this.touchStart = { p, t: performance.now(), moved: false, drag, ruler };
+      this.accX = 0;
+      this.accY = 0;
+    } else {
+      const st = this.touchStart;
+      if (st) {
+        st.moved = true; // no tap once a second finger lands
+        if (st.drag) {
+          st.drag = false;
+          this.onLeftUp(p, e, true);
+        }
+        // pinching mid-measurement: keep the start point, finish with a tap later
+        this.rulerDrag = null;
+      }
+      if (this.touches.size === 2) this.pinch = this.pinchState();
+    }
+  }
+
+  /** One finger: scroll / orbit (like a trackpad swipe). Two fingers: pinch zoom + pan. */
+  private touchMove(e: PointerEvent) {
+    const prev = this.touches.get(e.pointerId)!;
+    const p = this.pos(e);
+    this.touches.set(e.pointerId, p);
+    if (this.touches.size >= 2) {
+      if (!this.pinch || this.touches.size > 2) return;
+      const s = this.pinchState();
+      if (s.dist > 10 && this.pinch.dist > 10) this.zoomAt(s.c, this.pinch.dist / s.dist);
+      this.vs.panU -= (s.c[0] - this.pinch.c[0]) * this.vs.scale;
+      this.vs.panV -= (s.c[1] - this.pinch.c[1]) * this.vs.scale;
+      this.pinch = s;
+      this.app.requestRender();
+      return;
+    }
+    const st = this.touchStart;
+    if (!st) return;
+    if (st.ruler) {
+      const r = this.rulerDrag;
+      const w = r && this.measureAt(p);
+      if (r && w) {
+        r.m[r.end] = w;
+        this.app.requestRender();
+      }
+      return;
+    }
+    if (st.drag) {
+      if (Math.hypot(p[0] - st.p[0], p[1] - st.p[1]) > 3) st.moved = true;
+      this.onLeftDrag(p, prev, e);
+      return;
+    }
+    if (!st.moved) {
+      if (Math.hypot(p[0] - st.p[0], p[1] - st.p[1]) < 8) return;
+      st.moved = true;
+    }
+    const dx = p[0] - prev[0];
+    const dy = p[1] - prev[1];
+    // content follows the finger: feed the deltas like a natural-scrolling trackpad
+    if (this.onSwipe(-dx, -dy, p, noWheel())) return;
+    const STEP = 6; // px of finger travel per slice step
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (Math.sign(-dx) !== Math.sign(this.accX)) this.accX = 0;
+      this.accX -= dx;
+      while (Math.abs(this.accX) >= STEP) {
+        const dir = Math.sign(this.accX);
+        this.onTouchScrollH(dir, p);
+        this.accX -= dir * STEP;
+      }
+    } else {
+      if (Math.sign(-dy) !== Math.sign(this.accY)) this.accY = 0;
+      this.accY -= dy;
+      while (Math.abs(this.accY) >= STEP) {
+        const dir = Math.sign(this.accY);
+        this.onScroll(dir, p, noWheel());
+        this.accY -= dir * STEP;
+      }
+    }
+  }
+
+  /** Tap = click (e.g. move the crosshair there); double tap = fit the view. */
+  private touchUp(e: PointerEvent) {
+    const st = this.touchStart;
+    this.touches.delete(e.pointerId);
+    if (this.ovCanvas.hasPointerCapture(e.pointerId)) this.ovCanvas.releasePointerCapture(e.pointerId);
+    if (this.touches.size === 0) {
+      if (st?.ruler) {
+        const r = this.rulerDrag;
+        this.rulerDrag = null;
+        const p = this.pos(e);
+        // drag-release measures in one go; a plain tap waits for the second tap
+        if (r?.created && Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 6) this.finishMeasurement();
+        this.app.changed();
+      } else if (st?.drag) this.onLeftUp(this.pos(e), e, st.moved);
+      else if (e.type === 'pointerup' && st && !st.moved && performance.now() - st.t < 450) {
+        const now = performance.now();
+        // (no double-tap fit while tapping out a curve)
+        if (now - this.lastTapAt < 320 && !this.app.drawing) {
+          this.lastTapAt = 0;
+          // double-tap on a ruler deletes it, elsewhere fits the view
+          const m = this.measureKind ? this.hitMeasureLine(st.p) : null;
+          if (m) this.app.deleteMeasurement(m.id);
+          else this.vs.fitted = false;
+          this.app.requestRender();
+        } else {
+          this.lastTapAt = now;
+          // a tap on a ruler does nothing (a second tap deletes it)
+          const onRuler = this.measureKind && this.hitMeasureLine(st.p);
+          if (!onRuler && this.onLeftDown(st.p, e)) this.onLeftUp(st.p, e, false);
+        }
+      }
+      this.touchStart = null;
+      this.pinch = null;
+    } else if (this.touches.size === 1) {
+      // continue with the remaining finger without a jump
+      this.pinch = null;
+      this.touchStart = { p: [...this.touches.values()][0], t: 0, moved: true, drag: false, ruler: false };
+    } else if (this.touches.size === 2) this.pinch = this.pinchState();
   }
 
   // ---- trackpad --------------------------------------------------------------
@@ -623,6 +1056,21 @@ export abstract class PlaneView extends View {
     return s && Math.abs(s[2]) < 0.75 ? [s[0], s[1]] : null;
   }
 
+  protected supportsTool(_t: SegTool): boolean {
+    return true;
+  }
+
+  override screenOf(w: Vec3) {
+    return this.worldToScreen(w);
+  }
+
+  /** Cut drawn on this slice: the polyline extruded along the slice normal. */
+  override makeCut(pts: Vec3[], depth: number | null): NewCut | null {
+    const pl = this.currentPlane();
+    if (!pl) return null;
+    return { kind: 'plane', pts: pts.map((p) => [...p] as Vec3), u: pl.u, v: pl.v, n: cross(pl.u, pl.v), depth, viewName: this.title };
+  }
+
   /** Current plane including pan offsets (screen centre). */
   currentPlane(): Plane | null {
     const pl = this.plane();
@@ -669,19 +1117,33 @@ export abstract class PlaneView extends View {
   }
 
   protected composeExtraKey() {
-    return this.app.implantsKey();
+    return this.app.implantsKey() + this.app.segKey();
   }
 
-  /** Rasterise exact implant/abutment intersections with the plane into the image. */
+  /** Segments, cut traces, implant/abutment and nerve intersections with the plane. */
   protected composePixels(rgba: Uint8ClampedArray, w: number, h: number) {
     const pl = this.currentPlane();
-    if (!pl || !this.app.implants.length) return;
-    const n = cross(pl.u, pl.v);
+    if (!pl) return;
     const k = 1 / this.imgScale;
     const pxmm = this.vs.scale * k;
     const p0 = this.screenToWorld([0.5 * k, 0.5 * k], pl)!;
     const du = scale(pl.u, pxmm);
     const dv = scale(pl.v, pxmm);
+    const crop = this.crop();
+    composeSegmentation(this.app, rgba, w, h, (i, j, out) => {
+      out[0] = p0[0] + du[0] * i + dv[0] * j;
+      out[1] = p0[1] + du[1] * i + dv[1] * j;
+      out[2] = p0[2] + du[2] * i + dv[2] * j;
+      return !crop || inCrop(crop, out);
+    });
+    this.composeImplants(rgba, w, h, pl, p0, du, dv, pxmm, k);
+    composeNerveSection(this.app, rgba, w, h, p0, du, dv, pxmm);
+  }
+
+  /** Rasterise exact implant/abutment intersections with the plane into the image. */
+  private composeImplants(rgba: Uint8ClampedArray, w: number, h: number, pl: Plane, p0: Vec3, du: Vec3, dv: Vec3, pxmm: number, k: number) {
+    if (!this.app.implants.length) return;
+    const n = cross(pl.u, pl.v);
     const edge = Math.max(0.12, pxmm * 1.3);
     for (const part of this.app.allParts()) {
       const r = part.radius;
@@ -791,6 +1253,21 @@ export abstract class PlaneView extends View {
     this.el.style.cursor = c ?? '';
     return !!c;
   }
+}
+
+function inCrop(c: CropSpec, p: Vec3): boolean {
+  const q = sub(p, c.origin);
+  for (let a = 0; a < 3; a++) {
+    const f = dot(q, c.frame[a]);
+    if (f < c.min[a] || f > c.max[a]) return false;
+  }
+  return true;
+}
+
+let noWheelEvent: WheelEvent | null = null;
+/** Placeholder event (no modifier keys) for scroll handlers driven by touch. */
+function noWheel(): WheelEvent {
+  return (noWheelEvent ??= new WheelEvent('wheel'));
 }
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, lh: number) {

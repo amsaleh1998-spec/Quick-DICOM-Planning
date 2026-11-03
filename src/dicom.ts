@@ -1,5 +1,7 @@
 import * as dicomParser from 'dicom-parser';
 import type { DataSet } from 'dicom-parser';
+import { CODEC_NAMES, CodecKind, FrameMeta, TRANSFER_SYNTAX_CODECS, decodeFrame } from './codecs';
+import { DecodePool } from './decodePool';
 import { Vec3, cross, dot, normalize } from './math';
 import { Volume, VolumeInfo } from './volume';
 import { extractMeta } from './dicomMeta';
@@ -10,7 +12,12 @@ const UNCOMPRESSED = new Set([
   '1.2.840.10008.1.2.2', // explicit VR big endian (retired)
 ]);
 
-const MAX_VOXELS = 260_000_000;
+let MAX_VOXELS = 260_000_000;
+
+/** Larger series are downsampled on load (lower on phones to fit their memory). */
+export function setMaxVoxels(n: number) {
+  MAX_VOXELS = n;
+}
 
 interface Slice {
   seriesUid: string;
@@ -19,8 +26,10 @@ interface Slice {
   rows: number;
   cols: number;
   pixels: Float32Array | null;
-  // decode lazily from the file buffer to keep memory down
-  decode: () => Float32Array;
+  // decode lazily from the file buffer to keep memory down (compressed frames go to the worker pool)
+  decode: (pool: DecodePool | null) => Float32Array | Promise<Float32Array>;
+  /** compression of the frame, if any */
+  codec: CodecKind | null;
   rowDir: Vec3;
   colDir: Vec3;
   pixelSpacing: [number, number]; // [between rows (y), between columns (x)]
@@ -135,15 +144,19 @@ function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
   const pixelEl = ds.elements.x7fe00010;
   if (!pixelEl) return [];
   const ts = parsed.ts;
-  if (!UNCOMPRESSED.has(ts) || pixelEl.encapsulatedPixelData) {
+  const codec: CodecKind | null = TRANSFER_SYNTAX_CODECS[ts] ?? null;
+  if (!codec && (!UNCOMPRESSED.has(ts) || pixelEl.encapsulatedPixelData)) {
     throw new Error(
-      `"${name}" uses a compressed transfer syntax (${ts}). Only uncompressed DICOM is supported – export uncompressed or convert (e.g. "gdcmconv --raw").`,
+      `"${name}" uses a compression that is not supported yet (transfer syntax ${ts}). Supported: uncompressed, ${Object.values(CODEC_NAMES)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join(', ')}. Convert e.g. with "gdcmconv --raw".`,
     );
   }
   const rows = ds.uint16('x00280010') ?? 0;
   const cols = ds.uint16('x00280011') ?? 0;
   if (!rows || !cols) return [];
   const bits = ds.uint16('x00280100') ?? 16;
+  const bitsStored = ds.uint16('x00280101') ?? bits;
   const signed = (ds.uint16('x00280103') ?? 0) === 1;
   const spp = ds.uint16('x00280002') ?? 1;
   if (spp !== 1) return []; // colour images (e.g. screenshots) are skipped
@@ -194,6 +207,20 @@ function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
     if (pfPos) position = [pfPos[0], pfPos[1], pfPos[2]];
     else if (topPos && frames === 1) position = [topPos[0], topPos[1], topPos[2]];
     const offset = pixelEl.dataOffset + f * frameBytes;
+    const rescale = (res: Float32Array) => {
+      for (let i = 0; i < res.length; i++) {
+        const v = res[i] * slope + inter;
+        res[i] = invert ? -v : v;
+      }
+      return res;
+    };
+    const meta: FrameMeta = { rows, cols, bitsAllocated: bits, bitsStored, signed };
+    const decodeCompressed = async (pool: DecodePool | null) => {
+      // copy: the worker takes ownership of the bytes
+      const frame = encapsulatedFrame(ds, pixelEl, f, frames, codec!).slice();
+      const stored = pool ? await pool.decode(codec!, frame, meta) : await decodeFrame(codec!, frame, meta);
+      return rescale(stored);
+    };
     const decode = () => {
       const n = rows * cols;
       const res = new Float32Array(n);
@@ -208,11 +235,7 @@ function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
       } else {
         throw new Error(`Unsupported BitsAllocated=${bits}`);
       }
-      for (let i = 0; i < n; i++) {
-        const v = res[i] * slope + inter;
-        res[i] = invert ? -v : v;
-      }
-      return res;
+      return rescale(res);
     };
     out.push({
       seriesUid,
@@ -221,7 +244,8 @@ function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
       rows,
       cols,
       pixels: null,
-      decode,
+      decode: codec ? decodeCompressed : decode,
+      codec,
       rowDir,
       colDir,
       pixelSpacing: [spacing[0], spacing[1] ?? spacing[0]],
@@ -232,6 +256,16 @@ function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
     });
   }
   return out;
+}
+
+/** Bytes of one frame of encapsulated (compressed) pixel data. */
+function encapsulatedFrame(ds: DataSet, el: dicomParser.Element, f: number, frames: number, codec: CodecKind): Uint8Array {
+  const frags = el.fragments ?? [];
+  if (frames === 1) return dicomParser.readEncapsulatedPixelDataFromFragments(ds, el, 0, frags.length);
+  if ((el.basicOffsetTable?.length ?? 0) === frames) return dicomParser.readEncapsulatedImageFrame(ds, el, f);
+  if (frags.length === frames) return dicomParser.readEncapsulatedPixelDataFromFragments(ds, el, f, 1);
+  if (codec.startsWith('jpeg')) return dicomParser.readEncapsulatedImageFrame(ds, el, f, dicomParser.createJPEGBasicOffsetTable(ds, el));
+  throw new Error('Cannot locate the frames of this multi-frame compressed image (no offset table).');
 }
 
 export interface LoadProgress {
@@ -351,9 +385,7 @@ export async function loadDicomFiles(files: File[], progress: LoadProgress): Pro
 
   const data = new Int16Array(dims[0] * dims[1] * dims[2]);
   let clipped = false;
-  for (let k = 0; k < nk; k++) {
-    const sl = series[k * step];
-    const px = sl.decode();
+  const place = (k: number, px: Float32Array) => {
     const kOff = base + k * st[2];
     for (let j = 0; j < nj; j++) {
       const jOff = kOff + j * st[1];
@@ -377,9 +409,33 @@ export async function loadDicomFiles(files: File[], progress: LoadProgress): Pro
         data[jOff + i * st[0]] = v;
       }
     }
-    if (k % 8 === 0) {
-      progress('Building volume', k / nk);
-      await tick();
+  };
+  const compressed = series.find((s) => s.codec)?.codec ?? null;
+  if (!compressed) {
+    for (let k = 0; k < nk; k++) {
+      place(k, (await series[k * step].decode(null)) as Float32Array);
+      if (k % 8 === 0) {
+        progress('Building volume', k / nk);
+        await tick();
+      }
+    }
+  } else {
+    // compressed: decode in parallel workers, a few frames in flight per worker
+    const pool = new DecodePool();
+    const label = `Decompressing ${CODEC_NAMES[compressed]}`;
+    try {
+      let next = 0;
+      let done = 0;
+      const worker = async () => {
+        while (next < nk) {
+          const k = next++;
+          place(k, await series[k * step].decode(pool));
+          if (++done % 4 === 0) progress(label, done / nk);
+        }
+      };
+      await Promise.all(Array.from({ length: pool.size * 2 }, worker));
+    } finally {
+      pool.dispose();
     }
   }
   if (clipped) console.warn('Some voxel values were clipped to the 16-bit range.');

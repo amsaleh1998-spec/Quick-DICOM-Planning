@@ -1,5 +1,5 @@
 import { ArchCurve } from './curve';
-import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, setImplantAxis, setImplantLength } from './implant';
+import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, setApicalDiameter, setImplantAxis, setImplantLength } from './implant';
 import {
   Frame,
   Vec2,
@@ -11,6 +11,7 @@ import {
   dot,
   fromFrame,
   identityFrame,
+  length,
   neg,
   normalize,
   perpendicular,
@@ -19,7 +20,9 @@ import {
   sub,
   toFrame,
 } from './math';
+import { Nerve, createNerve, implantNerveDistance, insertNervePoint } from './nerve';
 import { CropSpec } from './render';
+import { Cut, SEGMENT_PRESETS, Segment, Segmentation } from './segment';
 import { Volume, resampleVolume } from './volume';
 import { MprView } from './views/MprView';
 import { View3D } from './views/View3D';
@@ -29,6 +32,8 @@ import { IS_MAC, Pt, View, newViewState } from './views/View';
 export type Mode = 'mpr' | 'plan';
 export type MprTool = 'navigate' | 'rotate' | 'crop';
 export type Jaw = 'upper' | 'lower';
+/** Segmentation / nerve tools: region growing, separation cut, nerve tracing. */
+export type SegTool = 'grow' | 'cut' | 'nerve';
 
 export interface Measurement {
   id: number;
@@ -102,15 +107,44 @@ export class App {
   hoverMeasurementId: number | null = null;
   /** what right-drag does */
   rightDrag: 'zoom' | 'wl' = 'zoom';
+  /** mouse-wheel events are ignored until then (the SpaceMouse driver also emits wheel events) */
+  wheelBlockedUntil = 0;
+  /** simplified phone UI: touch gestures instead of mouse interactions */
+  touchUi = false;
   /** pointing device: trackpad mode maps two-finger gestures to navigation */
   input: 'mouse' | 'trackpad' = loadInputPreference();
   defaultDiameter = 4;
+  /** new implants are tapered (apex 1 mm narrower than the platform) */
+  defaultTapered = true;
   defaultLength = 10;
   /** new implants copy the axis of the selected implant */
   placeParallel = true;
 
   /** 3D rendering settings */
   vr = { mode: 'surface' as RenderMode, lo: 0, hi: 0 };
+
+  // segmentation & nerve tracing
+  readonly seg = new Segmentation();
+  nerves: Nerve[] = [];
+  /** segment that clicks are added to */
+  activeSegId: number | null = null;
+  /** nerve being traced / edited */
+  activeNerveId: number | null = null;
+  segTool: SegTool | null = null;
+  /** separation cut being drawn (points in the view it was started in) */
+  cutDraft: { view: View; pts: Vec3[] } | null = null;
+  /** half thickness of new cuts (mm); null = through the whole volume */
+  cutDepth: number | null = null;
+  /** 3D: render bone that belongs to no segment */
+  showUnsegmented = true;
+  /** tint segments in the 2D slices */
+  showSegOverlay = true;
+  /** draw the blue panoramic curve (+ slab bounds, R/L) in the axial plan view */
+  showCurveAxial = true;
+  /** draw the blue curve / level / slab guide lines in the cross-sections */
+  showCurveCross = false;
+  /** nerve points added in this session (for undo) */
+  private nerveHistory: Vec3[] = [];
 
   activeView: View | null = null;
   readonly mprViews: MprView[];
@@ -125,6 +159,9 @@ export class App {
   onStateChange: () => void = () => {};
   onWindowChange: () => void = () => {};
   onCursor: (text: string) => void = () => {};
+  onStatus: (msg: string, error?: boolean) => void = () => {};
+  /** show / hide a busy overlay (null hides it) */
+  onBusy: (text: string | null) => void = () => {};
 
   private renderPending = false;
   private uiPending = false;
@@ -187,6 +224,13 @@ export class App {
     this.focusC = 0;
     this.panoOffset = 0;
     this.tangAngle = 0;
+    this.seg.reset(vol);
+    this.nerves = [];
+    this.activeSegId = null;
+    this.activeNerveId = null;
+    this.segTool = null;
+    this.cutDraft = null;
+    this.nerveHistory = [];
     this.fitAll();
     this.onWindowChange();
     this.changed();
@@ -313,6 +357,19 @@ export class App {
     const focus = this.focusC - min[2] - O2[2];
     const { s, selectedId, wl } = this;
     const vr = { ...this.vr };
+    const tCrop = (c: CropSpec | null): CropSpec | null =>
+      c && { origin: toNew(c.origin), frame: c.frame.map(dirToNew) as Frame, min: c.min, max: c.max };
+    const segments: Segment[] = this.seg.segments.map((g) => ({
+      ...g,
+      seeds: g.seeds.map((d) => ({ ...d, p: toNew(d.p), crop: tCrop(d.crop) })),
+    }));
+    const cuts: Cut[] = this.seg.cuts.map((c) =>
+      c.kind === 'plane'
+        ? { ...c, pts: c.pts.map(toNew), u: dirToNew(c.u), v: dirToNew(c.v), n: dirToNew(c.n) }
+        : { ...c, O: toNew(c.O), F: c.F.map(dirToNew) as Frame },
+    );
+    const nerves = this.nerves.map((n) => ({ ...n, pts: n.pts.map(toNew) }));
+    const { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth } = this;
 
     this.setVolume(nv);
     this.X = X2;
@@ -324,6 +381,8 @@ export class App {
     this.focusC = focus;
     this.wl = wl;
     this.vr = vr;
+    Object.assign(this, { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth });
+    this.restoreSegmentation(segments, cuts, nerves);
     this.onWindowChange();
     this.fitAll();
     this.changed();
@@ -343,6 +402,8 @@ export class App {
   startDrawing() {
     this.drawing = [];
     this.placing = null;
+    this.segTool = null;
+    this.cutDraft = null;
     this.changed();
   }
 
@@ -391,9 +452,10 @@ export class App {
     return this.s + (k - 1) * this.crossSpacing;
   }
 
-  moveAlongCurve(dir: number) {
+  /** Move the cross-sections along the curve by `step` mm (default: the cross-section spacing). */
+  moveAlongCurve(dir: number, step = this.crossSpacing) {
     if (!this.curve) return;
-    this.s = clamp(this.s + dir * this.crossSpacing, 0, this.curve.length);
+    this.s = clamp(this.s + dir * step, 0, this.curve.length);
     this.changed();
   }
 
@@ -434,6 +496,8 @@ export class App {
     this.placing = jaw;
     this.ruler = false;
     this.drawing = null;
+    this.segTool = null;
+    this.cutDraft = null;
     this.changed();
   }
 
@@ -454,6 +518,7 @@ export class App {
       axis = sameJaw ? ref.axis : neg(ref.axis);
     }
     const imp = createImplant(w, normalize(axis), this.defaultDiameter, this.defaultLength);
+    if (this.defaultTapered) setApicalDiameter(imp, Math.round((imp.diameter - 1) * 10) / 10);
     if (sameJaw && ref?.abutment) imp.abutment = { ...ref.abutment };
     if (sameJaw && ref) imp.showProstheticAxis = ref.showProstheticAxis;
     this.implants.push(imp);
@@ -628,6 +693,285 @@ export class App {
     return JSON.stringify([this.implants, this.selectedId, hasAb ? [this.curve?.ctrl, this.frame] : 0]);
   }
 
+  // ---- segmentation -----------------------------------------------------------
+
+  /** Switch the segmentation / nerve tool (null = off). */
+  setSegTool(t: SegTool | null) {
+    this.cutDraft = null;
+    this.segTool = t;
+    if (t) {
+      this.cancelPendingMeasurement();
+      this.ruler = false;
+      this.placing = null;
+      this.drawing = null;
+    }
+    this.changed();
+  }
+
+  activeSegment(): Segment | null {
+    return this.seg.segmentById(this.activeSegId);
+  }
+
+  /** Create a segment from a preset (index into SEGMENT_PRESETS) and wait for a click on it. */
+  newSegment(preset: number) {
+    if (!this.vol) return;
+    const p = SEGMENT_PRESETS[preset] ?? SEGMENT_PRESETS[SEGMENT_PRESETS.length - 1];
+    const seg = this.seg.addSegment(p.name, p.color);
+    if (!seg) {
+      this.onStatus('Too many segments – delete some first.', true);
+      return;
+    }
+    this.activeSegId = seg.id;
+    this.setSegTool('grow');
+    const tip =
+      p.name === 'Tooth'
+        ? 'raise the lower 3D threshold until the tooth stands out from the bone'
+        : p.name === 'Implant'
+          ? 'raise the lower 3D threshold until only the metal remains'
+          : 'set the 3D thresholds first so it is separated from its neighbours';
+    this.onStatus(`${seg.name}: click on it in the 3D view or in any slice (${tip}).`);
+  }
+
+  selectSegment(id: number | null) {
+    this.activeSegId = id;
+    this.changed();
+  }
+
+  /** Run a slow job behind the busy overlay, then refresh. */
+  private busy(text: string, fn: () => void) {
+    this.onBusy(text);
+    setTimeout(() => {
+      try {
+        fn();
+      } catch (e) {
+        console.error(e);
+        this.onStatus((e as Error).message, true);
+      } finally {
+        this.onBusy(null);
+        this.changed();
+      }
+    }, 30);
+  }
+
+  /** Region-grow the active segment from world point w with the current 3D thresholds. */
+  growAt(w: Vec3) {
+    if (!this.vol) return;
+    let seg = this.activeSegment();
+    if (!seg) {
+      seg = this.seg.addSegment('Segment');
+      if (!seg) return;
+      this.activeSegId = seg.id;
+    }
+    const target = seg;
+    const lo = this.vr.lo;
+    const hi = Math.max(this.vr.lo + 1, this.vr.hi);
+    const c = this.cropSpec();
+    const crop: CropSpec | null =
+      c && !this.cropIsFull()
+        ? { origin: [...c.origin] as Vec3, frame: c.frame.map((a) => [...a]) as Frame, min: [...c.min] as Vec3, max: [...c.max] as Vec3 }
+        : null;
+    this.busy(`Segmenting ${target.name}…`, () => {
+      const r = this.seg.grow(target, w, lo, hi, crop);
+      if (r.added) {
+        const cm3 = (target.voxels * this.seg.voxelVolume) / 1000;
+        this.onStatus(`${target.name}: ${cm3.toFixed(2)} cm³. Click more parts to add them, or draw a cut if it leaked into a neighbour.`);
+      } else this.onStatus(r.message ?? 'Nothing was added.', true);
+    });
+  }
+
+  /** Grow every segment again (after cuts, deletions or threshold changes). */
+  rebuildSegments(text = 'Updating segmentation…') {
+    this.busy(text, () => this.seg.rebuild());
+  }
+
+  deleteSegment(id: number) {
+    this.seg.removeSegment(id);
+    if (this.activeSegId === id) this.activeSegId = null;
+    if (this.segTool === 'grow' && !this.activeSegment()) this.segTool = null;
+    this.rebuildSegments();
+  }
+
+  /** Take back the last click of a segment. */
+  undoSegmentClick(id: number) {
+    const s = this.seg.segmentById(id);
+    if (!s || !s.seeds.length) return;
+    let last = 0;
+    s.seeds.forEach((d, i) => d.order > s.seeds[last].order && (last = i));
+    s.seeds.splice(last, 1);
+    this.rebuildSegments();
+  }
+
+  /** Remove all seeds of a segment (keeps the entry, ready for new clicks). */
+  clearSegment(id: number) {
+    const s = this.seg.segmentById(id);
+    if (!s) return;
+    s.seeds = [];
+    this.rebuildSegments();
+  }
+
+  /** Re-grow a segment with the current 3D thresholds. */
+  regrowSegment(id: number) {
+    const s = this.seg.segmentById(id);
+    if (!s || !s.seeds.length) return;
+    const hi = Math.max(this.vr.lo + 1, this.vr.hi);
+    for (const d of s.seeds) {
+      d.lo = this.vr.lo;
+      d.hi = hi;
+    }
+    this.rebuildSegments(`Re-growing ${s.name}…`);
+  }
+
+  setSegmentVisible(id: number, visible: boolean) {
+    const s = this.seg.segmentById(id);
+    if (!s) return;
+    s.visible = visible;
+    this.changed();
+  }
+
+  startCut() {
+    if (!this.vol) return;
+    this.setSegTool('cut');
+    this.onStatus('Click points along the gap in a slice or in the panoramic (crossing the contact), double-click or Enter to finish.');
+  }
+
+  addCutPoint(view: View, w: Vec3) {
+    if (!this.cutDraft || this.cutDraft.view !== view) this.cutDraft = { view, pts: [] };
+    const pts = this.cutDraft.pts;
+    // the clicks of a double click land on the same spot: keep one point
+    const last = pts[pts.length - 1];
+    if (last && length(sub(w, last)) < 3 * view.vs.scale) return;
+    pts.push(w);
+    this.requestRender();
+  }
+
+  finishCut() {
+    const d = this.cutDraft;
+    this.cutDraft = null;
+    if (!d || d.pts.length < 2) {
+      this.onStatus('A cut needs at least two points.', true);
+      this.changed();
+      return;
+    }
+    const c = d.view.makeCut(d.pts, this.cutDepth);
+    if (!c) return;
+    this.seg.addCut(c);
+    this.segTool = null;
+    this.rebuildSegments('Applying cut…');
+  }
+
+  deleteCut(id: number) {
+    this.seg.removeCut(id);
+    this.rebuildSegments();
+  }
+
+  /** Replace segments, cuts and nerves (project load, resampling) and rebuild the labels. */
+  restoreSegmentation(segments: Segment[], cuts: Cut[], nerves: Nerve[]) {
+    this.seg.restore(segments, cuts);
+    this.nerves = nerves;
+    if (!this.seg.segmentById(this.activeSegId)) this.activeSegId = null;
+    if (!nerves.some((n) => n.id === this.activeNerveId)) this.activeNerveId = null;
+    if (segments.some((s) => s.seeds.length)) this.rebuildSegments('Rebuilding segmentation…');
+    else this.changed();
+  }
+
+  // ---- nerve tracing ------------------------------------------------------------
+
+  activeNerve(): Nerve | null {
+    return this.nerves.find((n) => n.id === this.activeNerveId) ?? null;
+  }
+
+  /** Start (or continue) tracing the nerve of one side. */
+  traceNerve(side: 'right' | 'left') {
+    if (!this.vol) return;
+    let n = this.nerves.find((x) => x.side === side);
+    if (!n) {
+      n = createNerve(side);
+      this.nerves.push(n);
+    }
+    n.visible = true;
+    this.activeNerveId = n.id;
+    this.setSegTool('nerve');
+    this.onStatus(`${n.name}: click the centre of the canal on cross-sections or the panoramic, in any order (mental foramen → mandibular foramen).`);
+  }
+
+  selectNerve(id: number | null) {
+    this.activeNerveId = id;
+    this.changed();
+  }
+
+  /** Add a point to the active nerve; returns its index (or -1). */
+  addNervePoint(w: Vec3): number {
+    const n = this.activeNerve();
+    if (!n) return -1;
+    const i = insertNervePoint(n.pts, w);
+    this.nerveHistory.push(w);
+    this.changed();
+    return i;
+  }
+
+  /** Move a nerve control point (keeps the undo history pointing at it). */
+  moveNervePoint(n: Nerve, idx: number, w: Vec3) {
+    const old = n.pts[idx];
+    n.pts[idx] = w;
+    const h = this.nerveHistory.indexOf(old);
+    if (h >= 0) this.nerveHistory[h] = w;
+    this.requestRender();
+  }
+
+  deleteNervePoint(id: number, idx: number) {
+    const n = this.nerves.find((x) => x.id === id);
+    if (!n) return;
+    n.pts.splice(idx, 1);
+    this.changed();
+  }
+
+  /** Remove the most recently added point that still exists. */
+  undoNervePoint() {
+    while (this.nerveHistory.length) {
+      const p = this.nerveHistory.pop()!;
+      for (const n of this.nerves) {
+        const i = n.pts.indexOf(p);
+        if (i >= 0) {
+          n.pts.splice(i, 1);
+          this.changed();
+          return;
+        }
+      }
+    }
+    const n = this.activeNerve();
+    if (n?.pts.length) {
+      n.pts.pop();
+      this.changed();
+    }
+  }
+
+  deleteNerve(id: number) {
+    this.nerves = this.nerves.filter((n) => n.id !== id);
+    if (this.activeNerveId === id) {
+      this.activeNerveId = null;
+      if (this.segTool === 'nerve') this.segTool = null;
+    }
+    this.changed();
+  }
+
+  /** Distance between the implant and each traced nerve (surface to surface, mm). */
+  nerveDistances(imp: Implant): { nerve: Nerve; d: number }[] {
+    return this.nerves.filter((n) => n.pts.length >= 2).map((nerve) => ({ nerve, d: implantNerveDistance(imp, nerve) }));
+  }
+
+  /** Changes that affect segmentation / nerve drawing. */
+  segKey(): string {
+    const s = this.seg;
+    return JSON.stringify([
+      s.version,
+      s.segments.map((g) => [g.id, g.visible, g.color, g.voxels]),
+      s.cuts.map((c) => c.id),
+      this.showSegOverlay,
+      this.showUnsegmented,
+      this.nerves.map((n) => [n.pts, n.diameter, n.visible]),
+    ]);
+  }
+
   // ---- measurements -----------------------------------------------------------
 
   addMeasurement(kind: 'plane' | 'pano', w: Vec3): Measurement {
@@ -673,6 +1017,8 @@ export class App {
     if (on) {
       this.placing = null;
       this.drawing = null;
+      this.segTool = null;
+      this.cutDraft = null;
     }
     this.changed();
   }
@@ -717,8 +1063,10 @@ export class App {
     }
     const v = this.vol.sample(w, NaN);
     const f = toFrame(w, this.O, this.frame);
+    const segName = this.seg.segmentById(this.seg.labelAt(w[0], w[1], w[2]))?.name;
     this.onCursor(
-      `${view.title}  ·  x ${f[0].toFixed(1)}  y ${f[1].toFixed(1)}  z ${f[2].toFixed(1)} mm  ·  value ${Number.isNaN(v) ? '—' : Math.round(v)}`,
+      `${view.title}  ·  x ${f[0].toFixed(1)}  y ${f[1].toFixed(1)}  z ${f[2].toFixed(1)} mm  ·  value ${Number.isNaN(v) ? '—' : Math.round(v)}` +
+        (segName ? `  ·  ${segName}` : ''),
     );
   }
 }
