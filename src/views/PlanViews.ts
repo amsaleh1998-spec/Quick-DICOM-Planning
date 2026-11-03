@@ -1,9 +1,11 @@
-import type { App } from '../app';
+import type { App, SegTool } from '../app';
+import type { NewCut } from '../segment';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, Cylinder, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, platformOf } from '../implant';
-import { Vec2, Vec3, add, addScaled, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, toFrame } from '../math';
+import { Vec2, Vec3, add, addScaled, clamp, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, toFrame } from '../math';
 import { CropSpec, SlabSpec, sampleLine } from '../render';
-import { Plane, PlaneView, Pt, View, ViewState, drawLabel } from './View';
+import { Plane, PlaneView, Pt, ScrollInfo, View, ViewState, drawLabel } from './View';
 import { ImplantEditor, projectedRadialAxial } from './implantEdit';
+import { composeSegmentation, drawNervesProjected } from './overlays';
 
 const CURVE_COLOR = '#4fb3ff';
 const CROSS_COLOR = '#c38cff';
@@ -19,6 +21,14 @@ export class PlanAxialView extends PlaneView {
   constructor(app: App) {
     super(app, 'Axial', '#e8524a');
     this.implantsEditable = true;
+    this.curveBtn = curveToggle(app, this.el, 'axial view', () => app.showCurveAxial, (v) => (app.showCurveAxial = v));
+  }
+
+  private curveBtn?: HTMLButtonElement;
+
+  override render() {
+    syncCurveToggle(this.curveBtn, this.app, this.app.showCurveAxial);
+    super.render();
   }
 
   protected plane(): Plane | null {
@@ -47,6 +57,21 @@ export class PlanAxialView extends PlaneView {
     return [s[0], s[1]];
   }
 
+  /** control point hit radius (px): bigger for fingers */
+  private get hitR() {
+    return this.app.touchUi ? 18 : 8;
+  }
+
+  /** Touch: dragging starts on a curve control point (otherwise a swipe changes the level). */
+  protected touchDragAt(p: Pt): boolean {
+    const app = this.app;
+    if (app.drawing || app.placing || !app.curve || !app.showCurveAxial) return false;
+    return app.curve.ctrl.some((c) => {
+      const s = this.fromAB(c);
+      return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
+    });
+  }
+
   protected onLeftDown(p: Pt): boolean {
     const app = this.app;
     if (app.placing) {
@@ -58,10 +83,10 @@ export class PlanAxialView extends PlaneView {
       app.changed();
       return false;
     }
-    if (app.curve) {
+    if (app.curve && app.showCurveAxial) {
       const i = app.curve.ctrl.findIndex((c) => {
         const s = this.fromAB(c);
-        return Math.hypot(s[0] - p[0], s[1] - p[1]) < 8;
+        return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
       });
       if (i >= 0) {
         this.dragPt = i;
@@ -105,9 +130,9 @@ export class PlanAxialView extends PlaneView {
       return;
     }
     this.hover = null;
-    if (app.curve && app.curve.ctrl.some((c) => {
+    if (app.curve && app.showCurveAxial && app.curve.ctrl.some((c) => {
       const s = this.fromAB(c);
-      return Math.hypot(s[0] - p[0], s[1] - p[1]) < 8;
+      return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
     })) {
       this.el.style.cursor = 'grab';
       return;
@@ -129,12 +154,12 @@ export class PlanAxialView extends PlaneView {
       app.finishCurve();
       return;
     }
-    // double-click on a control point removes it; on the curve inserts one
-    if (!app.curve) return;
+    // double-click on a control point removes it; on the curve inserts one (not while the curve is hidden)
+    if (!app.curve || !app.showCurveAxial) return;
     const ctrl = app.curve.ctrl.slice();
     const i = ctrl.findIndex((c) => {
       const s = this.fromAB(c);
-      return Math.hypot(s[0] - p[0], s[1] - p[1]) < 8;
+      return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
     });
     if (i >= 0) {
       if (ctrl.length > 2) {
@@ -167,11 +192,22 @@ export class PlanAxialView extends PlaneView {
     this.app.changed();
   }
 
+  /** Scroll bar: axial level within the crop box (top = superior). */
+  protected scrollInfo(): ScrollInfo | null {
+    const { min, max } = this.app.crop;
+    return { top: max[2], bottom: min[2], value: this.app.focusC };
+  }
+
+  protected setScroll(v: number) {
+    this.app.focusC = v;
+    this.app.changed();
+  }
+
   protected drawOverlay(o: CanvasRenderingContext2D) {
     const app = this.app;
     this.drawImplantAxes(o);
     const curve = app.curve;
-    if (curve) {
+    if (curve && app.showCurveAxial) {
       const poly = curve.polyline();
       o.strokeStyle = CURVE_COLOR;
       o.lineWidth = 2;
@@ -222,7 +258,9 @@ export class PlanAxialView extends PlaneView {
         o.fill();
         o.stroke();
       }
-      // cross-section positions
+    }
+    if (curve) {
+      // cross-section positions (kept when the blue curve lines are hidden)
       for (let k = 0; k < 3; k++) {
         const s = app.crossS(k);
         const cp = curve.at(s);
@@ -236,10 +274,12 @@ export class PlanAxialView extends PlaneView {
         o.lineTo(b[0], b[1]);
         o.stroke();
       }
-      const sEnd = this.fromAB(curve.at(0).p);
-      const eEnd = this.fromAB(curve.at(curve.length).p);
-      drawLabel(o, 'R', sEnd[0] - 6, sEnd[1] + 18, CURVE_COLOR, 'center');
-      drawLabel(o, 'L', eEnd[0] + 6, eEnd[1] + 18, CURVE_COLOR, 'center');
+      if (app.showCurveAxial) {
+        const sEnd = this.fromAB(curve.at(0).p);
+        const eEnd = this.fromAB(curve.at(curve.length).p);
+        drawLabel(o, 'R', sEnd[0] - 6, sEnd[1] + 18, CURVE_COLOR, 'center');
+        drawLabel(o, 'L', eEnd[0] + 6, eEnd[1] + 18, CURVE_COLOR, 'center');
+      }
     }
     // tangential plane trace
     const tp = app.tangentialPlane();
@@ -278,12 +318,42 @@ export class PlanAxialView extends PlaneView {
         o.arc(s[0], s[1], 4, 0, Math.PI * 2);
         o.fill();
       }
-      drawLabel(o, 'Click to add points along the arch (patient right → left). Double-click / Enter to finish, Esc to cancel.', 8, this.h - 10, '#ffd34f');
+      drawLabel(
+        o,
+        app.touchUi
+          ? `Tap along the arch, patient right → left (${app.drawing.length} point${app.drawing.length === 1 ? '' : 's'})`
+          : 'Click to add points along the arch (patient right → left). Double-click / Enter to finish, Esc to cancel.',
+        8,
+        this.h - 10,
+        '#ffd34f',
+      );
     } else if (!curve) {
-      drawLabel(o, 'Use “Draw panoramic curve” and click along the arch.', 8, this.h - 10, '#ffd34f');
+      drawLabel(o, app.touchUi ? 'Tap “Draw curve”, then tap along the arch' : 'Use “Draw panoramic curve” and click along the arch.', 8, this.h - 10, '#ffd34f');
     }
     drawLabel(o, `level ${app.focusC.toFixed(1)} mm`, this.w - 34, 16, '#9fb0c8', 'right');
   }
+}
+
+/** In-view button that shows / hides the blue panoramic-curve lines in that view only. */
+function curveToggle(app: App, el: HTMLElement, where: string, get: () => boolean, set: (v: boolean) => void) {
+  const b = document.createElement('button');
+  b.className = 'view-toggle';
+  b.textContent = 'Curve';
+  b.title = `Show / hide the blue panoramic-curve lines in the ${where}`;
+  b.onclick = (e) => {
+    e.stopPropagation();
+    set(!get());
+    b.blur();
+    app.changed();
+  };
+  el.append(b);
+  return b;
+}
+
+function syncCurveToggle(b: HTMLButtonElement | undefined, app: App, on: boolean) {
+  if (!b) return;
+  b.classList.toggle('active', on);
+  b.style.display = app.curve ? '' : 'none';
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +368,14 @@ export class CrossView extends PlaneView {
   ) {
     super(app, `Cross-section ${index + 1}`, index === 1 ? '#ffffff' : CROSS_COLOR, vs);
     this.implantsEditable = true;
+    this.curveBtn = curveToggle(app, this.el, 'cross-sections', () => app.showCurveCross, (v) => (app.showCurveCross = v));
+  }
+
+  private curveBtn?: HTMLButtonElement;
+
+  override render() {
+    syncCurveToggle(this.curveBtn, this.app, this.app.showCurveCross);
+    super.render();
   }
 
   protected emptyMessage() {
@@ -349,8 +427,22 @@ export class CrossView extends PlaneView {
   protected onHover(p: Pt) {
     if (!this.updateHoverCursor(p)) this.el.style.cursor = this.app.placing ? 'crosshair' : '';
   }
+  /** Each wheel notch moves the cross-sections exactly 1 mm along the curve. */
   protected onScroll(dir: number) {
-    this.app.moveAlongCurve(dir);
+    this.app.moveAlongCurve(dir, 1);
+  }
+
+  /** Scroll bar: position of the cross-sections along the curve (top = patient right end). */
+  protected scrollInfo(): ScrollInfo | null {
+    const c = this.app.curve;
+    return c ? { top: 0, bottom: c.length, value: this.app.s } : null;
+  }
+
+  protected setScroll(v: number) {
+    const c = this.app.curve;
+    if (!c) return;
+    this.app.s = clamp(v, 0, c.length);
+    this.app.changed();
   }
 
   protected drawOverlay(o: CanvasRenderingContext2D) {
@@ -360,6 +452,18 @@ export class CrossView extends PlaneView {
     const cp = app.curve!.at(app.crossS(this.index));
     const base = fromFrame([cp.p[0], cp.p[1], app.focusC], app.O, app.frame);
     const s = this.worldToScreen(base, pl)!;
+    if (app.showCurveCross) this.drawCurveGuides(o, s);
+    this.drawImplantAxes(o);
+    drawLabel(o, 'B', 8, this.h / 2 + 4, '#9fb0c8');
+    drawLabel(o, 'L', this.w - 8, this.h / 2 + 4, '#9fb0c8', 'right');
+    const sk = app.crossS(this.index);
+    drawLabel(o, `${sk.toFixed(1)} mm`, this.w - 34, 16, '#9fb0c8', 'right');
+    drawScaleBar(o, this.w, this.h, this.vs.scale);
+  }
+
+  /** Blue guides: curve position (vertical), axial level (horizontal), panoramic slab/slice band. */
+  private drawCurveGuides(o: CanvasRenderingContext2D, s: ArrayLike<number>) {
+    const app = this.app;
     o.strokeStyle = 'rgba(79,179,255,0.55)';
     o.setLineDash([4, 4]);
     o.lineWidth = 1;
@@ -383,12 +487,6 @@ export class CrossView extends PlaneView {
       o.lineTo(xOff(off), this.h);
       o.stroke();
     }
-    this.drawImplantAxes(o);
-    drawLabel(o, 'B', 8, this.h / 2 + 4, '#9fb0c8');
-    drawLabel(o, 'L', this.w - 8, this.h / 2 + 4, '#9fb0c8', 'right');
-    const sk = app.crossS(this.index);
-    drawLabel(o, `${sk.toFixed(1)} mm`, this.w - 34, 16, '#9fb0c8', 'right');
-    drawScaleBar(o, this.w, this.h, this.vs.scale);
   }
 }
 
@@ -455,6 +553,16 @@ export class TangView extends PlaneView {
     app.changed();
   }
 
+  /** Scroll bar: rotation angle 0–360°. */
+  protected scrollInfo(): ScrollInfo | null {
+    return this.plane() ? { top: 0, bottom: 360, value: this.app.tangAngle } : null;
+  }
+
+  protected setScroll(v: number) {
+    this.app.tangAngle = Math.round(clamp(v, 0, 359.9));
+    this.app.changed();
+  }
+
   protected drawOverlay(o: CanvasRenderingContext2D) {
     const app = this.app;
     const pl = this.currentPlane()!;
@@ -513,6 +621,7 @@ export class PanoView extends View {
   constructor(app: App) {
     super(app, 'Panoramic', CURVE_COLOR);
     this.maxPixels = 320_000;
+    this.nervePointDepth = Infinity; // projection: all nerve points are shown
     // Slab / Slice switch inside the view
     this.modeSeg = document.createElement('div');
     this.modeSeg.className = 'view-seg';
@@ -537,6 +646,40 @@ export class PanoView extends View {
     if (!this.app.curve) return null;
     const pr = this.project(w);
     return Math.abs(pr.off - this.app.panoOffset) < 1 ? [pr.x, pr.y] : null;
+  }
+
+  protected supportsTool(_t: SegTool): boolean {
+    return !!this.app.curve;
+  }
+
+  override screenOf(w: Vec3): [number, number, number] | null {
+    if (!this.app.curve) return null;
+    const pr = this.project(w);
+    return [pr.x, pr.y, pr.off - this.app.panoOffset];
+  }
+
+  /** Cut drawn in the panoramic: a curved sheet following the arch (height profile along the curve). */
+  override makeCut(pts: Vec3[], depth: number | null): NewCut | null {
+    const app = this.app;
+    if (!app.curve) return null;
+    return {
+      kind: 'pano',
+      O: [...app.O] as Vec3,
+      F: app.frame.map((a) => [...a]) as [Vec3, Vec3, Vec3],
+      ctrl: app.curve.ctrl.map((c) => [...c] as Vec2),
+      pts: pts.map((w) => [this.project(w).s, toFrame(w, app.O, app.frame)[2]] as Vec2),
+      offset: app.panoOffset,
+      depth,
+    };
+  }
+
+  /** Dragging a nerve point keeps its buccal/lingual position. */
+  protected nervePointAt(p: Pt, old: Vec3): Vec3 | null {
+    const app = this.app;
+    if (!app.curve) return null;
+    const off = this.project(old).off;
+    const cp = app.curve.at(clamp(this.sAt(p[0]), 0, app.curve.length));
+    return fromFrame([cp.p[0] + cp.n[0] * off, cp.p[1] + cp.n[1] * off, this.cAt(p[1])], app.O, app.frame);
   }
 
   /** Distance measured on the developed panoramic surface. */
@@ -649,7 +792,39 @@ export class PanoView extends View {
   }
 
   protected composeExtraKey() {
-    return '';
+    return this.app.segKey();
+  }
+
+  /** Segment tint and cut traces on the panoramic surface (at the slice position). */
+  protected composePixels(rgba: Uint8ClampedArray, w: number, h: number) {
+    const app = this.app;
+    const curve = app.curve;
+    if (!curve || (!app.seg.cuts.length && !app.seg.segments.some((s) => s.voxels))) return;
+    const k = 1 / this.imgScale;
+    const F = app.frame;
+    const off = app.panoOffset;
+    // world position of every column at height 0, and the height of every row
+    const base = new Float64Array(w * 3);
+    const ok = new Uint8Array(w);
+    for (let i = 0; i < w; i++) {
+      const s = this.sAt((i + 0.5) * k);
+      if (s < 0 || s > curve.length) continue;
+      const cp = curve.at(s);
+      const b = fromFrame([cp.p[0] + cp.n[0] * off, cp.p[1] + cp.n[1] * off, 0], app.O, F);
+      base.set(b, i * 3);
+      ok[i] = 1;
+    }
+    const c0 = this.cAt(0.5 * k);
+    const dc = -this.vs.scale * k;
+    const z = F[2];
+    composeSegmentation(app, rgba, w, h, (i, j, out) => {
+      if (!ok[i]) return false;
+      const c = c0 + dc * j;
+      out[0] = base[i * 3] + z[0] * c;
+      out[1] = base[i * 3 + 1] + z[1] * c;
+      out[2] = base[i * 3 + 2] + z[2] * c;
+      return true;
+    });
   }
 
   // ---- interaction --------------------------------------------------------
@@ -728,6 +903,11 @@ export class PanoView extends View {
     this.app.moveAlongCurve(dir);
   }
 
+  /** Touch: the cross-section markers follow the finger (swipe right = move right). */
+  protected onTouchScrollH(dir: number) {
+    this.app.moveAlongCurve(-dir);
+  }
+
   protected onScroll(dir: number, _p: Pt, e: WheelEvent) {
     if (e.altKey) {
       this.app.moveAlongCurve(dir);
@@ -735,6 +915,16 @@ export class PanoView extends View {
     }
     // wheel up = buccal, wheel down = lingual (moves the panoramic slice position)
     this.app.panoOffset = Math.round((this.app.panoOffset - dir * 0.5) * 10) / 10;
+    this.app.changed();
+  }
+
+  /** Scroll bar: panoramic slice position, ±15 mm (top = buccal). */
+  protected scrollInfo(): ScrollInfo | null {
+    return this.app.curve ? { top: 15, bottom: -15, value: this.app.panoOffset } : null;
+  }
+
+  protected setScroll(v: number) {
+    this.app.panoOffset = Math.round(clamp(v, -15, 15) * 2) / 2;
     this.app.changed();
   }
 
@@ -813,6 +1003,7 @@ export class PanoView extends View {
       const ymin = Math.min(a.y, b.y) - r * 0.3;
       if (!t || ymin < t.y) tops.set(imp.id, { x: (a.x + b.x) / 2, y: ymin });
     }
+    drawNervesProjected(app, o, (w) => this.project(w), this.vs.scale);
     this.editor.draw(o);
     for (const imp of app.implants) {
       const t = tops.get(imp.id)!;
