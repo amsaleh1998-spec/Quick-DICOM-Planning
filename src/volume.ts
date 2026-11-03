@@ -3,12 +3,21 @@ import { Frame, Vec3, fromFrame } from './math';
 let nextVolumeId = 1;
 
 export interface VolumeInfo {
+  /** DICOM person name: Last^First^Middle */
   patientName?: string;
+  patientId?: string;
+  birthDate?: string;
+  sex?: string;
   seriesDescription?: string;
   studyDate?: string;
   modality?: string;
+  institution?: string;
+  manufacturer?: string;
+  model?: string;
   source: string;
   defaultWindow?: { center: number; width: number };
+  /** all attributes of the series' first file, for the DICOM tag viewer */
+  meta?: import('./dicomMeta').MetaEntry[];
 }
 
 /**

@@ -10,6 +10,7 @@
     <div id="app">
       <header id="toolbar">
         <div class="brand">Quick&nbsp;DICOM&nbsp;Planning</div>
+        <div id="patient-badge" class="patient-badge hidden" title="Patient of the open scan"></div>
         <div class="group">
           <button id="btn-open" title="Select one or more DICOM files">Open files</button>
           <button id="btn-open-folder" title="Select a folder containing a DICOM series">Open folder</button>
@@ -57,8 +58,17 @@
       <div id="main">
         <aside id="sidebar">
           <section id="panel-info" class="panel">
+            <h3>Patient</h3>
+            <div id="patient-fields" class="hidden">
+              <label class="field">Last name <input id="pt-last" type="text" maxlength="64" autocomplete="off" /></label>
+              <label class="field">First name <input id="pt-first" type="text" maxlength="64" autocomplete="off" /></label>
+              <div id="pt-details" class="small muted"></div>
+            </div>
             <h3>Volume</h3>
             <div id="vol-info" class="muted">Open a DICOM series (files or folder, or drag &amp; drop) or load the demo volume.</div>
+            <div class="row">
+              <button id="btn-tags" class="hidden" title="Show every DICOM attribute of the series">DICOM tags</button>
+            </div>
           </section>
 
           <section id="panel-mpr" class="panel">

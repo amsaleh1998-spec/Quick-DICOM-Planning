@@ -2,6 +2,7 @@ import * as dicomParser from 'dicom-parser';
 import type { DataSet } from 'dicom-parser';
 import { Vec3, cross, dot, normalize } from './math';
 import { Volume, VolumeInfo } from './volume';
+import { extractMeta } from './dicomMeta';
 
 const UNCOMPRESSED = new Set([
   '1.2.840.10008.1.2', // implicit VR little endian
@@ -26,6 +27,8 @@ interface Slice {
   sliceThickness: number;
   spacingBetween: number;
   info: VolumeInfo;
+  /** parsed data set (for the metadata viewer) */
+  ds: DataSet;
 }
 
 function str(ds: DataSet, tag: string): string | undefined {
@@ -164,9 +167,15 @@ function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
   const info: VolumeInfo = {
     source: name,
     patientName: str(ds, 'x00100010'),
+    patientId: str(ds, 'x00100020'),
+    birthDate: str(ds, 'x00100030'),
+    sex: str(ds, 'x00100040'),
     seriesDescription: str(ds, 'x0008103e'),
     studyDate: str(ds, 'x00080020'),
     modality: str(ds, 'x00080060'),
+    institution: str(ds, 'x00080080'),
+    manufacturer: str(ds, 'x00080070'),
+    model: str(ds, 'x00081090'),
     defaultWindow: wc !== undefined && ww !== undefined && ww > 1 ? { center: wc, width: ww } : undefined,
   };
 
@@ -219,6 +228,7 @@ function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
       sliceThickness: thickness,
       spacingBetween: between,
       info,
+      ds,
     });
   }
   return out;
@@ -373,8 +383,15 @@ export async function loadDicomFiles(files: File[], progress: LoadProgress): Pro
     }
   }
   if (clipped) console.warn('Some voxel values were clipped to the 16-bit range.');
+  let meta: VolumeInfo['meta'];
+  try {
+    meta = extractMeta(series[0].ds);
+  } catch (e) {
+    console.warn('Could not read DICOM metadata', e);
+  }
   const info = {
     ...ref.info,
+    meta,
     source: `${series.length} slices${step > 1 ? ` (downsampled ×${step})` : ''}${ignored ? ` · ${ignored} other file${ignored > 1 ? 's' : ''} ignored` : ''}`,
   };
   return new Volume(dims, spacing, data, info);

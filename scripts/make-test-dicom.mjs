@@ -41,6 +41,31 @@ function el(group, elem, vr, value) {
 }
 const us = (v) => new Uint16Array([v]);
 
+/** Sequence with defined length (items given as encoded data sets). */
+function seq(group, elem, items) {
+  const enc = items.map((ds) => {
+    const h = Buffer.alloc(8);
+    h.writeUInt16LE(0xfffe, 0);
+    h.writeUInt16LE(0xe000, 2);
+    h.writeUInt32LE(ds.length, 4);
+    return Buffer.concat([h, ds]);
+  });
+  const body = Buffer.concat(enc);
+  if (raw === 'implicit') {
+    const h = Buffer.alloc(8);
+    h.writeUInt16LE(group, 0);
+    h.writeUInt16LE(elem, 2);
+    h.writeUInt32LE(body.length, 4);
+    return Buffer.concat([h, body]);
+  }
+  const h = Buffer.alloc(12);
+  h.writeUInt16LE(group, 0);
+  h.writeUInt16LE(elem, 2);
+  h.write('SQ', 4, 'latin1');
+  h.writeUInt32LE(body.length, 8);
+  return Buffer.concat([h, body]);
+}
+
 function elImplicit(group, elem, vr, value) {
   let bytes;
   if (typeof value === 'string') {
@@ -85,7 +110,18 @@ for (let k = 0; k < slices; k++) {
   const ds = Buffer.concat([
     el(0x0008, 0x0060, 'CS', 'CT'),
     el(0x0008, 0x103e, 'LO', 'Synthetic test series'),
+    el(0x0008, 0x0070, 'LO', 'Synthetic Imaging Inc.'),
+    el(0x0008, 0x1090, 'LO', 'CBCT-Test 3000'),
+    el(0x0009, 0x0010, 'LO', 'PRIVATE CREATOR'),
+    el(0x0009, 0x1001, 'LO', 'private value'),
+    seq(0x0008, 0x1140, [
+      Buffer.concat([el(0x0008, 0x1150, 'UI', '1.2.840.10008.5.1.4.1.1.2'), el(0x0008, 0x1155, 'UI', `${seriesUid}.99`)]),
+    ]),
     el(0x0010, 0x0010, 'PN', 'Test^Loader'),
+    el(0x0010, 0x0020, 'LO', 'PAT-0042'),
+    el(0x0010, 0x0030, 'DA', '19800615'),
+    el(0x0010, 0x0040, 'CS', 'F'),
+    el(0x0018, 0x0060, 'DS', '90'),
     el(0x0018, 0x0050, 'DS', String(dz)),
     el(0x0020, 0x000e, 'UI', seriesUid),
     el(0x0020, 0x0013, 'IS', String(k + 1)),
