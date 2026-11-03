@@ -13,6 +13,13 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   position and the volume is re-oriented to patient axes (LPS).
 - "Demo volume" generates a synthetic mandible (with a missing molar and a slightly tilted occlusal plane) to try the app.
 
+**Patient & DICOM metadata**
+- The patient's last and first name (from the DICOM Patient's Name, `LAST^FIRST`) are shown in the toolbar and in the
+  Patient panel, with ID, birth date and sex. The names can be edited (e.g. for anonymised scans) and are saved with
+  the project and used for the project file name.
+- *DICOM tags* opens every attribute of the series' first file – tag, name, VR, value – with search (also inside
+  sequences), expandable sequences and *Copy all*.
+
 **MPR / Reorient**
 - Axial, coronal and sagittal views with a linked crosshair. Hold **Shift** to make the crosshair follow the mouse.
 - **Ctrl+Alt+drag** in a view (or the *Rotate* tool) rotates the other two planes around that view's axis, like 3D Slicer.
@@ -104,6 +111,8 @@ static – scans are processed in the visitor's browser and never uploaded.
 | File | Purpose |
 | --- | --- |
 | `src/dicom.ts` | DICOM parsing (dicom-parser), series grouping, slice sorting, volume assembly |
+| `src/dicomMeta.ts` | Tag dictionary, metadata extraction, patient-name helpers |
+| `src/tagViewer.ts` | Searchable DICOM tag viewer |
 | `src/volume.ts` | Volume class, trilinear sampling, resampling (apply rotate/crop), demo phantom |
 | `src/render.ts` | CPU reslicing of planes/lines with optional slab (average/MIP) and crop |
 | `src/curve.ts` | Panoramic curve (centripetal Catmull-Rom, arc-length parametrised) |

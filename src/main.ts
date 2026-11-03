@@ -2,6 +2,8 @@ import { App, Jaw, Mode, MprTool, RenderMode, saveInputPreference } from './app'
 import { MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronalDiameter } from './implant';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
+import { formatDicomDate, formatPatientName, joinPersonName, splitPersonName } from './dicomMeta';
+import { showTagViewer } from './tagViewer';
 
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
 import { createPhantom } from './volume';
@@ -505,19 +507,66 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---- state -> UI -----------------------------------------------------------------
+// ---- patient & DICOM tags ---------------------------------------------------
+const ptLast = $<HTMLInputElement>('pt-last');
+const ptFirst = $<HTMLInputElement>('pt-first');
+function updatePatientBadge() {
+  const badge = $('patient-badge');
+  const label = app.vol ? formatPatientName(app.vol.info.patientName) : '';
+  badge.textContent = label;
+  badge.classList.toggle('hidden', !label);
+}
+const onNameInput = () => {
+  if (!app.vol) return;
+  // stored as a DICOM person name (Last^First) – saved with the project
+  app.vol.info.patientName = joinPersonName(ptLast.value, ptFirst.value);
+  updatePatientBadge();
+};
+ptLast.oninput = onNameInput;
+ptFirst.oninput = onNameInput;
+$('btn-tags').onclick = () => {
+  const info = app.vol?.info;
+  if (!info?.meta?.length) return;
+  const who = formatPatientName(info.patientName);
+  showTagViewer(info.meta, `First file of the series${who ? ` · ${who}` : ''}${info.seriesDescription ? ` · ${info.seriesDescription}` : ''}`);
+};
+
 const implantList = $('implant-list');
 const listItems = new Map<number, HTMLLIElement>();
 function refreshUi() {
   const vol = app.vol;
+  // patient
+  const info = vol?.info;
+  $('patient-fields').classList.toggle('hidden', !vol);
+  if (info) {
+    const { last, first } = splitPersonName(info.patientName);
+    if (document.activeElement !== ptLast) ptLast.value = last;
+    if (document.activeElement !== ptFirst) ptFirst.value = first;
+    const sexes: Record<string, string> = { M: 'male', F: 'female', O: 'other' };
+    const details = [
+      info.patientId ? `ID ${info.patientId}` : '',
+      info.birthDate ? `born ${formatDicomDate(info.birthDate)}` : '',
+      info.sex ? sexes[info.sex] ?? info.sex : '',
+    ].filter(Boolean);
+    $('pt-details').textContent = details.join(' · ');
+  }
+  updatePatientBadge();
+
   $('vol-info').innerHTML = vol
     ? [
-        vol.info.patientName ? `<div>${escapeHtml(vol.info.patientName.replace(/\^/g, ' '))}</div>` : '',
-        vol.info.seriesDescription ? `<div>${escapeHtml(vol.info.seriesDescription)}</div>` : '',
+        info!.seriesDescription ? `<div>${escapeHtml(info!.seriesDescription)}</div>` : '',
+        info!.studyDate ? `<div>Study ${escapeHtml(formatDicomDate(info!.studyDate))}${info!.modality ? ` · ${escapeHtml(info!.modality)}` : ''}</div>` : '',
+        info!.manufacturer || info!.model ? `<div>${escapeHtml([info!.manufacturer, info!.model].filter(Boolean).join(' '))}</div>` : '',
         `<div>${vol.nx} × ${vol.ny} × ${vol.nz} voxels</div>`,
         `<div>${vol.spacing.map((s) => s.toFixed(3)).join(' × ')} mm</div>`,
-        `<div class="small">${escapeHtml(vol.info.source)}</div>`,
+        `<div class="small">${escapeHtml(info!.source)}</div>`,
       ].join('')
     : 'Open a DICOM series (files or folder, or drag &amp; drop) or load the demo volume.';
+  const tagsBtn = $('btn-tags');
+  tagsBtn.classList.toggle('hidden', !vol);
+  tagsBtn.textContent = info?.meta ? `DICOM tags (${info.meta.length})` : 'DICOM tags';
+  tagsBtn.toggleAttribute('disabled', !info?.meta?.length);
+  tagsBtn.title = info?.meta?.length ? 'Show every DICOM attribute of the series' : 'No DICOM tags (demo volume)';
 
   toolButtons.forEach((b) => b.classList.toggle('active', b.dataset.tool === app.mprTool));
   const tilt = [0, 1, 2].map((i) => app.viewTiltDeg(i));
