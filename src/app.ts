@@ -1,5 +1,5 @@
 import { ArchCurve } from './curve';
-import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, setApicalDiameter, setImplantAxis, setImplantLength } from './implant';
+import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, reserveImplantIds, setApicalDiameter, setImplantAxis, setImplantLength } from './implant';
 import {
   Frame,
   Vec2,
@@ -167,6 +167,11 @@ export class App {
   private uiPending = false;
 
   constructor() {
+    // track pressed pointers so an implant drag is recorded as one undo step
+    window.addEventListener('pointerdown', () => this.pointersDown++, true);
+    const up = () => (this.pointersDown = Math.max(0, this.pointersDown - 1));
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
     this.mprViews = [new MprView(this, 0), new MprView(this, 1), new MprView(this, 2)];
     this.planAxial = new PlanAxialView(this);
     this.pano = new PanoView(this);
@@ -190,6 +195,7 @@ export class App {
 
   /** State changed: re-render and refresh the side panel. */
   changed() {
+    this.scheduleImplantCommit();
     this.requestRender();
     if (this.uiPending) return;
     this.uiPending = true;
@@ -215,6 +221,7 @@ export class App {
     this.curve = null;
     this.drawing = null;
     this.implants = [];
+    this.resetImplantHistory();
     this.selectedId = null;
     this.placing = null;
     this.measurements = [];
@@ -374,6 +381,7 @@ export class App {
     this.setVolume(nv);
     this.X = X2;
     this.implants = implants;
+    this.resetImplantHistory(); // coordinates changed: old snapshots no longer apply
     this.measurements = measurements;
     this.selectedId = selectedId;
     if (ctrl) this.curve = new ArchCurve(ctrl);
@@ -546,8 +554,128 @@ export class App {
     this.changed();
   }
 
-  implantChanged(_imp: Implant | null, _final = false) {
+  implantChanged(_imp: Implant | null, final = false) {
     this.followSelected();
+    this.changed();
+    if (final) this.commitImplants();
+  }
+
+  // ---- implant undo / redo ---------------------------------------------------
+  //
+  // Snapshots of the implant list are taken at "commit points": the end of a
+  // drag, or after edits have settled (no button held, short pause). Every
+  // commit that differs from the previous one becomes one undo step; the
+  // history is unlimited. Show/hide state is not part of the history.
+
+  private undoStack: string[] = [];
+  private redoStack: string[] = [];
+  private committed = '[]';
+  private commitTimer = 0;
+  private pointersDown = 0;
+
+  private implantSnapshot(): string {
+    return JSON.stringify(this.implants.map(({ hidden: _h, abutmentHidden: _a, ...rest }) => rest));
+  }
+
+  /** Record the current implants as an undo step if they changed since the last one. */
+  commitImplants() {
+    clearTimeout(this.commitTimer);
+    const cur = this.implantSnapshot();
+    if (cur === this.committed) return;
+    this.undoStack.push(this.committed);
+    this.redoStack = [];
+    this.committed = cur;
+  }
+
+  private scheduleImplantCommit() {
+    clearTimeout(this.commitTimer);
+    this.commitTimer = window.setTimeout(() => {
+      if (this.pointersDown > 0) this.scheduleImplantCommit(); // still dragging
+      else this.commitImplants();
+    }, 400);
+  }
+
+  resetImplantHistory() {
+    clearTimeout(this.commitTimer);
+    this.visMemory.clear();
+    this.undoStack = [];
+    this.redoStack = [];
+    this.committed = this.implantSnapshot();
+  }
+
+  get undoCount() {
+    return this.undoStack.length + (this.implantSnapshot() !== this.committed ? 1 : 0);
+  }
+  get redoCount() {
+    return this.redoStack.length;
+  }
+
+  /** show/hide state by implant id, remembered across undo/redo (not part of the history) */
+  private visMemory = new Map<number, { hidden: boolean; abutmentHidden: boolean }>();
+
+  private restoreImplants(json: string) {
+    for (const i of this.implants) this.visMemory.set(i.id, { hidden: i.hidden, abutmentHidden: i.abutmentHidden });
+    const vis = this.visMemory;
+    const list = JSON.parse(json) as Omit<Implant, 'hidden' | 'abutmentHidden'>[];
+    this.implants = list.map((i) => ({ ...i, hidden: vis.get(i.id)?.hidden ?? false, abutmentHidden: vis.get(i.id)?.abutmentHidden ?? false }));
+    reserveImplantIds(Math.max(0, ...this.implants.map((i) => i.id)));
+    if (!this.implantById(this.selectedId)) this.selectedId = null;
+    this.committed = json;
+    this.followSelected();
+    this.requestRender();
+    this.onStateChangeSoon();
+  }
+
+  /** Undo the last implant change; returns false when there is nothing to undo. */
+  undoImplants(): boolean {
+    this.commitImplants(); // include edits that have not been committed yet
+    const prev = this.undoStack.pop();
+    if (prev === undefined) return false;
+    this.redoStack.push(this.committed);
+    this.restoreImplants(prev);
+    return true;
+  }
+
+  redoImplants(): boolean {
+    this.commitImplants();
+    const next = this.redoStack.pop();
+    if (next === undefined) return false;
+    this.undoStack.push(this.committed);
+    this.restoreImplants(next);
+    return true;
+  }
+
+  private onStateChangeSoon() {
+    if (this.uiPending) return;
+    this.uiPending = true;
+    requestAnimationFrame(() => {
+      this.uiPending = false;
+      this.onStateChange();
+    });
+  }
+
+  // ---- implant visibility -------------------------------------------------------
+
+  setImplantHidden(id: number, hidden: boolean) {
+    const imp = this.implantById(id);
+    if (!imp) return;
+    imp.hidden = hidden;
+    if (hidden && this.selectedId === id) this.selectedId = null; // nothing invisible stays editable
+    this.changed();
+  }
+
+  setAbutmentHidden(id: number, hidden: boolean) {
+    const imp = this.implantById(id);
+    if (!imp) return;
+    imp.abutmentHidden = hidden;
+    this.changed();
+  }
+
+  showAllImplants() {
+    for (const i of this.implants) {
+      i.hidden = false;
+      i.abutmentHidden = false;
+    }
     this.changed();
   }
 

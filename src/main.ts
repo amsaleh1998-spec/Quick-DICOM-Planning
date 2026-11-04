@@ -624,6 +624,13 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if ((e.target as HTMLElement).tagName === 'INPUT') return;
+  // Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z or Ctrl+Y redo (implant changes; unlimited)
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y')) {
+    e.preventDefault();
+    const redo = e.key === 'y' || e.key === 'Y' || e.shiftKey;
+    doUndoRedo(redo);
+    return;
+  }
   if (e.key === 'Enter' && app.segTool === 'cut' && app.cutDraft) {
     app.finishCut();
     return;
@@ -681,7 +688,41 @@ $('btn-tags').onclick = () => {
   showTagViewer(info.meta, `First file of the series${who ? ` · ${who}` : ''}${info.seriesDescription ? ` · ${info.seriesDescription}` : ''}`);
 };
 
+// ---- undo / redo ---------------------------------------------------------------
+function doUndoRedo(redo: boolean) {
+  const ok = redo ? app.redoImplants() : app.undoImplants();
+  if (!ok) setStatus(redo ? 'Nothing to redo' : 'Nothing to undo');
+  else setStatus(`${redo ? 'Redo' : 'Undo'} – ${app.undoCount} step${app.undoCount === 1 ? '' : 's'} to undo, ${app.redoCount} to redo`);
+}
+$('btn-undo').onclick = () => doUndoRedo(false);
+$('btn-redo').onclick = () => doUndoRedo(true);
+
+const EYE =
+  '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.2" fill="currentColor"/></svg>';
+const EYE_OFF =
+  '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".55"/><path d="M2 14L14 2" stroke="currentColor" stroke-width="1.6"/></svg>';
+
 const implantList = $('implant-list');
+// eye / MUA toggles inside list entries (handled before the entry's own click = select)
+for (const type of ['click', 'dblclick'] as const) {
+  implantList.addEventListener(
+    type,
+    (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button.vis-btn');
+      if (!btn) return;
+      e.stopPropagation();
+      e.preventDefault();
+      if (type === 'dblclick') return;
+      const id = Number(btn.dataset.id);
+      const imp = app.implantById(id);
+      if (!imp) return;
+      if (btn.dataset.kind === 'ab') app.setAbutmentHidden(id, !imp.abutmentHidden);
+      else app.setImplantHidden(id, !imp.hidden);
+    },
+    true,
+  );
+}
+$('btn-show-all-implants').onclick = () => app.showAllImplants();
 const listItems = new Map<number, HTMLLIElement>();
 function refreshUi() {
   const vol = app.vol;
@@ -781,11 +822,18 @@ function refreshUi() {
     const dia = isTapered(imp) ? `Ø${imp.diameter.toFixed(1)}→${apicalDiameterOf(imp).toFixed(1)}` : `Ø${imp.diameter.toFixed(1)}`;
     const near = app.nerveDistances(imp).some((x) => x.d < NERVE_SAFETY_MM);
     const warn = near ? ' <span class="warn" title="Closer than 2 mm to the nerve">⚠</span>' : '';
-    const html = `<span>${escapeHtml(imp.name)}${warn}</span><span class="dim">${dia} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
+    const eye = `<button class="vis-btn${imp.hidden ? ' off' : ''}" data-id="${imp.id}" data-kind="imp" title="${imp.hidden ? 'Show' : 'Hide'} this implant">${imp.hidden ? EYE_OFF : EYE}</button>`;
+    const muaBtn = imp.abutment
+      ? `<button class="vis-btn mua${imp.abutmentHidden ? ' off' : ''}" data-id="${imp.id}" data-kind="ab" title="${imp.abutmentHidden ? 'Show' : 'Hide'} the abutment (MUA)">MUA</button>`
+      : '';
+    const html = `<span class="vis">${eye}${muaBtn}</span><span class="nm">${escapeHtml(imp.name)}${warn}</span><span class="dim">${dia} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
     if (li.innerHTML !== html) li.innerHTML = html;
-    li.className = imp.id === app.selectedId ? 'sel' : '';
+    li.className = (imp.id === app.selectedId ? 'sel' : '') + (imp.hidden ? ' hidden-imp' : '');
     if (implantList.children[idx] !== li) implantList.insertBefore(li, implantList.children[idx] ?? null);
   });
+  ($('btn-undo') as HTMLButtonElement).disabled = app.undoCount === 0;
+  ($('btn-redo') as HTMLButtonElement).disabled = app.redoCount === 0;
+  $('btn-show-all-implants').classList.toggle('hidden', !app.implants.some((i) => i.hidden || (i.abutment && i.abutmentHidden)));
   for (const [id, li] of listItems) {
     if (!seen.has(id)) {
       li.remove();

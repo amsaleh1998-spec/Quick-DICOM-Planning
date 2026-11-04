@@ -1005,3 +1005,51 @@ a.btn-link {
   border-bottom: 1px solid var(--border);
   font: 11px ui-monospace, Menlo, monospace;
 }
+
+/* ---- implant visibility & undo ---- */
+#implant-list li .vis {
+  display: inline-flex;
+  gap: 3px;
+  margin-right: 6px;
+  flex: 0 0 auto;
+}
+#implant-list li .nm {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 8px;
+}
+.vis-btn {
+  padding: 1px 4px;
+  line-height: 1;
+  font-size: 9px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.vis-btn.mua {
+  color: #8cb4e6;
+}
+.vis-btn.off {
+  color: var(--muted);
+  opacity: 0.7;
+}
+.vis-btn.mua.off {
+  text-decoration: line-through;
+}
+#implant-list li.hidden-imp .nm,
+#implant-list li.hidden-imp .dim {
+  opacity: 0.45;
+}
+.undo-row button {
+  padding: 4px 9px;
+}
+
+#implant-list li {
+  align-items: center;
+}

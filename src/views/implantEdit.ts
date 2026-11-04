@@ -88,7 +88,7 @@ export class ImplantEditor {
   hit(p: Pt): { imp: Implant; mode: EditMode } | null {
     const app = this.app;
     const sel = app.selectedImplant();
-    if (sel && this.ad.visible(sel)) {
+    if (sel && !sel.hidden && this.ad.visible(sel)) {
       const hd = this.handles(sel);
       for (const [w, mode] of [
         [hd.coronal, 'rotCoronal'],
@@ -350,7 +350,7 @@ export class ImplantEditor {
     this.placeBadge();
     const app = this.app;
     for (const imp of app.implants) {
-      if (!this.ad.visible(imp)) continue;
+      if (imp.hidden || !this.ad.visible(imp)) continue;
       const sel = imp.id === app.selectedId;
       const hd = this.handles(imp);
       const ext = 2;
