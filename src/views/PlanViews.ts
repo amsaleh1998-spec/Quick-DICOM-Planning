@@ -65,7 +65,8 @@ export class PlanAxialView extends PlaneView {
   /** Touch: dragging starts on a curve control point (otherwise a swipe changes the level). */
   protected touchDragAt(p: Pt): boolean {
     const app = this.app;
-    if (app.drawing || app.placing || !app.curve || !app.showCurveAxial) return false;
+    if (app.drawing) return true; // drawing: a finger drag draws the curve freehand
+    if (app.placing || !app.curve || !app.showCurveAxial) return false;
     return app.curve.ctrl.some((c) => {
       const s = this.fromAB(c);
       return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
@@ -79,9 +80,11 @@ export class PlanAxialView extends PlaneView {
       return false;
     }
     if (app.drawing) {
+      // a click adds one point; holding the button and dragging draws freehand
       app.drawing.push(this.toAB(p));
+      this.freehand = { from: app.drawing.length - 1, moved: false };
       app.changed();
-      return false;
+      return true;
     }
     if (app.curve && app.showCurveAxial) {
       const i = app.curve.ctrl.findIndex((c) => {
@@ -106,7 +109,27 @@ export class PlanAxialView extends PlaneView {
     return false;
   }
 
+  /** Freehand curve drawing: index of the first point of this stroke, and whether it moved. */
+  private freehand: { from: number; moved: boolean } | null = null;
+  /** when the last freehand stroke ended (the browser may report the press as a double-click) */
+  private freehandDoneAt = 0;
+  /** Distance (mm) between automatically placed points while dragging. */
+  private static readonly FREEHAND_SPACING_MM = 5;
+
   protected onLeftDrag(p: Pt, last: Pt) {
+    const fh = this.freehand;
+    if (fh && this.app.drawing) {
+      const d = this.app.drawing;
+      const ab = this.toAB(p);
+      const prev = d[d.length - 1];
+      if (Math.hypot(ab[0] - prev[0], ab[1] - prev[1]) >= PlanAxialView.FREEHAND_SPACING_MM) {
+        d.push(ab);
+        fh.moved = true;
+      }
+      this.hover = p; // rubber band to the pointer between points
+      this.app.requestRender();
+      return;
+    }
     if (this.dragImplant(p, last)) return;
     if (this.dragPt >= 0 && this.app.curve) {
       const ctrl = this.app.curve.ctrl.slice();
@@ -115,7 +138,24 @@ export class PlanAxialView extends PlaneView {
     }
   }
 
-  protected onLeftUp() {
+  protected onLeftUp(p: Pt) {
+    const fh = this.freehand;
+    if (fh) {
+      this.freehand = null;
+      const d = this.app.drawing;
+      if (d && fh.moved) {
+        this.freehandDoneAt = performance.now();
+        // close the stroke at the release point, smooth hand jitter, then finish the curve
+        const ab = this.toAB(p);
+        const prev = d[d.length - 1];
+        if (Math.hypot(ab[0] - prev[0], ab[1] - prev[1]) > 1.5) d.push(ab);
+        smoothStroke(d, fh.from);
+        // desktop: releasing the button finishes the curve; touch keeps drawing until “Done”
+        if (!this.app.touchUi) this.app.finishCurve();
+        else this.app.changed();
+      }
+      return;
+    }
     if (this.endImplantDrag()) return;
     if (this.dragPt >= 0) this.app.setCurve(this.app.curve!.ctrl, false);
     this.dragPt = -1;
@@ -143,6 +183,8 @@ export class PlanAxialView extends PlaneView {
 
   protected onDoubleClick(p: Pt) {
     const app = this.app;
+    // a click quickly followed by a press-and-drag counts as a double-click: ignore it
+    if (this.freehand?.moved || performance.now() - this.freehandDoneAt < 600) return;
     if (app.drawing) {
       // the dblclick also produced two clicks; drop the duplicate point
       const d = app.drawing;
@@ -321,8 +363,8 @@ export class PlanAxialView extends PlaneView {
       drawLabel(
         o,
         app.touchUi
-          ? `Tap along the arch, patient right → left (${app.drawing.length} point${app.drawing.length === 1 ? '' : 's'})`
-          : 'Click to add points along the arch (patient right → left). Double-click / Enter to finish, Esc to cancel.',
+          ? `Drag or tap along the arch, patient right → left (${app.drawing.length} point${app.drawing.length === 1 ? '' : 's'})`
+          : 'Hold the left button and drag along the arch, or click point by point (patient right → left). Double-click / Enter to finish, Esc to cancel.',
         8,
         this.h - 10,
         '#ffd34f',
@@ -1074,3 +1116,16 @@ function drawScaleBar(o: CanvasRenderingContext2D, w: number, h: number, mmPerPx
   o.textAlign = 'left';
 }
 
+/**
+ * One pass of [¼ ½ ¼] smoothing over the points of a freehand stroke (from
+ * index `from` on), keeping the stroke's first and last point in place.
+ */
+function smoothStroke(pts: Vec2[], from: number) {
+  const start = Math.max(1, from + 1);
+  const end = pts.length - 1;
+  if (end - start < 1) return;
+  const src = pts.map((q) => [q[0], q[1]] as Vec2);
+  for (let i = start; i < end; i++) {
+    pts[i] = [0.25 * src[i - 1][0] + 0.5 * src[i][0] + 0.25 * src[i + 1][0], 0.25 * src[i - 1][1] + 0.5 * src[i][1] + 0.25 * src[i + 1][1]];
+  }
+}

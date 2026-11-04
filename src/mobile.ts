@@ -110,7 +110,7 @@ $('m-draw').onclick = () => {
   } else {
     app.setRuler(false);
     app.startDrawing();
-    showHint('Tap along the arch in the axial view, from the patient’s right to left, then tap “Done”');
+    showHint('Drag your finger (or tap point by point) along the arch in the axial view, from the patient’s right to left, then tap “Done”');
   }
 };
 $('m-undo-pt').onclick = () => {
