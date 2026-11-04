@@ -175,6 +175,11 @@
               <label>L <input id="def-l" type="number" step="0.5" min="4" max="20" /> mm</label>
             </div>
             <label class="check small" title="New implants get an apex 1 mm narrower than the platform (can be changed per implant)"><input id="def-tapered" type="checkbox" checked /> New implants tapered (apex 1 mm narrower)</label>
+            <div class="row undo-row">
+              <button id="btn-undo" title="Undo the last implant change (Ctrl+Z / ⌘Z)" disabled>↶ Undo</button>
+              <button id="btn-redo" title="Redo (Ctrl+Shift+Z or Ctrl+Y / ⇧⌘Z)" disabled>↷ Redo</button>
+              <button id="btn-show-all-implants" class="hidden" title="Show every hidden implant and abutment">Show all</button>
+            </div>
             <ul id="implant-list"></ul>
             <div id="implant-edit" class="hidden">
               <div class="row">
@@ -239,6 +244,8 @@
                 <li><b>Tangential</b>: wheel = rotate 360° (around the selected implant)</li>
                 <li><b>Implant</b>: drag body = move · drag side outline = diameter (tapered: apical half = apex Ø) · drag apical end = length (click the live value to type it)</li>
                 <li><b>C / A handles</b> (selected implant): C rotates around the apex, A rotates around the platform</li>
+                <li><b>Ctrl+Z</b> / <b>⌘Z</b> undo implant changes (unlimited) · <b>Ctrl+Shift+Z</b> / <b>Ctrl+Y</b> redo</li>
+                <li>Eye / <b>MUA</b> buttons in the implant list show or hide an implant or its abutment</li>
                 <li><b>Esc</b> deselect / cancel · <b>Del</b> delete implant · double-click a name in the list to rename</li>
                 <li>Cross-sections follow the selected implant when it moves</li>
                 <li><b>Ctrl+wheel</b> or <b>right drag</b> zoom · <b>Shift/Alt/middle drag</b> pan · <b>M</b> maximize · <b>R</b> ruler</li>

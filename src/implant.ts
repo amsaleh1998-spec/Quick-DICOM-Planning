@@ -36,6 +36,10 @@ export interface Implant {
   abutment: Abutment | null;
   /** draw the Ø3 × 15 mm prosthetic axis (from the MUA top, or from the platform without an MUA) */
   showProstheticAxis: boolean;
+  /** hidden implants (with their abutment and axis) are not drawn and cannot be clicked */
+  hidden: boolean;
+  /** hide only the abutment (MUA) */
+  abutmentHidden: boolean;
 }
 
 export const MIN_APICAL_DIAMETER = 1.5;
@@ -112,7 +116,7 @@ export function reserveImplantIds(maxId: number) {
 
 export function createImplant(center: Vec3, axis: Vec3, diameter = 4, length = 10): Implant {
   const id = nextId++;
-  return { id, name: `Implant ${id}`, center, axis, diameter, apicalDiameter: null, length, abutment: null, showProstheticAxis: false };
+  return { id, name: `Implant ${id}`, center, axis, diameter, apicalDiameter: null, length, abutment: null, showProstheticAxis: false, hidden: false, abutmentHidden: false };
 }
 
 /** Centre of the implant platform (coronal end). */
@@ -143,6 +147,7 @@ export function setImplantAxis(imp: Implant, axis: Vec3) {
  * coronal direction of the abutment head (computed by the app).
  */
 export function implantParts(imp: Implant, abutmentDir: Vec3 | null): Cylinder[] {
+  if (imp.hidden) return [];
   const r = imp.diameter / 2;
   const ra = apicalDiameterOf(imp) / 2; // r0 = platform end, r1 = apex end
   const parts: Cylinder[] = [
@@ -157,11 +162,11 @@ export function implantParts(imp: Implant, abutmentDir: Vec3 | null): Cylinder[]
   if (ab) {
     const gh = ab.gingivalHeight;
     // transmucosal collar: Ø3.5 at the implant -> Ø4.8 at the gingiva
-    parts.push(cone(p, up, gh, MUA_BASE_DIAMETER / 2, MUA_DIAMETER / 2, 'abutment', imp));
+    if (!imp.abutmentHidden) parts.push(cone(p, up, gh, MUA_BASE_DIAMETER / 2, MUA_DIAMETER / 2, 'abutment', imp));
     // head: 2.5 mm above the gingiva, Ø4.8 -> Ø3 (follows the abutment angulation)
     const dir = abutmentDir ?? up;
     const gingiva = addScaled(p, up, gh);
-    parts.push(cone(gingiva, dir, MUA_HEAD_HEIGHT, MUA_DIAMETER / 2, MUA_TOP_DIAMETER / 2, 'abutment', imp));
+    if (!imp.abutmentHidden) parts.push(cone(gingiva, dir, MUA_HEAD_HEIGHT, MUA_DIAMETER / 2, MUA_TOP_DIAMETER / 2, 'abutment', imp));
     axisStart = addScaled(gingiva, dir, MUA_HEAD_HEIGHT);
     axisDir = dir;
   }

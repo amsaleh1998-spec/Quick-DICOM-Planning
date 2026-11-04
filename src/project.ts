@@ -187,6 +187,8 @@ export function applyProjectState(app: App, file: ProjectFile) {
     abutment: i.abutment ?? null,
     // projects saved before the toggle showed the axis exactly when an MUA was present
     showProstheticAxis: i.showProstheticAxis ?? !!i.abutment,
+    hidden: i.hidden ?? false,
+    abutmentHidden: i.abutmentHidden ?? false,
   }));
   reserveImplantIds(Math.max(0, ...app.implants.map((i) => i.id)));
   app.selectedId = st.selectedId;
@@ -217,6 +219,7 @@ export function applyProjectState(app: App, file: ProjectFile) {
   const nerves = (st.nerves ?? []).map((n) => ({ ...n, pts: n.pts.map((p) => [...p] as Vec3) }));
   reserveNerveIds(Math.max(0, ...nerves.map((n) => n.id)));
   app.restoreSegmentation(st.segments ?? [], st.cuts ?? [], nerves);
+  app.resetImplantHistory();
   app.onWindowChange();
   app.changed();
 }

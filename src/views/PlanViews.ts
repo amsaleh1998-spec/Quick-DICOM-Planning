@@ -1048,7 +1048,8 @@ export class PanoView extends View {
     drawNervesProjected(app, o, (w) => this.project(w), this.vs.scale);
     this.editor.draw(o);
     for (const imp of app.implants) {
-      const t = tops.get(imp.id)!;
+      const t = tops.get(imp.id);
+      if (!t) continue; // hidden implant
       const sel = imp.id === app.selectedId;
       const col = sel ? IMPLANT_SELECTED_COLOR : IMPLANT_COLOR;
       drawLabel(o, imp.name.replace('Implant ', '#'), t.x, t.y - 8, `rgb(${col[0]},${col[1]},${col[2]})`, 'center');
@@ -1056,7 +1057,7 @@ export class PanoView extends View {
     // angulation between neighbouring implants
     for (const jaw of ['upper', 'lower'] as const) {
       const ordered = app.implants
-        .filter((imp) => app.implantJaw(imp) === jaw)
+        .filter((imp) => !imp.hidden && tops.has(imp.id) && app.implantJaw(imp) === jaw)
         .map((imp) => ({ imp, x: this.project(imp.center).x }))
         .sort((a, b) => a.x - b.x);
       for (let i = 0; i + 1 < ordered.length; i++) {

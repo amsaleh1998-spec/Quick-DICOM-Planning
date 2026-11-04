@@ -100,6 +100,12 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   Per implant: tick *Tapered* and set the apex diameter (default 1 mm narrower than the platform), or drag the
   apical half of the side outline; the coronal half still sets the platform diameter. The apex is never wider than the
   platform.
+- **Undo / redo**: Ctrl+Z (⌘Z) undoes implant changes – moves, tilts, resizing, typed values, adding / deleting,
+  abutment changes – with unlimited history; Ctrl+Shift+Z or Ctrl+Y (⇧⌘Z) redoes. A whole drag is one step. Also as
+  Undo / Redo buttons above the implant list.
+- **Show / hide**: the eye button in the implant list hides an implant (with its abutment and axis); the **MUA** button
+  hides only its abutment. Hidden items are not drawn in any view (including 3D) and cannot be clicked; *Show all*
+  brings everything back. Visibility is saved with the project and is not part of the undo history.
 - Implants can be renamed (name field, or double-click a name in the implant list); names appear in the views,
   the angle table and saved projects.
 - While an implant is selected, the cross-sections follow it: moving, tilting or resizing it re-centres the middle
