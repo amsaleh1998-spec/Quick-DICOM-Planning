@@ -1053,3 +1053,55 @@ a.btn-link {
 #implant-list li {
   align-items: center;
 }
+
+/* ---- panoramic curve list ---- */
+.curve-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 6px;
+}
+.curve-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  margin: 3px 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.curve-list li .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid #4fb3ff;
+  flex: 0 0 auto;
+}
+.curve-list li.sel {
+  border-color: #4fb3ff;
+  background: rgba(79, 179, 255, 0.12);
+}
+.curve-list li.sel .dot {
+  background: #4fb3ff;
+}
+.curve-list li .dim {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+#curve-name-row label.grow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+#curve-name {
+  flex: 1;
+  min-width: 0;
+  background: #0e1420;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: inherit;
+}

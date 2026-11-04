@@ -288,9 +288,24 @@ $('btn-apply').onclick = async () => {
 $('btn-draw-curve').onclick = () => {
   if (!app.vol) return;
   if (app.drawing) app.finishCurve();
-  else app.startDrawing();
+  else app.startDrawing(); // (re)draws the active curve
+};
+$('btn-add-curve').onclick = () => {
+  if (!app.vol) return;
+  if (app.drawing) app.cancelDrawing();
+  app.startDrawing(true); // an additional curve
 };
 $('btn-clear-curve').onclick = () => app.clearCurve();
+const curveList = $('curve-list');
+curveList.addEventListener('click', (e) => {
+  const li = (e.target as HTMLElement).closest<HTMLLIElement>('li[data-id]');
+  if (li) app.activateCurve(Number(li.dataset.id));
+});
+const curveName = $<HTMLInputElement>('curve-name');
+curveName.oninput = () => {
+  const sl = app.activeSlot();
+  if (sl && curveName.value.trim()) app.renameCurve(sl.id, curveName.value);
+};
 const slab = $<HTMLInputElement>('slab');
 const spacing = $<HTMLInputElement>('spacing');
 slab.oninput = () => {
@@ -647,6 +662,9 @@ window.addEventListener('keydown', (e) => {
       app.changed();
     } else app.selectImplant(null, false);
   } else if (e.key === 'Enter' && app.drawing) {
+    // the Draw button usually still has focus: don't let Enter also "press" it (that restarted drawing)
+    e.preventDefault();
+    (document.activeElement as HTMLElement | null)?.blur?.();
     app.finishCurve();
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && app.hoverMeasurementId !== null) {
     app.deleteMeasurement(app.hoverMeasurementId);
@@ -771,8 +789,25 @@ function refreshUi() {
     : '';
 
   const draw = $('btn-draw-curve');
-  draw.textContent = app.drawing ? 'Finish curve' : app.curve ? 'Redraw panoramic curve' : 'Draw panoramic curve';
+  draw.textContent = app.drawing ? 'Finish curve' : app.curve ? 'Redraw' : 'Draw panoramic curve';
   draw.classList.toggle('active', !!app.drawing);
+  $('btn-add-curve').classList.toggle('hidden', !app.curve || !!app.drawing);
+  $('btn-clear-curve').classList.toggle('hidden', !app.curve);
+  // curve list (only useful with more than one curve)
+  const sl = app.activeSlot();
+  $('curve-name-row').classList.toggle('hidden', !sl);
+  if (sl && document.activeElement !== curveName) curveName.value = sl.name;
+  const listHtml =
+    app.curves.length > 1
+      ? app.curves
+          .map(
+            (c) =>
+              `<li data-id="${c.id}" class="${c.id === app.activeCurveId ? 'sel' : ''}" title="Show this curve in the panoramic, cross-sections and tangential view">` +
+              `<span class="dot"></span>${escapeHtml(c.name)}<span class="dim">${c.curve.length.toFixed(0)} mm</span></li>`,
+          )
+          .join('')
+      : '';
+  if (curveList.innerHTML !== listHtml) curveList.innerHTML = listHtml;
   for (const jaw of ['upper', 'lower'] as Jaw[]) {
     const b = $(`btn-add-${jaw}`);
     b.textContent = app.placing === jaw ? 'Click in a view… (Esc)' : `Add ${jaw} implant`;
@@ -806,7 +841,12 @@ function refreshUi() {
       li = document.createElement('li') as HTMLLIElement;
       const id = imp.id;
       li.title = 'Click to select · double-click to rename';
-      li.onclick = () => app.selectImplant(id, true);
+      li.onclick = () => {
+        const imp = app.implantById(id);
+        const sl = imp && app.curves.length > 1 ? app.curveForImplant(imp) : null;
+        if (sl) app.activateCurve(sl.id); // e.g. an upper implant shows the maxilla curve
+        app.selectImplant(id, true);
+      };
       li.ondblclick = () => {
         app.selectImplant(id, true);
         requestAnimationFrame(() =>

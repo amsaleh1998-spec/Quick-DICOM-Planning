@@ -140,10 +140,18 @@
               <div class="mode-banner-title"><span class="step">2</span>Implant planning</div>
               <button class="mode-go" data-goto="mpr" title="Back to reorienting / cropping the scan (key 1)">← Back to MPR / Reorient</button>
             </div>
-            <h3>Panoramic curve</h3>
+            <h3>Panoramic curves</h3>
+            <ul id="curve-list" class="curve-list"></ul>
+            <div class="row" id="curve-name-row">
+              <label class="grow small muted">Name
+                <input id="curve-name" type="text" list="curve-name-options" maxlength="40" placeholder="e.g. Maxilla" />
+              </label>
+              <datalist id="curve-name-options"><option value="Maxilla"></option><option value="Mandible"></option></datalist>
+            </div>
             <div class="row">
               <button id="btn-draw-curve" class="primary">Draw panoramic curve</button>
-              <button id="btn-clear-curve">Clear</button>
+              <button id="btn-add-curve" class="hidden" title="Draw another curve, e.g. one for the maxilla and one for the mandible">+ New curve</button>
+              <button id="btn-clear-curve" title="Delete the active curve">Delete</button>
             </div>
             <div class="row">
               <span class="muted small">Panoramic view</span>

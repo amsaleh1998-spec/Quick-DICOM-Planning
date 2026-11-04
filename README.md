@@ -80,6 +80,12 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   every 5 mm, the stroke is lightly smoothed and the curve finishes on release), or click point by point from patient
   right to left and double-click / Enter to finish.
   Drag control points to edit, double-click the curve to insert a point, double-click a point to remove it.
+- **Several panoramic curves**, e.g. one for the maxilla and one for the mandible: *+ New curve* draws another one
+  (scroll the axial view to that jaw's level first). The active curve drives the panoramic, cross-sections and
+  tangential view; each curve keeps its own axial level, position, panoramic slice offset and zoom. Switch in the
+  *Panoramic curves* list or by clicking a dimmed curve in the axial view; selecting an implant in the implant list
+  switches to the curve it belongs to. Curves can be renamed (Maxilla / Mandible suggestions), redrawn and deleted,
+  and are all saved in projects.
 - Panoramic reconstruction along the curve, switchable between a thick **slab** and a thin **slice** (separate adjustable
   thicknesses; switch in the sidebar or inside the panoramic view). The mouse wheel in the panoramic moves the slice
   position buccal (up) / lingual (down); Alt+wheel moves the cross-sections along the curve. *Center* puts it back on the curve.
