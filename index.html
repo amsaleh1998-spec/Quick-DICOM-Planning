@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quick DICOM Planning</title>
+    <!-- installable app: lets Windows open .dcm files with it (Chrome / Edge) -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#131a26" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <script>
       // Phones open the simplified mobile version, unless the full version was chosen
       // (index.html?ui=desktop remembers that, ?ui=mobile forgets it). Mirrors src/uiMode.ts.
@@ -61,6 +66,7 @@
             <button data-input="trackpad" title="Trackpad: two-finger swipe scrolls, pinch zooms, ⌘+swipe pans, ⇧+swipe brightness/contrast">Trackpad</button>
           </div>
           <button id="btn-trackpad-guide" title="How to use the app with a Mac trackpad">Trackpad guide</button>
+          <button id="btn-install" class="hidden" title="Install as a desktop app – then double-clicking a .dcm file in Windows Explorer opens it here">Install app</button>
           <a id="btn-mobile" class="btn-link hidden" href="mobile.html?ui=mobile" title="Simplified version for phones">Mobile version</a>
         </div>
         <div class="group">
@@ -375,6 +381,12 @@
           <div id="layout-mpr" class="layout"></div>
           <div id="layout-plan" class="layout hidden"></div>
           <div id="drop-overlay" class="hidden">Drop DICOM files or a folder</div>
+          <div id="launch-banner" class="launch-banner hidden" role="dialog" aria-live="polite">
+            <div class="lb-text"><b>Opened <span id="lb-file"></span></b><span class="muted">A CBCT is a series of files – load the whole folder to open the scan.</span></div>
+            <button id="lb-folder" class="primary" title="Opens the folder picker inside this file's folder – just confirm">Load whole folder</button>
+            <button id="lb-single" title="Only this file (for single-file / multi-frame scans)">Only this file</button>
+            <button id="lb-close" class="modal-close" title="Close">×</button>
+          </div>
           <div id="loading" class="hidden"><div class="box"><div id="loading-text">Loading…</div><div class="bar"><div id="loading-bar"></div></div></div></div>
         </section>
       </div>
