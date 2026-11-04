@@ -1,5 +1,4 @@
 import type { App, Measurement, Mode, RenderMode } from './app';
-import { ArchCurve } from './curve';
 import { Implant, reserveImplantIds } from './implant';
 import { Frame, Vec2, Vec3 } from './math';
 import { Nerve, reserveNerveIds } from './nerve';
@@ -32,7 +31,11 @@ interface ProjectFile {
     wl: { center: number; width: number };
     mprTool: App['mprTool'];
     rightDrag: App['rightDrag'];
+    /** active curve (kept for older versions of the app) */
     curve: Vec2[] | null;
+    /** all panoramic curves (newer projects) */
+    curves?: { name: string; ctrl: Vec2[]; nav: { s: number; focusC: number; panoOffset: number; panoVs: ViewState | null } }[];
+    activeCurve?: number;
     s: number;
     focusC: number;
     crossSpacing: number;
@@ -96,6 +99,10 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       mprTool: app.mprTool,
       rightDrag: app.rightDrag,
       curve: app.curve?.ctrl ?? null,
+      ...(() => {
+        const c = app.curvesForSave();
+        return { curves: c.list, activeCurve: c.active };
+      })(),
       s: app.s,
       focusC: app.focusC,
       crossSpacing: app.crossSpacing,
@@ -172,9 +179,10 @@ export function applyProjectState(app: App, file: ProjectFile) {
   app.wl = st.wl;
   app.mprTool = st.mprTool;
   app.rightDrag = st.rightDrag;
-  app.curve = st.curve ? new ArchCurve(st.curve) : null;
   app.s = st.s;
   app.focusC = st.focusC;
+  if (st.curves?.length) app.restoreCurves(st.curves, st.activeCurve ?? 0);
+  else app.restoreCurves(st.curve ? [{ name: 'Curve 1', ctrl: st.curve }] : [], 0); // older single-curve projects
   app.crossSpacing = st.crossSpacing;
   app.panoMode = st.panoMode;
   app.panoSlab = st.panoSlab;

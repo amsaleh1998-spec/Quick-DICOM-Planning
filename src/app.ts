@@ -27,11 +27,21 @@ import { Volume, resampleVolume } from './volume';
 import { MprView } from './views/MprView';
 import { View3D } from './views/View3D';
 import { CrossView, PanoView, PlanAxialView, TangView } from './views/PlanViews';
-import { IS_MAC, Pt, View, newViewState } from './views/View';
+import { IS_MAC, Pt, View, ViewState, newViewState } from './views/View';
 
 export type Mode = 'mpr' | 'plan';
 export type MprTool = 'navigate' | 'rotate' | 'crop';
 export type Jaw = 'upper' | 'lower';
+
+/** A panoramic curve plus the view state that belongs to it. */
+export interface CurveSlot {
+  id: number;
+  name: string;
+  curve: ArchCurve;
+  /** navigation remembered while another curve is active */
+  nav: { s: number; focusC: number; panoOffset: number; panoVs: ViewState | null };
+}
+let nextCurveId = 1;
 /** Segmentation / nerve tools: region growing, separation cut, nerve tracing. */
 export type SegTool = 'grow' | 'cut' | 'nerve';
 
@@ -81,7 +91,13 @@ export class App {
   mprTool: MprTool = 'navigate';
 
   // planning
+  /** the ACTIVE panoramic curve (the panoramic, cross-sections and tangential view follow it) */
   curve: ArchCurve | null = null;
+  /** all panoramic curves, e.g. one for the maxilla and one for the mandible */
+  curves: CurveSlot[] = [];
+  activeCurveId: number | null = null;
+  /** true while drawing an additional curve (false = (re)drawing the active one) */
+  private drawingNew = false;
   drawing: Vec2[] | null = null;
   /** arc length of the middle cross-section */
   s = 0;
@@ -219,6 +235,8 @@ export class App {
     this.vr.lo = Math.round(vol.boneThreshold());
     this.vr.hi = vol.max;
     this.curve = null;
+    this.curves = [];
+    this.activeCurveId = null;
     this.drawing = null;
     this.implants = [];
     this.resetImplantHistory();
@@ -360,8 +378,16 @@ export class App {
     const X2 = toNew(this.X);
     const implants = this.implants.map((imp) => ({ ...imp, center: toNew(imp.center), axis: normalize(dirToNew(imp.axis)) }));
     const measurements = this.measurements.map((m) => ({ ...m, a: toNew(m.a), b: toNew(m.b) }));
-    const ctrl = this.curve?.ctrl.map((p) => [p[0] - min[0] - O2[0], p[1] - min[1] - O2[1]] as Vec2);
-    const focus = this.focusC - min[2] - O2[2];
+    this.saveCurveNav();
+    const toNewAB = (p: Vec2): Vec2 => [p[0] - min[0] - O2[0], p[1] - min[1] - O2[1]];
+    const toNewC = (c: number) => c - min[2] - O2[2];
+    const curveSlots = this.curves.map((sl) => ({
+      ...sl,
+      curve: new ArchCurve(sl.curve.ctrl.map(toNewAB)),
+      nav: { ...sl.nav, focusC: toNewC(sl.nav.focusC), panoVs: null },
+    }));
+    const activeCurveId = this.activeCurveId;
+    const focus = toNewC(this.focusC);
     const { s, selectedId, wl } = this;
     const vr = { ...this.vr };
     const tCrop = (c: CropSpec | null): CropSpec | null =>
@@ -384,7 +410,9 @@ export class App {
     this.resetImplantHistory(); // coordinates changed: old snapshots no longer apply
     this.measurements = measurements;
     this.selectedId = selectedId;
-    if (ctrl) this.curve = new ArchCurve(ctrl);
+    this.curves = curveSlots;
+    this.activeCurveId = activeCurveId;
+    this.curve = this.activeSlot()?.curve ?? null;
     this.s = s;
     this.focusC = focus;
     this.wl = wl;
@@ -407,7 +435,9 @@ export class App {
     this.changed();
   }
 
-  startDrawing() {
+  /** Start drawing: `asNew` adds another curve, otherwise the active curve is (re)drawn. */
+  startDrawing(asNew = false) {
+    this.drawingNew = asNew || !this.curve;
     this.drawing = [];
     this.placing = null;
     this.segTool = null;
@@ -426,24 +456,160 @@ export class App {
     if (d && d.length >= 2) {
       // run from patient right (-a) to patient left (+a)
       if (d[0][0] > d[d.length - 1][0]) d.reverse();
-      this.setCurve(d, false);
+      if (this.drawingNew) this.addCurve(d);
+      else this.setCurve(d, false);
       this.s = this.curve!.length / 2;
+      this.panoOffset = 0;
       this.pano.vs.fitted = false;
     }
+    this.drawingNew = false;
     this.changed();
   }
 
+  /** Replace the active curve's points (creates the first curve when there is none). */
   setCurve(ctrl: Vec2[], _interactive: boolean) {
+    const slot = this.activeSlot();
+    if (!slot) {
+      this.addCurve(ctrl);
+      return;
+    }
     const prevLen = this.curve?.length;
-    this.curve = new ArchCurve(ctrl);
+    this.curve = slot.curve = new ArchCurve(ctrl);
     if (prevLen !== undefined) this.s = clamp(this.s, 0, this.curve.length);
     this.changed();
   }
 
-  clearCurve() {
-    this.curve = null;
+  activeSlot(): CurveSlot | null {
+    return this.curves.find((c) => c.id === this.activeCurveId) ?? null;
+  }
+
+  private defaultCurveName(): string {
+    const used = new Set(this.curves.map((c) => c.name));
+    for (let n = this.curves.length + 1; ; n++) if (!used.has(`Curve ${n}`)) return `Curve ${n}`;
+  }
+
+  /** Add a new curve and make it active (its view starts at the current axial level). */
+  addCurve(ctrl: Vec2[], name?: string): CurveSlot {
+    // the user usually scrolls to the new jaw's level before adding the curve:
+    // keep the previous curve's own level
+    this.saveCurveNav(true);
+    const curve = new ArchCurve(ctrl);
+    const slot: CurveSlot = {
+      id: nextCurveId++,
+      name: name ?? this.defaultCurveName(),
+      curve,
+      nav: { s: curve.length / 2, focusC: this.focusC, panoOffset: 0, panoVs: null },
+    };
+    this.curves.push(slot);
+    this.activeCurveId = slot.id;
+    this.curve = curve;
+    this.s = curve.length / 2;
+    this.panoOffset = 0;
+    this.pano.vs.fitted = false;
+    this.changed();
+    return slot;
+  }
+
+  /** Remember the active curve's navigation (level, position, panoramic offset & zoom). */
+  private saveCurveNav(keepLevel = false) {
+    const slot = this.activeSlot();
+    if (slot) slot.nav = { s: this.s, focusC: keepLevel ? slot.nav.focusC : this.focusC, panoOffset: this.panoOffset, panoVs: { ...this.pano.vs } };
+  }
+
+  /** Switch the panoramic, cross-sections and tangential view to another curve. */
+  activateCurve(id: number) {
+    if (id === this.activeCurveId) return;
+    const slot = this.curves.find((c) => c.id === id);
+    if (!slot) return;
+    this.saveCurveNav();
+    this.activeCurveId = id;
+    this.curve = slot.curve;
+    this.s = clamp(slot.nav.s, 0, slot.curve.length);
+    this.focusC = slot.nav.focusC;
+    this.panoOffset = slot.nav.panoOffset;
+    if (slot.nav.panoVs) Object.assign(this.pano.vs, slot.nav.panoVs);
+    else this.pano.vs.fitted = false;
     this.drawing = null;
     this.changed();
+  }
+
+  renameCurve(id: number, name: string) {
+    const slot = this.curves.find((c) => c.id === id);
+    if (!slot) return;
+    slot.name = name.trim().slice(0, 40) || slot.name;
+    this.changed();
+  }
+
+  deleteCurve(id: number) {
+    const idx = this.curves.findIndex((c) => c.id === id);
+    if (idx < 0) return;
+    this.curves.splice(idx, 1);
+    if (this.activeCurveId === id) {
+      const next = this.curves[Math.min(idx, this.curves.length - 1)];
+      this.activeCurveId = null;
+      this.curve = null;
+      if (next) {
+        // restore the remaining curve's own view
+        this.activeCurveId = next.id;
+        this.curve = next.curve;
+        this.s = clamp(next.nav.s, 0, next.curve.length);
+        this.focusC = next.nav.focusC;
+        this.panoOffset = next.nav.panoOffset;
+        if (next.nav.panoVs) Object.assign(this.pano.vs, next.nav.panoVs);
+        else this.pano.vs.fitted = false;
+      }
+    }
+    this.changed();
+  }
+
+  /** Delete the active curve (the next one, if any, becomes active). */
+  clearCurve() {
+    this.drawing = null;
+    if (this.activeCurveId !== null) this.deleteCurve(this.activeCurveId);
+    else this.changed();
+  }
+
+  /** The curve an implant belongs to: closest in the axial plane and in height to the curve's level. */
+  curveForImplant(imp: Implant): CurveSlot | null {
+    if (this.curves.length === 0) return null;
+    this.saveCurveNav();
+    const f = toFrame(imp.center, this.O, this.frame);
+    let best: CurveSlot | null = null;
+    let bestScore = Infinity;
+    for (const sl of this.curves) {
+      const d = sl.curve.nearest(f[0], f[1]).dist;
+      const score = d + Math.abs(f[2] - sl.nav.focusC);
+      if (score < bestScore) {
+        bestScore = score;
+        best = sl;
+      }
+    }
+    return best;
+  }
+
+  /** Project restore: all curves and which one is active. */
+  restoreCurves(list: { name: string; ctrl: Vec2[]; nav?: Partial<CurveSlot['nav']> }[], activeIndex: number) {
+    this.curves = list.map((c) => {
+      const curve = new ArchCurve(c.ctrl);
+      return {
+        id: nextCurveId++,
+        name: c.name,
+        curve,
+        nav: { s: c.nav?.s ?? curve.length / 2, focusC: c.nav?.focusC ?? this.focusC, panoOffset: c.nav?.panoOffset ?? 0, panoVs: c.nav?.panoVs ?? null },
+      };
+    });
+    const active = this.curves[Math.max(0, Math.min(activeIndex, this.curves.length - 1))];
+    this.activeCurveId = active?.id ?? null;
+    this.curve = active?.curve ?? null;
+  }
+
+  /** Curves for saving: current navigation of the active curve included. */
+  curvesForSave(): { list: { name: string; ctrl: Vec2[]; nav: CurveSlot['nav'] }[]; active: number } {
+    this.saveCurveNav();
+    return {
+      list: this.curves.map((c) => ({ name: c.name, ctrl: c.curve.ctrl, nav: c.nav })),
+      active: Math.max(0, this.curves.findIndex((c) => c.id === this.activeCurveId)),
+    };
   }
 
   /** Thickness actually used for the panoramic reconstruction. */

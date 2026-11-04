@@ -86,6 +86,16 @@ export class PlanAxialView extends PlaneView {
       app.changed();
       return true;
     }
+    // click on another (inactive) curve -> make it the active one (when it is nearer than the active curve)
+    const other = this.hitInactiveCurve(p);
+    if (other !== null) {
+      const ab = this.toAB(p);
+      const dActive = app.curve ? app.curve.nearest(ab[0], ab[1]).dist : Infinity;
+      if (other.d < dActive) {
+        app.activateCurve(other.id);
+        return false;
+      }
+    }
     if (app.curve && app.showCurveAxial) {
       const i = app.curve.ctrl.findIndex((c) => {
         const s = this.fromAB(c);
@@ -170,6 +180,14 @@ export class PlanAxialView extends PlaneView {
       return;
     }
     this.hover = null;
+    const other = this.hitInactiveCurve(p);
+    if (other !== null) {
+      const ab = this.toAB(p);
+      if (!app.curve || other.d < app.curve.nearest(ab[0], ab[1]).dist) {
+        this.el.style.cursor = 'pointer';
+        return;
+      }
+    }
     if (app.curve && app.showCurveAxial && app.curve.ctrl.some((c) => {
       const s = this.fromAB(c);
       return Math.hypot(s[0] - p[0], s[1] - p[1]) < this.hitR;
@@ -245,9 +263,55 @@ export class PlanAxialView extends PlaneView {
     this.app.changed();
   }
 
+  /** Inactive curve under the screen point (within a few pixels), or null. */
+  private hitInactiveCurve(p: Pt): { id: number; d: number } | null {
+    const app = this.app;
+    if (app.curves.length < 2 || !app.showCurveAxial) return null;
+    const ab = this.toAB(p);
+    const tol = 8 * this.vs.scale;
+    let best: { id: number; d: number } | null = null;
+    for (const sl of app.curves) {
+      if (sl.id === app.activeCurveId) continue;
+      const d = sl.curve.nearest(ab[0], ab[1]).dist;
+      if (d < tol && (!best || d < best.d)) best = { id: sl.id, d };
+    }
+    return best;
+  }
+
+  /** Other panoramic curves: thin and dimmed, with their names; click one to switch to it. */
+  private drawInactiveCurves(o: CanvasRenderingContext2D) {
+    const app = this.app;
+    if (app.curves.length < 2 || !app.showCurveAxial) return;
+    for (const sl of app.curves) {
+      if (sl.id === app.activeCurveId) continue;
+      const poly = sl.curve.polyline();
+      o.save();
+      o.strokeStyle = 'rgba(79,179,255,0.45)';
+      o.lineWidth = 1.5;
+      o.setLineDash([6, 4]);
+      o.beginPath();
+      poly.forEach((q, i) => {
+        const sc = this.fromAB(q);
+        if (i) o.lineTo(sc[0], sc[1]);
+        else o.moveTo(sc[0], sc[1]);
+      });
+      o.stroke();
+      o.restore();
+      const mid = this.fromAB(sl.curve.position(sl.curve.length / 2));
+      drawLabel(o, sl.name, mid[0], mid[1] + 20, 'rgba(160,200,240,0.85)', 'center'); // below: the active name sits above
+    }
+    // name of the active curve too, so it is clear which one the other views follow
+    const act = app.activeSlot();
+    if (act && app.curve) {
+      const mid = this.fromAB(app.curve.position(app.curve.length / 2));
+      drawLabel(o, act.name, mid[0], mid[1] - 10, CURVE_COLOR, 'center');
+    }
+  }
+
   protected drawOverlay(o: CanvasRenderingContext2D) {
     const app = this.app;
     this.drawImplantAxes(o);
+    this.drawInactiveCurves(o);
     const curve = app.curve;
     if (curve && app.showCurveAxial) {
       const poly = curve.polyline();
@@ -1085,7 +1149,7 @@ export class PanoView extends View {
     drawLabel(o, 'L', this.xOf(curve.length) - 6, this.h - 10, '#9fb0c8', 'right');
     drawLabel(
       o,
-      `${app.panoMode === 'slab' ? 'slab' : 'slice'} ${app.panoThickness().toFixed(1)} mm${app.panoOffset ? ` · offset ${app.panoOffset.toFixed(1)} mm` : ''} · length ${curve.length.toFixed(0)} mm`,
+      `${app.curves.length > 1 && app.activeSlot() ? `${app.activeSlot()!.name} · ` : ''}${app.panoMode === 'slab' ? 'slab' : 'slice'} ${app.panoThickness().toFixed(1)} mm${app.panoOffset ? ` · offset ${app.panoOffset.toFixed(1)} mm` : ''} · length ${curve.length.toFixed(0)} mm`,
       this.w - 34,
       16,
       '#9fb0c8',
