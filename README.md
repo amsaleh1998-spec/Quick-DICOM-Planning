@@ -76,7 +76,9 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   ignored while the cap is moved, so the two inputs do not fight. Motion is lightly smoothed.
 
 **Implant planning**
-- Axial view: draw the panoramic curve (click along the arch from patient right to left, double-click/Enter to finish).
+- Axial view: draw the panoramic curve by holding the left button and dragging along the arch (a point is placed
+  every 5 mm, the stroke is lightly smoothed and the curve finishes on release), or click point by point from patient
+  right to left and double-click / Enter to finish.
   Drag control points to edit, double-click the curve to insert a point, double-click a point to remove it.
 - Panoramic reconstruction along the curve, switchable between a thick **slab** and a thin **slice** (separate adjustable
   thicknesses; switch in the sidebar or inside the panoramic view). The mouse wheel in the panoramic moves the slice
