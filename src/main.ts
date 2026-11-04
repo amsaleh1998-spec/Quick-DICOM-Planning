@@ -82,6 +82,97 @@ async function loadFiles(files: File[]) {
   }
 }
 
+// ---- installed app: open DICOM files from Windows Explorer ------------------------
+// The manifest registers .dcm/.dicom/.dic/.ima; Chrome/Edge hand the double-clicked
+// file(s) to the app through the launch queue. A web app is never given the other
+// files of that folder automatically, so for a single file we offer "Load whole
+// folder", which opens the folder picker right inside that file's folder.
+
+type DirHandle = { kind: 'directory'; name: string; values(): AsyncIterable<FileHandleLike | DirHandle> };
+type FileHandleLike = { kind: 'file'; name: string; getFile(): Promise<File> };
+
+async function filesFromDirectory(dir: DirHandle, depth = 0): Promise<File[]> {
+  const out: File[] = [];
+  for await (const entry of dir.values()) {
+    if (entry.kind === 'file') out.push(await entry.getFile());
+    else if (depth < 4) out.push(...(await filesFromDirectory(entry, depth + 1)));
+  }
+  return out;
+}
+
+let launchHandle: FileHandleLike | null = null;
+let launchFile: File | null = null;
+const launchBanner = $('launch-banner');
+const hideLaunchBanner = () => launchBanner.classList.add('hidden');
+
+$('lb-folder').onclick = async () => {
+  const picker = (window as unknown as { showDirectoryPicker?: (o: unknown) => Promise<DirHandle> }).showDirectoryPicker;
+  if (!picker) {
+    hideLaunchBanner();
+    folderInput.click(); // browsers without the picker: ordinary folder dialog
+    return;
+  }
+  try {
+    const dir = await picker({ startIn: launchHandle ?? undefined, id: 'dicom-folder', mode: 'read' });
+    hideLaunchBanner();
+    showLoading('Reading folder…', 0);
+    const files = await filesFromDirectory(dir);
+    await loadFiles(files);
+  } catch (e) {
+    if ((e as Error).name !== 'AbortError') setStatus((e as Error).message, true);
+  } finally {
+    hideLoading();
+  }
+};
+$('lb-single').onclick = () => {
+  hideLaunchBanner();
+  if (launchFile) loadFiles([launchFile]);
+};
+$('lb-close').onclick = hideLaunchBanner;
+
+type LaunchQueue = { setConsumer(cb: (p: { files?: FileHandleLike[] }) => void): void };
+const launchQueue = (window as unknown as { launchQueue?: LaunchQueue }).launchQueue;
+launchQueue?.setConsumer(async (params) => {
+  const handles = params.files ?? [];
+  if (!handles.length) return;
+  const files = await Promise.all(handles.map((h) => h.getFile()));
+  if (files.length > 1) {
+    // several files selected in Explorer (e.g. Ctrl+A, Enter): open them directly
+    await loadFiles(files);
+    return;
+  }
+  if (/\.(zip|qdp)$/i.test(files[0].name)) {
+    await loadFiles(files);
+    return;
+  }
+  launchHandle = handles[0];
+  launchFile = files[0];
+  $('lb-file').textContent = `“${files[0].name}”`;
+  launchBanner.classList.remove('hidden');
+});
+
+// "Install app" button (Chrome / Edge offer installation through this event)
+let installPrompt: (Event & { prompt(): Promise<void> }) | null = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e as Event & { prompt(): Promise<void> };
+  $('btn-install').classList.remove('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  $('btn-install').classList.add('hidden');
+  setStatus('Installed. Double-click a .dcm file in Explorer (choose Quick DICOM Planning the first time) to open it here.');
+});
+$('btn-install').onclick = async () => {
+  if (!installPrompt) return;
+  await installPrompt.prompt();
+};
+
+// offline support + installability (production build only; the dev server reloads too often)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('Service worker not registered', e));
+}
+
 // ---- projects ----------------------------------------------------------------------
 async function openProject(file: File) {
   try {

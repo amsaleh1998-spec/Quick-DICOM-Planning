@@ -177,6 +177,22 @@ Alt/middle-drag = pan (also Shift-drag outside the MPR) · F = fit all views ·
 M or the ⤢ button = maximize/restore a view · Esc = cancel / deselect / leave the segmentation tool ·
 Enter = finish a cut · Del = delete selected implant.
 
+## Open DICOM files by double-clicking (Windows)
+
+The app can be installed from Chrome or Microsoft Edge and then registered for `.dcm`, `.dicom`, `.dic` and `.ima` files:
+
+1. Open the app in Chrome or Edge and click **Install app** in the toolbar (or the install icon in the address bar /
+   ⋯ → *Apps* → *Install this site as an app*).
+2. Double-click a `.dcm` file in Explorer. The first time, Windows asks which app to use: choose
+   **Quick DICOM Planning** and tick *Always*. The browser may also ask once to allow the app to open these files.
+3. The app opens with that file and offers **Load whole folder**: the folder picker opens inside the file's folder,
+   so one click on *Select folder* loads the whole series. (A web app is never given the other files of a folder
+   automatically – that is a browser security rule.) Selecting all files in Explorer (Ctrl+A) and pressing Enter
+   opens them directly.
+
+Files without an extension cannot be associated in Windows; open their folder with *Open folder* or drag & drop.
+The installed app also works offline.
+
 ## Development
 
 ```bash
