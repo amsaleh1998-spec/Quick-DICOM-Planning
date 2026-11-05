@@ -342,6 +342,8 @@ function refresh() {
   const vol = app.vol;
   const info = vol?.info;
   $('m-title').textContent = info ? (info.patientName ?? '').replace(/\^/g, ' ').trim() || info.seriesDescription || '' : '';
+  const who = $('m-title').textContent ?? '';
+  document.title = who ? `${who} – Quick DICOM Planning` : 'Quick DICOM Planning';
   if (!vol) return;
 
   // tool strips
