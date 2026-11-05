@@ -269,15 +269,19 @@ export class Segmentation {
   }
 
   /**
-   * Scalar field of one segment for surface export, sampled every `step` grid voxels inside the
-   * segment's bounding box (plus one padding layer). Its own voxels (and its shell) carry the CT
-   * value minus the threshold, so the surface follows the bone smoothly; everything else is
-   * forced outside, so the surface closes against neighbouring segments, cuts and the borders.
+   * Scalar field of one segment for surface export, sampled every `step` CT voxels (1 = the full
+   * resolution of the scan, finer than the label grid when that is downsampled) inside the
+   * segment's bounding box plus one padding layer. Where the nearest label voxel belongs to the
+   * segment (or its shell) the sample carries the CT value minus the threshold, so the surface
+   * follows the bone at full resolution; everything else is forced outside, so the surface closes
+   * against neighbouring segments, cuts and the borders. `step` grows when the box would need
+   * more than `maxSamples` samples.
    */
-  segmentField(seg: Segment, step: number): import('./stl').ScalarGrid | null {
+  segmentField(seg: Segment, step: number, maxSamples = 60_000_000): import('./stl').ScalarGrid | null {
     const L = this.labels;
-    if (!L || !this.vol || !seg.voxels) return null;
-    const { nx, ny, nz } = this;
+    const vol = this.vol;
+    if (!L || !vol || !seg.voxels) return null;
+    const { nx, ny, nz, f } = this;
     const nxy = nx * ny;
     let i0 = nx, j0 = ny, k0 = nz, i1 = -1, j1 = -1, k1 = -1;
     for (let k = 0, idx = 0; k < nz; k++)
@@ -292,34 +296,46 @@ export class Segmentation {
           if (k > k1) k1 = k;
         }
     if (i1 < 0) return null;
+    // bounding box in CT voxels (a label voxel covers f CT voxels around i·f)
+    const lo: [number, number, number] = [Math.max(0, i0 * f - f), Math.max(0, j0 * f - f), Math.max(0, k0 * f - f)];
+    const hi: [number, number, number] = [Math.min(vol.nx - 1, i1 * f + f), Math.min(vol.ny - 1, j1 * f + f), Math.min(vol.nz - 1, k1 * f + f)];
+    let st = Math.max(1, Math.round(step));
+    const dims = () => [0, 1, 2].map((a) => Math.floor((hi[a] - lo[a]) / st) + 3);
+    while (dims().reduce((x, y) => x * y, 1) > maxSamples) st++;
+    const [sx, sy, sz] = dims();
     const iso = this.segmentLo(seg) - 0.5;
-    // samples cover [i0, i1] at `step`, plus one forced-outside layer on every side
-    const sx = Math.floor((i1 - i0) / step) + 3;
-    const sy = Math.floor((j1 - j0) / step) + 3;
-    const sz = Math.floor((k1 - k0) / step) + 3;
     const out = new Float32Array(sx * sy * sz).fill(-Infinity);
+    const data = vol.data;
+    const vnx = vol.nx;
+    const vnxy = vol.nx * vol.ny;
     for (let c = 1; c < sz - 1; c++) {
-      const k = k0 + (c - 1) * step;
-      if (k >= nz) continue;
+      const vk = lo[2] + (c - 1) * st;
+      if (vk > hi[2]) continue;
+      const lk = Math.min(nz - 1, Math.round(vk / f));
       for (let b = 1; b < sy - 1; b++) {
-        const j = j0 + (b - 1) * step;
-        if (j >= ny) continue;
+        const vj = lo[1] + (b - 1) * st;
+        if (vj > hi[1]) continue;
+        const lj = Math.min(ny - 1, Math.round(vj / f));
+        const rowOut = b * sx + c * sx * sy;
+        const rowL = lj * nx + lk * nxy;
+        const rowV = vj * vnx + vk * vnxy;
         for (let a = 1; a < sx - 1; a++) {
-          const i = i0 + (a - 1) * step;
-          if (i >= nx) continue;
-          if ((L[i + j * nx + k * nxy] & 127) !== seg.id) continue;
-          out[a + b * sx + c * sx * sy] = this.valueAt(i, j, k) - iso;
+          const vi = lo[0] + (a - 1) * st;
+          if (vi > hi[0]) continue;
+          const li = Math.min(nx - 1, Math.round(vi / f));
+          if ((L[li + rowL] & 127) !== seg.id) continue;
+          out[a + rowOut] = data[vi + rowV] - iso;
         }
       }
     }
-    const gs = this.gs;
+    const sp = vol.spacing;
     return {
       nx: sx,
       ny: sy,
       nz: sz,
       s: out,
-      origin: [(i0 - step) * gs[0], (j0 - step) * gs[1], (k0 - step) * gs[2]],
-      step: [gs[0] * step, gs[1] * step, gs[2] * step],
+      origin: [(lo[0] - st) * sp[0], (lo[1] - st) * sp[1], (lo[2] - st) * sp[2]],
+      step: [st * sp[0], st * sp[1], st * sp[2]],
     };
   }
 

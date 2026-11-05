@@ -109,87 +109,147 @@ const TETS = [
   [0, 5, 1, 7],
 ];
 
-/** Iso-surface s = 0 of the grid (marching tetrahedra), outward-facing triangles. */
-export async function isoSurface(g: ScalarGrid, onProgress?: (f: number) => void): Promise<Tris> {
+/** Indexed triangle mesh: xyz per vertex, 3 vertex indices per triangle. */
+export interface Mesh {
+  pos: Float32Array;
+  idx: Uint32Array;
+}
+
+class Growable<T extends Float32Array | Uint32Array> {
+  data: T;
+  n = 0;
+  constructor(private make: (n: number) => T) {
+    this.data = make(1 << 16);
+  }
+  push3(a: number, b: number, c: number) {
+    if (this.n + 3 > this.data.length) {
+      const bigger = this.make(this.data.length * 2);
+      bigger.set(this.data);
+      this.data = bigger;
+    }
+    this.data[this.n++] = a;
+    this.data[this.n++] = b;
+    this.data[this.n++] = c;
+  }
+  done(): T {
+    return this.data.slice(0, this.n) as T;
+  }
+}
+
+/**
+ * Iso-surface s = 0 of the grid by marching tetrahedra, as an indexed mesh with outward-facing
+ * triangles. Every grid edge crossed by the surface gets exactly one vertex, shared by all the
+ * triangles around it, so the mesh is connected (needed for smoothing) and closed.
+ */
+export async function isoSurface(g: ScalarGrid, onProgress?: (f: number) => void): Promise<Mesh> {
   const { nx, ny, nz, s, origin, step } = g;
   const nxy = nx * ny;
-  const out = new TriBuffer();
+  const pos = new Growable((n) => new Float32Array(n));
+  const idx = new Growable((n) => new Uint32Array(n));
+  let nVerts = 0;
+  // Vertex ids of crossed edges, by the edge's lower sample and direction (bits x=1, y=2, z=4;
+  // in Freudenthal cubes every edge runs in a positive direction from its lower corner).
+  // In-plane directions 1,2,3 live in the plane of their lower sample, the others cross
+  // from plane k to k+1. Two plane buffers are swapped as the sweep moves up.
+  let planeLo = new Int32Array(nxy * 3).fill(-1);
+  let planeHi = new Int32Array(nxy * 3).fill(-1);
+  const crossE = new Int32Array(nxy * 4);
+  const CROSS_SLOT = [-1, -1, -1, -1, 0, 1, 2, 3];
   const cs = new Float64Array(8);
-  const cx = new Float64Array(8);
-  const cy = new Float64Array(8);
-  const cz = new Float64Array(8);
-  const off = [0, 1, nx, nx + 1, nxy, nxy + 1, nxy + nx, nxy + nx + 1];
-  // edge point between corners a (inside) and b (outside) -> written to p[o..o+2]
-  const p = new Float64Array(12);
-  const edge = (a: number, b: number, o: number) => {
-    const sa = cs[a];
-    const sb = cs[b];
+  const corner = [0, 1, nx, nx + 1, nxy, nxy + 1, nxy + nx, nxy + nx + 1];
+  let i = 0, j = 0, k = 0;
+  const vertex = (ca: number, cb: number): number => {
+    // make ca the lower corner (its bits are a subset of cb's)
+    if ((ca & cb) !== ca) {
+      const t = ca;
+      ca = cb;
+      cb = t;
+    }
+    const d = cb ^ ca;
+    const ax = i + (ca & 1), ay = j + ((ca >> 1) & 1), az = k + ((ca >> 2) & 1);
+    const inPlane = ax + ay * nx;
+    let buf: Int32Array;
+    let slot: number;
+    if (d & 4) {
+      buf = crossE;
+      slot = inPlane * 4 + CROSS_SLOT[d];
+    } else {
+      buf = az === k ? planeLo : planeHi;
+      slot = inPlane * 3 + (d - 1);
+    }
+    const have = buf[slot];
+    if (have >= 0) return have;
+    const sa = cs[ca];
+    const sb = cs[cb];
     let t = 0.5;
     if (Number.isFinite(sa) && Number.isFinite(sb)) t = Math.min(1, Math.max(0, sa / (sa - sb)));
-    p[o] = cx[a] + t * (cx[b] - cx[a]);
-    p[o + 1] = cy[a] + t * (cy[b] - cy[a]);
-    p[o + 2] = cz[a] + t * (cz[b] - cz[a]);
+    const bx = ax + ((d & 1) ? 1 : 0), by = ay + ((d & 2) ? 1 : 0), bz = az + ((d & 4) ? 1 : 0);
+    pos.push3(
+      origin[0] + (ax + t * (bx - ax)) * step[0],
+      origin[1] + (ay + t * (by - ay)) * step[1],
+      origin[2] + (az + t * (bz - az)) * step[2],
+    );
+    buf[slot] = nVerts;
+    return nVerts++;
   };
-  // emit triangle p[o1], p[o2], p[o3], flipped so its normal points along (rx, ry, rz)
-  const tri = (o1: number, o2: number, o3: number, rx: number, ry: number, rz: number) => {
-    const ux = p[o2] - p[o1], uy = p[o2 + 1] - p[o1 + 1], uz = p[o2 + 2] - p[o1 + 2];
-    const vx = p[o3] - p[o1], vy = p[o3 + 1] - p[o1 + 1], vz = p[o3 + 2] - p[o1 + 2];
+  // triangle (a, b, c) oriented so its normal points from the inside corners to the outside ones
+  const P = pos;
+  const tri = (a: number, b: number, c: number, rx: number, ry: number, rz: number) => {
+    const d = P.data;
+    const ux = d[b * 3] - d[a * 3], uy = d[b * 3 + 1] - d[a * 3 + 1], uz = d[b * 3 + 2] - d[a * 3 + 2];
+    const vx = d[c * 3] - d[a * 3], vy = d[c * 3 + 1] - d[a * 3 + 1], vz = d[c * 3 + 2] - d[a * 3 + 2];
     const nX = uy * vz - uz * vy, nY = uz * vx - ux * vz, nZ = ux * vy - uy * vx;
-    if (nX * rx + nY * ry + nZ * rz >= 0) out.push(p[o1], p[o1 + 1], p[o1 + 2], p[o2], p[o2 + 1], p[o2 + 2], p[o3], p[o3 + 1], p[o3 + 2]);
-    else out.push(p[o1], p[o1 + 1], p[o1 + 2], p[o3], p[o3 + 1], p[o3 + 2], p[o2], p[o2 + 1], p[o2 + 2]);
+    if (a === b || b === c || a === c) return;
+    if (nX * rx + nY * ry + nZ * rz >= 0) idx.push3(a, b, c);
+    else idx.push3(a, c, b);
   };
   const ins: number[] = [];
   const outs: number[] = [];
   let lastYield = performance.now();
-  for (let k = 0; k < nz - 1; k++) {
-    for (let j = 0; j < ny - 1; j++) {
-      for (let i = 0; i < nx - 1; i++) {
+  for (k = 0; k < nz - 1; k++) {
+    crossE.fill(-1);
+    for (j = 0; j < ny - 1; j++) {
+      for (i = 0; i < nx - 1; i++) {
         const base = i + j * nx + k * nxy;
         let nIn = 0;
         for (let c = 0; c < 8; c++) {
-          const v = s[base + off[c]];
+          const v = s[base + corner[c]];
           cs[c] = v;
           if (v > 0) nIn++;
         }
         if (nIn === 0 || nIn === 8) continue;
-        for (let c = 0; c < 8; c++) {
-          cx[c] = origin[0] + (i + (c & 1)) * step[0];
-          cy[c] = origin[1] + (j + ((c >> 1) & 1)) * step[1];
-          cz[c] = origin[2] + (k + ((c >> 2) & 1)) * step[2];
-        }
-        for (const t of TETS) {
+        for (const tt of TETS) {
           ins.length = 0;
           outs.length = 0;
-          for (const c of t) (cs[c] > 0 ? ins : outs).push(c);
+          for (const c of tt) (cs[c] > 0 ? ins : outs).push(c);
           if (ins.length === 0 || ins.length === 4) continue;
-          // reference direction: from the inside corners towards the outside corners
+          // reference direction (grid units): from the inside corners towards the outside corners
           let rx = 0, ry = 0, rz = 0;
-          for (const c of outs) (rx += cx[c] / outs.length), (ry += cy[c] / outs.length), (rz += cz[c] / outs.length);
-          for (const c of ins) (rx -= cx[c] / ins.length), (ry -= cy[c] / ins.length), (rz -= cz[c] / ins.length);
+          for (const c of outs) (rx += (c & 1) / outs.length), (ry += ((c >> 1) & 1) / outs.length), (rz += ((c >> 2) & 1) / outs.length);
+          for (const c of ins) (rx -= (c & 1) / ins.length), (ry -= ((c >> 1) & 1) / ins.length), (rz -= ((c >> 2) & 1) / ins.length);
+          rx *= step[0];
+          ry *= step[1];
+          rz *= step[2];
           if (ins.length === 1) {
-            edge(ins[0], outs[0], 0);
-            edge(ins[0], outs[1], 3);
-            edge(ins[0], outs[2], 6);
-            tri(0, 3, 6, rx, ry, rz);
+            tri(vertex(ins[0], outs[0]), vertex(ins[0], outs[1]), vertex(ins[0], outs[2]), rx, ry, rz);
           } else if (ins.length === 3) {
-            edge(ins[0], outs[0], 0);
-            edge(ins[1], outs[0], 3);
-            edge(ins[2], outs[0], 6);
-            tri(0, 3, 6, rx, ry, rz);
+            tri(vertex(ins[0], outs[0]), vertex(ins[1], outs[0]), vertex(ins[2], outs[0]), rx, ry, rz);
           } else {
             // quad a-c, a-d, b-d, b-c
             const [a, b] = ins;
             const [c, d] = outs;
-            edge(a, c, 0);
-            edge(a, d, 3);
-            edge(b, d, 6);
-            edge(b, c, 9);
-            tri(0, 3, 6, rx, ry, rz);
-            tri(0, 6, 9, rx, ry, rz);
+            const ac = vertex(a, c), ad = vertex(a, d), bd = vertex(b, d), bc = vertex(b, c);
+            tri(ac, ad, bd, rx, ry, rz);
+            tri(ac, bd, bc, rx, ry, rz);
           }
         }
       }
     }
+    // the upper plane becomes the lower plane of the next layer
+    const t = planeLo;
+    planeLo = planeHi;
+    planeHi = t;
+    planeHi.fill(-1);
     if (performance.now() - lastYield > 60) {
       onProgress?.((k + 1) / (nz - 1));
       await new Promise((r) => setTimeout(r, 0));
@@ -197,7 +257,81 @@ export async function isoSurface(g: ScalarGrid, onProgress?: (f: number) => void
     }
   }
   onProgress?.(1);
-  return out.done();
+  return { pos: pos.done(), idx: idx.done() };
+}
+
+/**
+ * Taubin λ|μ smoothing (Laplacian smoothing that does not shrink the model): removes the voxel
+ * staircase while keeping the size and shape of the bone.
+ */
+export async function smoothMesh(m: Mesh, iterations = 12, lambda = 0.5, mu = -0.53, onProgress?: (f: number) => void) {
+  const nv = m.pos.length / 3;
+  const idx = m.idx;
+  // neighbour lists (CSR); each edge appears in two triangles, which just doubles its weight
+  const deg = new Uint32Array(nv + 1);
+  for (let t = 0; t < idx.length; t += 3) {
+    deg[idx[t]] += 2;
+    deg[idx[t + 1]] += 2;
+    deg[idx[t + 2]] += 2;
+  }
+  const start = new Uint32Array(nv + 1);
+  for (let v = 0; v < nv; v++) start[v + 1] = start[v] + deg[v];
+  const nb = new Uint32Array(start[nv]);
+  const fillPos = start.slice(0, nv);
+  const add = (a: number, b: number) => (nb[fillPos[a]++] = b);
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+    add(a, b);
+    add(a, c);
+    add(b, a);
+    add(b, c);
+    add(c, a);
+    add(c, b);
+  }
+  let p: Float32Array = m.pos;
+  let q: Float32Array = new Float32Array(p.length);
+  for (let it = 0; it < iterations; it++) {
+    const f = it % 2 === 0 ? lambda : mu;
+    for (let v = 0; v < nv; v++) {
+      const s0 = start[v], s1 = start[v + 1];
+      const x = p[v * 3], y = p[v * 3 + 1], z = p[v * 3 + 2];
+      if (s1 === s0) {
+        q[v * 3] = x;
+        q[v * 3 + 1] = y;
+        q[v * 3 + 2] = z;
+        continue;
+      }
+      let ax = 0, ay = 0, az = 0;
+      for (let e = s0; e < s1; e++) {
+        const w = nb[e] * 3;
+        ax += p[w];
+        ay += p[w + 1];
+        az += p[w + 2];
+      }
+      const inv = 1 / (s1 - s0);
+      q[v * 3] = x + f * (ax * inv - x);
+      q[v * 3 + 1] = y + f * (ay * inv - y);
+      q[v * 3 + 2] = z + f * (az * inv - z);
+    }
+    const t = p;
+    p = q;
+    q = t;
+    onProgress?.((it + 1) / iterations);
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  m.pos = p as Mesh['pos'];
+}
+
+/** Indexed mesh -> triangle soup. */
+export function meshToTris(m: Mesh): Tris {
+  const out = new Float32Array(m.idx.length * 3);
+  for (let t = 0; t < m.idx.length; t++) {
+    const v = m.idx[t] * 3;
+    out[t * 3] = m.pos[v];
+    out[t * 3 + 1] = m.pos[v + 1];
+    out[t * 3 + 2] = m.pos[v + 2];
+  }
+  return out;
 }
 
 // ---- solids ---------------------------------------------------------------------
@@ -301,11 +435,12 @@ export function concatTris(parts: Tris[]): Tris {
 }
 
 /** Binary STL (little endian), facet normals from the vertex order. */
-export function stlBytes(tris: Tris, name: string): Uint8Array {
+export function stlBytes(tris: Tris, name: string, space: 'LPS' | null = null): Uint8Array {
   const n = tris.length / 9;
   const buf = new ArrayBuffer(84 + n * 50);
   const bytes = new Uint8Array(buf);
-  const header = `Quick DICOM Planning - ${name}`.slice(0, 79);
+  // "SPACE=LPS" tells 3D Slicer (and similar) which patient coordinate convention the file uses
+  const header = `${space ? `SPACE=${space} ` : ''}Quick DICOM Planning - ${name}`.slice(0, 79);
   for (let i = 0; i < header.length; i++) bytes[i] = header.charCodeAt(i) & 0x7f;
   const dv = new DataView(buf);
   dv.setUint32(80, n, true);

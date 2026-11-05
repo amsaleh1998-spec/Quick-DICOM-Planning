@@ -8,8 +8,8 @@ import { addScaled, fromFrame, Vec3 } from './math';
 import { nervePath } from './nerve';
 import type { CropSpec } from './render';
 import { cropTester } from './segment';
-import { ScalarGrid, Tris, concatTris, coneMesh, fillCavities, isoSurface, stlBytes, tubeMesh } from './stl';
-import type { Volume } from './volume';
+import { ScalarGrid, Tris, concatTris, coneMesh, fillCavities, isoSurface, meshToTris, smoothMesh, stlBytes, tubeMesh } from './stl';
+import { affineDet, type Volume } from './volume';
 import { writeZip } from './zip';
 
 export interface ExportHooks {
@@ -20,7 +20,7 @@ export interface ExportHooks {
 }
 
 /** Keep sampled grids below this many samples (memory / time). */
-const MAX_SAMPLES = 32_000_000;
+export const MAX_SAMPLES = 60_000_000;
 
 interface Item {
   key: string;
@@ -32,9 +32,11 @@ interface Item {
 }
 
 interface BuildOpts {
-  /** extra downsampling of voxel surfaces (1 = full detail) */
+  /** sampling step of bone surfaces in CT voxels (1 = full CT resolution) */
   step: number;
   solid: boolean;
+  /** Taubin smoothing of bone surfaces */
+  smooth: boolean;
 }
 
 const safe = (s: string) =>
@@ -102,7 +104,9 @@ function thresholdField(vol: Volume, lo: number, hi: number, crop: CropSpec | nu
 async function surface(g: ScalarGrid | null, opts: BuildOpts, progress: (f: number) => void): Promise<Tris> {
   if (!g) return new Float32Array(0);
   if (opts.solid) fillCavities(g);
-  return isoSurface(g, progress);
+  const mesh = await isoSurface(g, (f) => progress(opts.smooth ? f * 0.8 : f));
+  if (opts.smooth) await smoothMesh(mesh, 12, 0.5, -0.53, (f) => progress(0.8 + 0.2 * f));
+  return meshToTris(mesh);
 }
 
 function implantSolid(app: App, imp: Implant, kind: 'implant' | 'abutment'): Tris {
@@ -111,6 +115,24 @@ function implantSolid(app: App, imp: Implant, kind: 'implant' | 'abutment'): Tri
   return concatTris(
     parts.map((p) => coneMesh(addScaled(p.center, p.axis, -p.half), addScaled(p.center, p.axis, p.half), p.r0, p.r1)),
   );
+}
+
+/** Move a mesh into DICOM patient coordinates (in place), keeping the triangles outward-facing. */
+function toPatient(tris: Tris, m: number[]) {
+  const flip = affineDet(m) < 0;
+  for (let i = 0; i < tris.length; i += 3) {
+    const x = tris[i], y = tris[i + 1], z = tris[i + 2];
+    tris[i] = m[0] * x + m[1] * y + m[2] * z + m[3];
+    tris[i + 1] = m[4] * x + m[5] * y + m[6] * z + m[7];
+    tris[i + 2] = m[8] * x + m[9] * y + m[10] * z + m[11];
+  }
+  if (flip)
+    for (let t = 0; t < tris.length; t += 9)
+      for (let k = 0; k < 3; k++) {
+        const a = tris[t + 3 + k];
+        tris[t + 3 + k] = tris[t + 6 + k];
+        tris[t + 6 + k] = a;
+      }
 }
 
 function collectItems(app: App): { groups: { title: string; items: Item[] }[]; base: string } {
@@ -141,7 +163,7 @@ function collectItems(app: App): { groups: { title: string; items: Item[] }[]; b
         label: sg.name,
         name: sg.name,
         checked: true,
-        build: (o, pr) => surface(app.seg.segmentField(sg, o.step), o, pr),
+        build: (o, pr) => surface(app.seg.segmentField(sg, o.step, MAX_SAMPLES), o, pr),
       })),
     });
   if (app.implants.length) {
@@ -201,7 +223,11 @@ export function showExportStl(app: App, hooks: ExportHooks) {
         <h2 id="xs-title">Export STL</h2>
         <button class="modal-close" title="Close (Esc)">×</button>
       </header>
-      <p class="muted">Millimetres, in the coordinate system of this scan – all exported files line up with each other.</p>
+      <p class="muted">${
+        app.vol.info.patientAffine
+          ? 'Millimetres, in the <b>original DICOM patient coordinates</b> (LPS, as in the DICOM files) – the STL files line up with this CBCT in other software (exocad, 3Shape, Blue Sky Plan, 3D Slicer …) and with each other.'
+          : 'Millimetres, in this scan’s own coordinates – the files line up with each other. (This scan has no DICOM position information, so the original DICOM coordinates are not available.)'
+      }</p>
       ${groups
         .map(
           (g) => `<h4>${esc(g.title)}</h4>
@@ -211,11 +237,12 @@ export function showExportStl(app: App, hooks: ExportHooks) {
       <h4>Options</h4>
       <label class="check">Detail of bone surfaces
         <select id="xs-step">
-          <option value="1">Full (largest files)</option>
-          <option value="2" selected>Medium (≈ 4× smaller files)</option>
+          <option value="1" selected>High – full CT resolution</option>
+          <option value="2">Medium (≈ 4× smaller files)</option>
           <option value="3">Low (≈ 9× smaller files)</option>
         </select>
       </label>
+      <label class="check"><input type="checkbox" id="xs-smooth" checked /> Smooth surfaces (removes the voxel staircase, keeps the size)</label>
       <label class="check"><input type="checkbox" id="xs-solid" checked /> Solid models (fill closed hollow spaces inside the bone)</label>
       <label class="check"><input type="radio" name="xs-files" value="zip" checked /> One STL file per object (ZIP)</label>
       <label class="check"><input type="radio" name="xs-files" value="one" /> Everything in one STL file</label>
@@ -254,9 +281,12 @@ export function showExportStl(app: App, hooks: ExportHooks) {
     const opts: BuildOpts = {
       step: Number(m.querySelector<HTMLSelectElement>('#xs-step')!.value) || 1,
       solid: m.querySelector<HTMLInputElement>('#xs-solid')!.checked,
+      smooth: m.querySelector<HTMLInputElement>('#xs-smooth')!.checked,
     };
     const combined = m.querySelector<HTMLInputElement>('input[name="xs-files"][value="one"]')!.checked;
     close();
+    const affine = app.vol?.info.patientAffine;
+    const space = affine ? 'LPS' : null;
     try {
       const meshes: { name: string; tris: Tris }[] = [];
       for (let i = 0; i < items.length; i++) {
@@ -265,6 +295,7 @@ export function showExportStl(app: App, hooks: ExportHooks) {
         hooks.showLoading(label, i / items.length);
         await new Promise((r) => setTimeout(r, 0));
         const tris = await it.build(opts, (f) => hooks.showLoading(label, (i + f) / items.length));
+        if (affine) toPatient(tris, affine);
         if (tris.length) meshes.push({ name: it.name, tris });
       }
       if (!meshes.length) {
@@ -281,7 +312,7 @@ export function showExportStl(app: App, hooks: ExportHooks) {
       if (combined || meshes.length === 1) {
         const tris = meshes.length === 1 ? meshes[0].tris : concatTris(meshes.map((x) => x.tris));
         const nm = meshes.length === 1 ? meshes[0].name : 'export';
-        blob = new Blob([stlBytes(tris, nm) as BlobPart], { type: 'model/stl' });
+        blob = new Blob([stlBytes(tris, nm, space) as BlobPart], { type: 'model/stl' });
         filename = `${base}_${safe(nm)}.stl`;
         type = stlType;
       } else {
@@ -290,7 +321,7 @@ export function showExportStl(app: App, hooks: ExportHooks) {
           let fn = `${base}_${safe(x.name)}.stl`;
           for (let n = 2; used.has(fn); n++) fn = `${base}_${safe(x.name)}_${n}.stl`;
           used.add(fn);
-          return { name: fn, data: stlBytes(x.tris, x.name) };
+          return { name: fn, data: stlBytes(x.tris, x.name, space) };
         });
         blob = await writeZip(entries, (f) => hooks.showLoading('Compressing…', 0.95 + 0.05 * f));
         filename = `${base}_STL.zip`;
@@ -300,7 +331,7 @@ export function showExportStl(app: App, hooks: ExportHooks) {
       const ok = await hooks.deliver(blob, filename, type);
       hooks.setStatus(
         ok
-          ? `Exported ${meshes.length} object${meshes.length > 1 ? 's' : ''} (${Math.round(totalTris).toLocaleString()} triangles) as ${filename} – ${(blob.size / 1e6).toFixed(1)} MB`
+          ? `Exported ${meshes.length} object${meshes.length > 1 ? 's' : ''} (${Math.round(totalTris).toLocaleString()} triangles) as ${filename} – ${(blob.size / 1e6).toFixed(1)} MB, ${affine ? 'DICOM patient coordinates' : 'scan coordinates'}`
           : 'Export cancelled',
       );
     } catch (e) {

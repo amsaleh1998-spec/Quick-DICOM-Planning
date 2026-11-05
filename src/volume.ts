@@ -18,6 +18,41 @@ export interface VolumeInfo {
   defaultWindow?: { center: number; width: number };
   /** all attributes of the series' first file, for the DICOM tag viewer */
   meta?: import('./dicomMeta').MetaEntry[];
+  /**
+   * Maps this volume's world coordinates (mm) to the original DICOM patient coordinates
+   * (LPS, mm, as in ImagePositionPatient): 3×4 row-major [R | t], p = R·w + t.
+   * Missing when the series has no position information (or for the demo phantom).
+   */
+  patientAffine?: number[];
+}
+
+/** Apply a 3×4 row-major affine to a point. */
+export function applyAffine(m: number[], p: Vec3): Vec3 {
+  return [
+    m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3],
+    m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7],
+    m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11],
+  ];
+}
+
+/** a ∘ b (first b, then a), both 3×4 row-major. */
+export function composeAffine(a: number[], b: number[]): number[] {
+  const out = new Array<number>(12);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      let v = c === 3 ? a[r * 4 + 3] : 0;
+      for (let k = 0; k < 3; k++) v += a[r * 4 + k] * b[k * 4 + c];
+      out[r * 4 + c] = v;
+    }
+  }
+  return out;
+}
+
+/** Determinant of the 3×3 part (negative = mirroring). */
+export function affineDet(m: number[]): number {
+  return (
+    m[0] * (m[5] * m[10] - m[6] * m[9]) - m[1] * (m[4] * m[10] - m[6] * m[8]) + m[2] * (m[4] * m[9] - m[5] * m[8])
+  );
 }
 
 /**
@@ -249,7 +284,18 @@ export async function resampleVolume(
       last = performance.now();
     }
   }
-  return new Volume(dims, [spacing, spacing, spacing], out, { ...vol.info, source: vol.info.source + ' (reoriented/cropped)' });
+  // new world w' -> old world: p0 + Σ frame[a] * w'[a]  (columns of the 3×3 are the frame axes)
+  const toOld = [
+    frame[0][0], frame[1][0], frame[2][0], p0[0],
+    frame[0][1], frame[1][1], frame[2][1], p0[1],
+    frame[0][2], frame[1][2], frame[2][2], p0[2],
+  ];
+  const patientAffine = vol.info.patientAffine ? composeAffine(vol.info.patientAffine, toOld) : undefined;
+  return new Volume(dims, [spacing, spacing, spacing], out, {
+    ...vol.info,
+    patientAffine,
+    source: vol.info.source + ' (reoriented/cropped)',
+  });
 }
 
 /**
