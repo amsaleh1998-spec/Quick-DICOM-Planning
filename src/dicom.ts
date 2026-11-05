@@ -445,9 +445,31 @@ export async function loadDicomFiles(files: File[], progress: LoadProgress): Pro
   } catch (e) {
     console.warn('Could not read DICOM metadata', e);
   }
+  // world (mm) -> DICOM patient coordinates. Native voxel (i,j,k) sits at
+  // P0 + i·ns0·rowDir + j·ns1·colDir + k·ns2·normal; the stored index on patient axis map[a][0]
+  // is native[a] (sign +) or dims-1-native[a] (sign -), and world = stored index × spacing.
+  let patientAffine: number[] | undefined;
+  if (hasPos) {
+    // in-plane box averaging moves the voxel centre by (step-1)/2 source pixels
+    const half = (step - 1) / 2;
+    const P0: Vec3 = [0, 1, 2].map(
+      (c) => series[0].position![c] + half * (ref.pixelSpacing[1] * ref.rowDir[c] + ref.pixelSpacing[0] * ref.colDir[c]),
+    ) as Vec3;
+    const R = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const t: Vec3 = [P0[0], P0[1], P0[2]];
+    for (let a = 0; a < 3; a++) {
+      const [ax, sign] = map[a];
+      for (let c = 0; c < 3; c++) {
+        R[c * 3 + ax] = sign * dirs[a][c];
+        if (sign < 0) t[c] += (dims[ax] - 1) * spacing[ax] * dirs[a][c];
+      }
+    }
+    patientAffine = [R[0], R[1], R[2], t[0], R[3], R[4], R[5], t[1], R[6], R[7], R[8], t[2]];
+  }
   const info = {
     ...ref.info,
     meta,
+    patientAffine,
     source: `${series.length} slices${step > 1 ? ` (downsampled ×${step})` : ''}${ignored ? ` · ${ignored} other file${ignored > 1 ? 's' : ''} ignored` : ''}`,
   };
   return new Volume(dims, spacing, data, info);

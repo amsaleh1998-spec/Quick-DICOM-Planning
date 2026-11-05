@@ -179,8 +179,11 @@ Enter = finish a cut · Del = delete selected implant.
 
 ## Export STL
 
-**Export STL** (toolbar) writes binary STL files in millimetres, all in the scan's own coordinate system (origin at
-the first voxel, axes as in the app), so every exported file lines up with the others:
+**Export STL** (toolbar) writes binary STL files in millimetres in the **original DICOM patient coordinates**
+(LPS, as in ImagePositionPatient; the header carries `SPACE=LPS` for 3D Slicer), so the models line up with the CBCT
+in other software and with each other. The mapping is recorded when the series is loaded (axis reordering, flips,
+downsampling), follows *Apply rotate + crop* and is saved in projects. Series without position information (and the
+demo phantom) export in the scan's own coordinates instead.
 
 - **3D render** – the surface at the current 3D threshold range, limited to the crop box when one is set
 - **Segments** – each segment's bone surface (follows the CT values at the segment's threshold, closed against
@@ -188,10 +191,12 @@ the first voxel, axes as in the app), so every exported file lines up with the o
 - **Implants** (truncated cones with their real platform/apex diameters and length) and **MUAs** (collar + angled head)
 - **Nerve canals** – tubes along the traced centre line with the canal diameter
 
-Options: detail of bone surfaces (Full / Medium / Low – each step makes files ~4× / ~9× smaller), *Solid models*
-(fills closed hollow spaces inside the bone, e.g. trabecular pores, for smaller printable models), and one STL per
-object in a ZIP or everything in a single STL. Surfaces are extracted with marching tetrahedra, so they are closed,
-consistently oriented meshes.
+Options: detail of bone surfaces – **High** (default: sampled at the full CT resolution, even when the segmentation
+label grid is downsampled for large scans), Medium (~4× smaller files) or Low (~9×); *Smooth surfaces* (Taubin
+smoothing, removes the voxel staircase without shrinking the model); *Solid models* (fills closed hollow spaces
+inside the bone for smaller printable models); one STL per object in a ZIP or everything in a single STL. Surfaces
+are extracted with marching tetrahedra into a shared-vertex mesh, so they are closed, manifold and consistently
+oriented.
 
 ## Open DICOM files by double-clicking (Windows)
 
