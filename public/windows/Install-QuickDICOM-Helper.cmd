@@ -106,6 +106,9 @@ Log ('app command template: ' + $template)
 function Start-App([string]$Path) {
   $quoted = '"' + $Path + '"'
   $cmd = $template
+  # Chrome/Edge register '--single-argument %1': everything after that switch is taken
+  # literally as ONE argument, so the path must not be quoted (quotes would become part of it)
+  if ($cmd -match '--single-argument') { $quoted = $Path }
   $done = $false
   foreach ($tok in @('"%1"', '"%L"', '%1', '%L')) {
     if (-not $done -and $cmd.Contains($tok)) { $cmd = $cmd.Replace($tok, $quoted); $done = $true }
