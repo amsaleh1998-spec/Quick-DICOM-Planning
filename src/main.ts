@@ -1046,6 +1046,16 @@ function updatePatientBadge() {
   const label = app.vol ? formatPatientName(app.vol.info.patientName) : '';
   badge.textContent = label;
   badge.classList.toggle('hidden', !label);
+  updateWindowTitle();
+}
+/** Window / tab title starts with the patient (and scan date), so several open scans are easy to tell apart. */
+function updateWindowTitle() {
+  const info = app.vol?.info;
+  const who = info ? formatPatientName(info.patientName) || info.seriesDescription?.trim() || '' : '';
+  const date = info?.studyDate ? formatDicomDate(info.studyDate) : '';
+  const lead = [who, date].filter(Boolean).join(' · ');
+  const title = lead ? `${lead} – Quick DICOM Planning` : 'Quick DICOM Planning';
+  if (document.title !== title) document.title = title;
 }
 const onNameInput = () => {
   if (!app.vol) return;
