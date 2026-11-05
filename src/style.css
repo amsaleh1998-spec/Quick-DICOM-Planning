@@ -1173,3 +1173,6 @@ a.btn-link {
   border-top: none;
   padding-top: 0;
 }
+.launch-banner .lb-error {
+  color: #ff8a80;
+}

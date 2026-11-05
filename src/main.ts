@@ -64,15 +64,27 @@ const hideLoading = () => loading.classList.add('hidden');
 app.onStatus = (msg, error) => setStatus(msg, error);
 app.onBusy = (text) => (text ? showLoading(text, 0.6) : hideLoading());
 
-async function loadFiles(files: File[]) {
-  if (!files.length) return;
+/** Load DICOM files, a ZIP of them or a project. Resolves to an error message, or null on success. */
+async function loadFiles(files: File[]): Promise<string | null> {
+  if (!files.length) return 'No files received.';
   if (files.length === 1 && (await isZipFile(files[0]))) {
     // a project, or a ZIP of DICOM files (e.g. a whole series handed over by the Windows helper)
-    const entries = await zipEntriesAsFiles(files[0]).catch(() => null);
-    if (!entries || entries.some((f) => f.name === 'project.json')) {
-      await openProject(files[0]);
-      return;
+    showLoading('Unpacking…', 0);
+    let entries: File[] | null = null;
+    let zipError = '';
+    try {
+      entries = await zipEntriesAsFiles(files[0]);
+    } catch (e) {
+      zipError = (e as Error).message;
+      console.error(e);
     }
+    if (!entries && !/\.(zip|qdp)$/i.test(files[0].name)) {
+      hideLoading();
+      const msg = `Could not unpack “${files[0].name}” (${(files[0].size / 1048576).toFixed(1)} MB): ${zipError}`;
+      setStatus(msg, true);
+      return msg;
+    }
+    if (!entries || entries.some((f) => f.name === 'project.json')) return openProject(files[0]);
     files = entries;
   }
   try {
@@ -81,9 +93,11 @@ async function loadFiles(files: File[]) {
     app.setVolume(vol);
     setMode('mpr');
     setStatus(`Loaded ${vol.nx}×${vol.ny}×${vol.nz} voxels from ${vol.info.source}`);
+    return null;
   } catch (e) {
     console.error(e);
     setStatus((e as Error).message, true);
+    return (e as Error).message;
   } finally {
     hideLoading();
   }
@@ -120,25 +134,31 @@ async function loadFolderOf(hit: { root: ScanDir; path: string[] }) {
     showLoading('Reading folder…', 0);
     const dir = await parentOf(hit);
     const files = await filesFromDirectory(dir as unknown as DirHandle, 0);
-    await loadFiles(files.length ? files : launchFile ? [launchFile] : []);
+    const err = await loadFiles(files.length ? files : launchFile ? [launchFile] : []);
+    if (err) showLaunchBanner('error', err);
   } catch (e) {
-    setStatus((e as Error).message, true);
-    if (launchFile) await loadFiles([launchFile]);
+    showLaunchBanner('error', `${(e as Error).name}: ${(e as Error).message}`);
   } finally {
     hideLoading();
   }
 }
 
-function showLaunchBanner(kind: 'setup' | 'allow', folderName = '') {
-  $('lb-file').textContent = launchFile ? `“${launchFile.name}”` : '';
+function showLaunchBanner(kind: 'setup' | 'allow' | 'error', detail = '') {
+  const folderName = detail;
+  $('lb-file').textContent = launchFile ? `“${launchFile.name}”` : launchHandle ? `“${launchHandle.name}”` : '';
   $('lb-msg').innerHTML =
-    kind === 'setup'
+    kind === 'error'
+      ? `<span class="lb-error">Could not open it: ${escapeHtml(detail)}</span> ` +
+        'If you use the Windows helper, please send the text of <b>%LOCALAPPDATA%\\QuickDICOMPlanning\\log.txt</b>. ' +
+        'You can still load the folder yourself:'
+      : kind === 'setup'
       ? 'One-time setup: choose the folder where your scans are saved (e.g. <b>D:\\CBCT</b> or <b>Documents\\Scans</b> – ' +
         'the higher up, the better). From then on, double-clicking a scan anywhere inside it opens the whole series directly.'
       : `Allow access to your scans folder <b>${escapeHtml(folderName)}</b> again to open the series. ` +
         'Choose <b>Allow on every visit</b> if offered, so it opens directly next time.';
-  $('lb-folder').textContent = kind === 'setup' ? 'Choose scans folder' : 'Allow';
+  $('lb-folder').textContent = kind === 'allow' ? 'Allow' : kind === 'error' ? 'Choose folder' : 'Choose scans folder';
   launchBanner.dataset.kind = kind;
+  if (kind !== 'error') setStatus('');
   launchBanner.classList.remove('hidden');
 }
 
@@ -182,24 +202,37 @@ type LaunchQueue = { setConsumer(cb: (p: { files?: FileSystemFileHandle[] }) => 
 const launchQueue = (window as unknown as { launchQueue?: LaunchQueue }).launchQueue;
 launchQueue?.setConsumer(async (params) => {
   const handles = params.files ?? [];
-  if (!handles.length) return;
+  if (!handles.length) return; // ordinary start, no file
   hideLaunchBanner();
-  const files = await Promise.all(handles.map((h) => h.getFile()));
-  if (files.length > 1 || /\.(zip|qdp)$/i.test(files[0].name) || (await isZipFile(files[0]))) {
-    // several files selected in Explorer, a project, or a whole series bundled by the
-    // Windows helper (a ZIP named .dcm): open them as they are, no folder access needed
-    await loadFiles(files);
-    return;
-  }
   launchHandle = handles[0];
-  launchFile = files[0];
-  const hit = await findScanFolder(handles[0]);
-  if (hit?.permission === 'granted') {
-    await loadFolderOf(hit);
-    return;
+  launchFile = null;
+  const what = handles.length > 1 ? `${handles.length} files` : `“${handles[0].name}”`;
+  console.info('[launch] received', handles.map((h) => h.name));
+  setStatus(`Opening ${what}…`);
+  showLoading(`Opening ${what}…`, 0);
+  try {
+    const files = await Promise.all(handles.map((h) => h.getFile()));
+    launchFile = files[0];
+    if (files.length > 1 || /\.(zip|qdp)$/i.test(files[0].name) || (await isZipFile(files[0]))) {
+      // several files selected in Explorer, a project, or a whole series bundled by the
+      // Windows helper (a ZIP named .dcm): open them as they are, no folder access needed
+      const err = await loadFiles(files);
+      if (err) showLaunchBanner('error', err);
+      return;
+    }
+    const hit = await findScanFolder(handles[0]);
+    if (hit?.permission === 'granted') {
+      await loadFolderOf(hit);
+      return;
+    }
+    pendingHit = hit;
+    showLaunchBanner(hit ? 'allow' : 'setup', hit?.root.name);
+  } catch (e) {
+    console.error(e);
+    showLaunchBanner('error', `${(e as Error).name}: ${(e as Error).message}`);
+  } finally {
+    hideLoading();
   }
-  pendingHit = hit;
-  showLaunchBanner(hit ? 'allow' : 'setup', hit?.root.name);
 });
 
 // "Install app" button. Chrome / Edge hand us an install prompt through `beforeinstallprompt`; when they
@@ -326,7 +359,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 // ---- projects ----------------------------------------------------------------------
-async function openProject(file: File) {
+async function openProject(file: File): Promise<string | null> {
   try {
     showLoading('Opening project…', 0.2);
     const buf = await file.arrayBuffer();
@@ -337,9 +370,11 @@ async function openProject(file: File) {
     setMode(pf.state.mode);
     applyProjectState(app, pf);
     setStatus(`Project "${file.name}" restored (saved ${new Date(pf.savedAt).toLocaleString()})`);
+    return null;
   } catch (e) {
     console.error(e);
     setStatus((e as Error).message, true);
+    return (e as Error).message;
   } finally {
     hideLoading();
   }
