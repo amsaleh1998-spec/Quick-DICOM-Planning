@@ -151,21 +151,99 @@ launchQueue?.setConsumer(async (params) => {
   launchBanner.classList.remove('hidden');
 });
 
-// "Install app" button (Chrome / Edge offer installation through this event)
-let installPrompt: (Event & { prompt(): Promise<void> }) | null = null;
+// "Install app" button. Chrome / Edge hand us an install prompt through `beforeinstallprompt`; when they
+// haven't (yet), or in other browsers, the button opens step-by-step instructions instead.
+let installPrompt: (Event & { prompt(): Promise<{ outcome: string } | void>; userChoice?: Promise<{ outcome: string }> }) | null = null;
+const isStandalone = () =>
+  window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: window-controls-overlay)').matches;
+if (isStandalone()) $('btn-install').classList.add('hidden');
+else $('btn-install').classList.remove('hidden');
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
-  installPrompt = e as Event & { prompt(): Promise<void> };
+  installPrompt = e as typeof installPrompt;
   $('btn-install').classList.remove('hidden');
 });
 window.addEventListener('appinstalled', () => {
   installPrompt = null;
   $('btn-install').classList.add('hidden');
+  hideInstallHelp();
   setStatus('Installed. Double-click a .dcm file in Explorer (choose Quick DICOM Planning the first time) to open it here.');
 });
+
+let installModal: HTMLDivElement | null = null;
+function hideInstallHelp() {
+  if (installModal) installModal.style.display = 'none';
+}
+function showInstallHelp() {
+  const ua = navigator.userAgent;
+  const isEdge = /Edg\//.test(ua);
+  const isChrome = !isEdge && /Chrome\//.test(ua) && !/OPR\//.test(ua);
+  const inFrame = window.top !== window.self;
+  const appUrl = 'https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/';
+  let steps: string;
+  if (inFrame) {
+    steps = `<p>This copy of the app runs inside another page, and browsers can't install it from there.
+      Open <a href="${appUrl}" target="_blank" rel="noopener">${appUrl}</a> in <b>Chrome</b> or <b>Edge</b> and click <b>Install app</b> there.</p>`;
+  } else if (isEdge) {
+    steps = `<ol>
+      <li>Look at the right end of the address bar for the <b>App available</b> icon (a small square with a <b>+</b>) and click it, then <b>Install</b>.</li>
+      <li>No icon? Open the <b>⋯</b> menu (top right) → <b>Apps</b> → <b>Install Quick DICOM Planning</b>.</li>
+    </ol>`;
+  } else if (isChrome) {
+    steps = `<ol>
+      <li>Look at the right end of the address bar for the <b>install</b> icon (a monitor with a down arrow) and click it, then <b>Install</b>.</li>
+      <li>No icon? Open the <b>⋮</b> menu (top right) → <b>Cast, save and share</b> → <b>Install page as app…</b>
+        (older Chrome versions: <b>Install Quick DICOM Planning…</b> directly in the menu).</li>
+    </ol>`;
+  } else {
+    steps = `<p>This browser can't install web apps that open files. Open <a href="${appUrl}" target="_blank" rel="noopener">${appUrl}</a>
+      in <b>Google Chrome</b> or <b>Microsoft Edge</b> (Edge is built into Windows) and click <b>Install app</b> there.</p>`;
+  }
+  if (!installModal) {
+    installModal = document.createElement('div');
+    installModal.className = 'modal-backdrop';
+    installModal.addEventListener('pointerdown', (e) => {
+      if (e.target === installModal) hideInstallHelp();
+    });
+    document.body.append(installModal);
+  }
+  installModal.innerHTML = `
+    <div class="modal install-help" role="dialog" aria-modal="true" aria-labelledby="ih-title">
+      <header>
+        <h2 id="ih-title">Install Quick DICOM Planning</h2>
+        <button class="modal-close" title="Close (Esc)">×</button>
+      </header>
+      ${steps}
+      <p class="muted">After installing, right-click any <b>.dcm</b> file in Windows Explorer → <b>Open with</b> →
+        <b>Choose another app</b> → <b>Quick DICOM Planning</b> and tick <b>Always use this app</b>.
+        From then on a double-click opens the file here and the app offers to load the whole folder.</p>
+      <footer><span></span><button class="primary modal-ok">OK</button></footer>
+    </div>`;
+  installModal.querySelector<HTMLButtonElement>('.modal-close')!.onclick = hideInstallHelp;
+  installModal.querySelector<HTMLButtonElement>('.modal-ok')!.onclick = hideInstallHelp;
+  installModal.style.display = '';
+  installModal.querySelector<HTMLButtonElement>('.modal-ok')!.focus();
+}
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key === 'Escape' && installModal && installModal.style.display !== 'none') {
+      e.stopImmediatePropagation();
+      hideInstallHelp();
+    }
+  },
+  true,
+);
 $('btn-install').onclick = async () => {
-  if (!installPrompt) return;
-  await installPrompt.prompt();
+  if (installPrompt) {
+    const p = installPrompt;
+    installPrompt = null; // a prompt can only be used once
+    await p.prompt();
+    const choice = await p.userChoice;
+    if (choice?.outcome === 'dismissed') setStatus('Installation cancelled. Click Install app again for instructions.');
+    return;
+  }
+  showInstallHelp();
 };
 
 // offline support + installability (production build only; the dev server reloads too often)

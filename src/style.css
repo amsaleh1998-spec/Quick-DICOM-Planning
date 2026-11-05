@@ -1137,3 +1137,29 @@ a.btn-link {
 .launch-banner .lb-text .muted {
   font-size: 12px;
 }
+
+/* ---- install instructions ---- */
+.modal.install-help {
+  max-width: 560px;
+}
+.install-help ol {
+  margin: 12px 0;
+  padding-left: 20px;
+}
+.install-help li {
+  margin: 6px 0;
+  line-height: 1.45;
+}
+.install-help p {
+  line-height: 1.45;
+}
+.install-help .muted {
+  color: var(--muted);
+}
+.install-help .muted b {
+  color: var(--text);
+}
+.install-help a {
+  color: var(--accent, #4da3ff);
+  word-break: break-all;
+}
