@@ -1,1 +1,2 @@
 public/windows/*.cmd -text
+public/mac/*.sh text eol=lf

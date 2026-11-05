@@ -202,6 +202,20 @@ all files of that folder into one uncompressed bundle (a ZIP named `.dcm` in `%T
 starts the installed app with it, so the whole series opens with no prompt. `uninstall.cmd` in the same folder
 removes it. The app also opens any ZIP of DICOM files (drag & drop or *Open files*).
 
+**macOS.** Install the app from Chrome or Edge the same way; in Finder select a `.dcm` file → *File → Get Info* →
+*Open with: Quick DICOM Planning* → *Change All…*. To skip the folder question there too, run the Mac helper once in
+Terminal (also shown in the app under *Install app* / *Mac helper*):
+
+```bash
+curl -fsSL https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/mac/install-helper.sh | bash
+```
+
+It builds *Quick DICOM Planning (whole series)* in `~/Applications` (an AppleScript droplet, current user only, no
+password), registers it for `.dcm/.dicom/.dic/.ima` and tries to make it the default (otherwise: Get Info → Open
+with → Change All…). A double-click packs the file's folder with `zip -0` into the temp folder and opens the installed
+web app with it. macOS may ask once per protected location (Documents, Desktop, Dropbox …) to allow folder access.
+Log: `~/Library/Application Support/QuickDICOMPlanning/log.txt`; remove with `uninstall.sh` in the same folder.
+
 Files without an extension cannot be associated in Windows; open their folder with *Open folder* or drag & drop.
 The installed app also works offline.
 

@@ -143,16 +143,22 @@ async function loadFolderOf(hit: { root: ScanDir; path: string[] }) {
   }
 }
 
+const OS_WIN = /Windows/.test(navigator.userAgent);
+const OS_MAC = !OS_WIN && /Macintosh|Mac OS X/.test(navigator.userAgent) && navigator.maxTouchPoints < 2;
+const HELPER_LOG = OS_MAC
+  ? '~/Library/Application Support/QuickDICOMPlanning/log.txt'
+  : '%LOCALAPPDATA%\\QuickDICOMPlanning\\log.txt';
+
 function showLaunchBanner(kind: 'setup' | 'allow' | 'error', detail = '') {
   const folderName = detail;
   $('lb-file').textContent = launchFile ? `“${launchFile.name}”` : launchHandle ? `“${launchHandle.name}”` : '';
   $('lb-msg').innerHTML =
     kind === 'error'
       ? `<span class="lb-error">Could not open it: ${escapeHtml(detail)}</span> ` +
-        'If you use the Windows helper, please send the text of <b>%LOCALAPPDATA%\\QuickDICOMPlanning\\log.txt</b>. ' +
+        `If you use the ${OS_MAC ? 'Mac' : 'Windows'} helper, please send the text of <b>${HELPER_LOG}</b>. ` +
         'You can still load the folder yourself:'
       : kind === 'setup'
-      ? 'One-time setup: choose the folder where your scans are saved (e.g. <b>D:\\CBCT</b> or <b>Documents\\Scans</b> – ' +
+      ? `One-time setup: choose the folder where your scans are saved (e.g. ${OS_MAC ? '<b>Documents/CBCT</b> or <b>Dropbox</b>' : '<b>D:\\CBCT</b> or <b>Documents\\Scans</b>'} – ` +
         'the higher up, the better). From then on, double-clicking a scan anywhere inside it opens the whole series directly.'
       : `Allow access to your scans folder <b>${escapeHtml(folderName)}</b> again to open the series. ` +
         'Choose <b>Allow on every visit</b> if offered, so it opens directly next time.';
@@ -243,7 +249,10 @@ const isStandalone = () =>
 if (isStandalone()) $('btn-install').classList.add('hidden');
 else $('btn-install').classList.remove('hidden');
 // inside the installed app on Windows: keep the helper one click away
-if (isStandalone() && /Windows/.test(navigator.userAgent)) $('btn-helper').classList.remove('hidden');
+if (isStandalone() && (OS_WIN || OS_MAC)) {
+  $('btn-helper').classList.remove('hidden');
+  $('btn-helper').textContent = OS_MAC ? 'Mac helper' : 'Windows helper';
+}
 $('btn-helper').onclick = () => showHelperHelp();
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
@@ -285,7 +294,9 @@ function showInfoModal(title: string, body: string) {
   infoModal.querySelector<HTMLButtonElement>('.modal-ok')!.focus();
 }
 const HELPER_URL = './windows/Install-QuickDICOM-Helper.cmd';
-const helperSection = () => `
+const MAC_HELPER_URL = new URL('./mac/install-helper.sh', document.baseURI).href;
+const macCommand = () => `curl -fsSL ${MAC_HELPER_URL} | bash`;
+const winHelperSection = () => `
   <h3>Never be asked for a folder (Windows helper)</h3>
   <p class="muted">Browsers give a web app only the one file you double-click. This small helper (installs for your
     Windows user only, no admin rights) packs the file's whole folder and hands it to the app, so a double-click opens
@@ -298,6 +309,27 @@ const helperSection = () => `
     <li>In the window that opens, choose <b>Quick DICOM Planning (whole series)</b> and tick <b>Always use this app</b>.</li>
   </ol>
   <p class="muted">To remove it later, run <b>uninstall.cmd</b> in <b>%LOCALAPPDATA%\\QuickDICOMPlanning</b>.</p>`;
+const macHelperSection = () => `
+  <h3>Never be asked for a folder (Mac helper)</h3>
+  <p class="muted">Browsers give a web app only the one file you double-click. This small helper adds
+    <b>Quick DICOM Planning (whole series)</b> to your Applications folder (your user only, no password). It packs the
+    file's whole folder and hands it to the app, so a double-click opens the full series with <b>no questions at all</b>.</p>
+  <ol>
+    <li>${isStandalone() ? 'Open' : 'Install the app first. Then open'} <b>Terminal</b> (⌘ Space, type <i>Terminal</i>, Return),
+      paste this line and press Return:
+      <div class="cmd-row"><code class="helper-cmd">${escapeHtml(macCommand())}</code><button class="primary copy-cmd">Copy</button></div></li>
+    <li>If Terminal says so at the end: in Finder select any <b>.dcm</b> file → <b>File → Get Info</b> (⌘I) →
+      <b>Open with</b>: choose <b>Quick DICOM Planning (whole series)</b> → <b>Change All…</b></li>
+    <li>The first time you open a scan, macOS may ask to let the helper access a folder (Documents, Desktop,
+      Dropbox …): click <b>Allow</b>, so it can read the other files of the scan.</li>
+  </ol>
+  <p class="muted">To remove it later, run <code>bash ~/Library/Application\\ Support/QuickDICOMPlanning/uninstall.sh</code> in Terminal.</p>`;
+const helperSection = () =>
+  OS_MAC
+    ? macHelperSection()
+    : OS_WIN
+    ? winHelperSection()
+    : `<h3>Helper</h3><p class="muted">The double-click helper is available for Windows and macOS.</p>`;
 /** Save the helper via a blob: works the same in a browser tab and in the installed app window. */
 async function downloadHelper() {
   try {
@@ -319,6 +351,21 @@ async function downloadHelper() {
 }
 function bindHelperButtons() {
   infoModal?.querySelectorAll<HTMLButtonElement>('.dl-helper').forEach((b) => (b.onclick = () => downloadHelper()));
+  infoModal?.querySelectorAll<HTMLButtonElement>('.copy-cmd').forEach(
+    (b) =>
+      (b.onclick = async () => {
+        const text = macCommand();
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          const code = b.parentElement?.querySelector('code');
+          if (code) window.getSelection()?.selectAllChildren(code); // let the user press ⌘C
+          document.execCommand?.('copy');
+        }
+        b.textContent = 'Copied';
+        setTimeout(() => (b.textContent = 'Copy'), 2000);
+      }),
+  );
 }
 function showHelperHelp() {
   showInfoModal('Open whole scans with a double-click', helperSection());
@@ -349,13 +396,16 @@ function showInstallHelp() {
     steps = `<p>This browser can't install web apps that open files. Open <a href="${appUrl}" target="_blank" rel="noopener">${appUrl}</a>
       in <b>Google Chrome</b> or <b>Microsoft Edge</b> (Edge is built into Windows) and click <b>Install app</b> there.</p>`;
   }
-  const isWindows = /Windows/.test(ua);
+  const after = OS_MAC
+    ? `After installing, select any <b>.dcm</b> file in Finder → <b>File → Get Info</b> (⌘I) → <b>Open with</b>:
+        <b>Quick DICOM Planning</b> → <b>Change All…</b>`
+    : `After installing, right-click any <b>.dcm</b> file in Windows Explorer → <b>Open with</b> →
+        <b>Choose another app</b> → <b>Quick DICOM Planning</b> and tick <b>Always use this app</b>.`;
   showInfoModal(
     'Install Quick DICOM Planning',
     `${steps}
-      <p class="muted">After installing, right-click any <b>.dcm</b> file in Windows Explorer → <b>Open with</b> →
-        <b>Choose another app</b> → <b>Quick DICOM Planning</b> and tick <b>Always use this app</b>.</p>
-      ${isWindows && !inFrame ? helperSection() : ''}`,
+      <p class="muted">${after}</p>
+      ${(OS_WIN || OS_MAC) && !inFrame ? helperSection() : ''}`,
   );
   bindHelperButtons();
 }
