@@ -192,6 +192,16 @@ The app can be installed from Chrome or Microsoft Edge and then registered for `
    later asks again, choose **Allow on every visit**. Selecting several files in Explorer and pressing Enter opens
    exactly those files.
 
+**Never be asked (Windows helper).** Browsers only ever hand a web app the one file that was double-clicked, so
+the steps above need the scans folder once. To skip even that, download
+[`Install-QuickDICOM-Helper.cmd`](public/windows/Install-QuickDICOM-Helper.cmd) (also linked in the app: *Install app*
+dialog, or *Never ask again…* on the launch banner) and run it once. It installs for the current Windows user only
+(no admin rights, files in `%LOCALAPPDATA%\QuickDICOMPlanning`), registers *Quick DICOM Planning (whole series)* for
+`.dcm/.dicom/.dic/.ima`, and opens the *Open with* dialog: choose it and tick *Always*. On a double-click it packs
+all files of that folder into one uncompressed bundle (a ZIP named `.dcm` in `%TEMP%`, cleaned up after 12 h) and
+starts the installed app with it, so the whole series opens with no prompt. `uninstall.cmd` in the same folder
+removes it. The app also opens any ZIP of DICOM files (drag & drop or *Open files*).
+
 Files without an extension cannot be associated in Windows; open their folder with *Open folder* or drag & drop.
 The installed app also works offline.
 
