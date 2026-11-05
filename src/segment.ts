@@ -268,6 +268,61 @@ export class Segmentation {
     return L[i + j * this.nx + k * this.nx * this.ny] & 127;
   }
 
+  /**
+   * Scalar field of one segment for surface export, sampled every `step` grid voxels inside the
+   * segment's bounding box (plus one padding layer). Its own voxels (and its shell) carry the CT
+   * value minus the threshold, so the surface follows the bone smoothly; everything else is
+   * forced outside, so the surface closes against neighbouring segments, cuts and the borders.
+   */
+  segmentField(seg: Segment, step: number): import('./stl').ScalarGrid | null {
+    const L = this.labels;
+    if (!L || !this.vol || !seg.voxels) return null;
+    const { nx, ny, nz } = this;
+    const nxy = nx * ny;
+    let i0 = nx, j0 = ny, k0 = nz, i1 = -1, j1 = -1, k1 = -1;
+    for (let k = 0, idx = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++, idx++) {
+          if ((L[idx] & 127) !== seg.id) continue;
+          if (i < i0) i0 = i;
+          if (i > i1) i1 = i;
+          if (j < j0) j0 = j;
+          if (j > j1) j1 = j;
+          if (k < k0) k0 = k;
+          if (k > k1) k1 = k;
+        }
+    if (i1 < 0) return null;
+    const iso = this.segmentLo(seg) - 0.5;
+    // samples cover [i0, i1] at `step`, plus one forced-outside layer on every side
+    const sx = Math.floor((i1 - i0) / step) + 3;
+    const sy = Math.floor((j1 - j0) / step) + 3;
+    const sz = Math.floor((k1 - k0) / step) + 3;
+    const out = new Float32Array(sx * sy * sz).fill(-Infinity);
+    for (let c = 1; c < sz - 1; c++) {
+      const k = k0 + (c - 1) * step;
+      if (k >= nz) continue;
+      for (let b = 1; b < sy - 1; b++) {
+        const j = j0 + (b - 1) * step;
+        if (j >= ny) continue;
+        for (let a = 1; a < sx - 1; a++) {
+          const i = i0 + (a - 1) * step;
+          if (i >= nx) continue;
+          if ((L[i + j * nx + k * nxy] & 127) !== seg.id) continue;
+          out[a + b * sx + c * sx * sy] = this.valueAt(i, j, k) - iso;
+        }
+      }
+    }
+    const gs = this.gs;
+    return {
+      nx: sx,
+      ny: sy,
+      nz: sz,
+      s: out,
+      origin: [(i0 - step) * gs[0], (j0 - step) * gs[1], (k0 - step) * gs[2]],
+      step: [gs[0] * step, gs[1] * step, gs[2] * step],
+    };
+  }
+
   /** Threshold of a segment (its first seed) for rendering its surface. */
   segmentLo(seg: Segment): number {
     return seg.seeds.length ? Math.min(...seg.seeds.map((s) => s.lo)) : 0;
@@ -559,7 +614,7 @@ export class Segmentation {
 }
 
 /** Point-in-crop test (frame coordinates); always true without a crop. */
-function cropTester(crop: CropSpec | null): (x: number, y: number, z: number) => boolean {
+export function cropTester(crop: CropSpec | null): (x: number, y: number, z: number) => boolean {
   if (!crop) return () => true;
   const { origin: o, frame: F, min, max } = crop;
   return (x, y, z) => {

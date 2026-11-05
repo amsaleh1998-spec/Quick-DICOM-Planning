@@ -177,6 +177,22 @@ Alt/middle-drag = pan (also Shift-drag outside the MPR) · F = fit all views ·
 M or the ⤢ button = maximize/restore a view · Esc = cancel / deselect / leave the segmentation tool ·
 Enter = finish a cut · Del = delete selected implant.
 
+## Export STL
+
+**Export STL** (toolbar) writes binary STL files in millimetres, all in the scan's own coordinate system (origin at
+the first voxel, axes as in the app), so every exported file lines up with the others:
+
+- **3D render** – the surface at the current 3D threshold range, limited to the crop box when one is set
+- **Segments** – each segment's bone surface (follows the CT values at the segment's threshold, closed against
+  neighbouring segments and cuts)
+- **Implants** (truncated cones with their real platform/apex diameters and length) and **MUAs** (collar + angled head)
+- **Nerve canals** – tubes along the traced centre line with the canal diameter
+
+Options: detail of bone surfaces (Full / Medium / Low – each step makes files ~4× / ~9× smaller), *Solid models*
+(fills closed hollow spaces inside the bone, e.g. trabecular pores, for smaller printable models), and one STL per
+object in a ZIP or everything in a single STL. Surfaces are extracted with marching tetrahedra, so they are closed,
+consistently oriented meshes.
+
 ## Open DICOM files by double-clicking (Windows)
 
 The app can be installed from Chrome or Microsoft Edge and then registered for `.dcm`, `.dicom`, `.dic` and `.ima` files:
@@ -262,6 +278,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/views/overlays.ts` | 2D overlays: segment tint/outlines, cut traces, nerve tube sections and projections |
 | `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
 | `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles, diameter/length dragging |
+| `src/stl.ts`, `src/exportStl.ts` | STL export: marching-tetrahedra iso-surfaces, cavity filling, cone/tube solids, binary STL writer, export dialog |
 
 ## Limitations
 

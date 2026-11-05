@@ -4,6 +4,7 @@ import { NERVE_SAFETY_MM, nerveLength } from './nerve';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
 import { isZipFile, zipEntriesAsFiles } from './zip';
+import { showExportStl } from './exportStl';
 import { findScanFolder, parentOf, rememberScanFolder, type FolderHit, type ScanDir } from './scanFolders';
 import { formatDicomDate, formatPatientName, joinPersonName, splitPersonName } from './dicomMeta';
 import { showTagViewer } from './tagViewer';
@@ -462,7 +463,10 @@ type DownloadsNs = { save(r: { filename: string; data: Blob }): Promise<unknown>
 type ClaudeHost = { use(name: string): Promise<unknown> };
 
 /** Hand the file to the user: hosted page capability, native save dialog, or a plain download. */
-async function deliverFile(blob: Blob, filename: string): Promise<boolean> {
+type FileTypeSpec = { description: string; accept: Record<string, string[]> };
+const PROJECT_FILE_TYPE: FileTypeSpec = { description: 'Quick DICOM Planning project', accept: { 'application/zip': ['.zip'] } };
+
+async function deliverFile(blob: Blob, filename: string, fileType: FileTypeSpec = PROJECT_FILE_TYPE): Promise<boolean> {
   const host = (window as unknown as { claude?: ClaudeHost }).claude;
   if (host?.use) {
     const dl = (await host.use('downloads').catch(() => null)) as DownloadsNs | null;
@@ -482,7 +486,7 @@ async function deliverFile(blob: Blob, filename: string): Promise<boolean> {
     try {
       const handle = await picker({
         suggestedName: filename,
-        types: [{ description: 'Quick DICOM Planning project', accept: { 'application/zip': ['.zip'] } }],
+        types: [fileType],
       });
       const w = await (handle as unknown as { createWritable(): Promise<WritableStream & { write(b: Blob): Promise<void>; close(): Promise<void> }> }).createWritable();
       await w.write(blob);
@@ -526,6 +530,13 @@ async function saveProject() {
 
 const projectInput = $<HTMLInputElement>('project-input');
 $('btn-save-project').onclick = () => saveProject();
+$('btn-export-stl').onclick = () =>
+  showExportStl(app, {
+    showLoading,
+    hideLoading,
+    setStatus,
+    deliver: (blob, name, type) => deliverFile(blob, name, type),
+  });
 $('btn-open-project').onclick = () => projectInput.click();
 projectInput.onchange = () => {
   const f = projectInput.files?.[0];
