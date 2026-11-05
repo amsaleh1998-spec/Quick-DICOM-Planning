@@ -3,6 +3,7 @@ import type { Measurement } from '../app';
 import type { Nerve } from '../nerve';
 import type { NewCut } from '../segment';
 import { CUT_CSS, composeNerveSection, composeSegmentation } from './overlays';
+import { drawPlaneScans } from './scanContours';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, radiusAt } from '../implant';
 import { ImplantEditor } from './implantEdit';
 import { Vec3, add, cross, distToSegment2, dot, length, scale, sub } from '../math';
@@ -222,6 +223,8 @@ export abstract class View {
   protected abstract geometryKey(): string | null;
   protected abstract computeValues(out: Float32Array, w: number, h: number): void;
   protected abstract drawOverlay(ctx: CanvasRenderingContext2D): void;
+  /** Outlines of intraoral scans (planar / panoramic views). */
+  protected drawScanOverlay(_ctx: CanvasRenderingContext2D): void {}
   /** Fit zoom/pan to the content. */
   abstract fit(): void;
   protected emptyMessage(): string {
@@ -560,6 +563,7 @@ export abstract class View {
         o.textAlign = 'left';
       }
     } else {
+      this.drawScanOverlay(o);
       this.drawOverlay(o);
       this.drawMeasurements(o);
       this.drawToolOverlay(o);
@@ -1098,6 +1102,12 @@ export abstract class PlaneView extends View {
 
   override worldAt(p: Pt) {
     return this.screenToWorld(p);
+  }
+
+  protected override drawScanOverlay(o: CanvasRenderingContext2D) {
+    const pl = this.currentPlane();
+    if (!pl || !this.app.scans.length) return;
+    drawPlaneScans(this, this.app, o, pl.center, pl.u, pl.v, this.vs.scale, this.w, this.h);
   }
 
   protected geometryKey(): string | null {

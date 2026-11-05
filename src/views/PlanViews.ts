@@ -6,6 +6,7 @@ import { CropSpec, SlabSpec, sampleLine } from '../render';
 import { Plane, PlaneView, Pt, ScrollInfo, View, ViewState, drawLabel } from './View';
 import { ImplantEditor, projectedRadialAxial } from './implantEdit';
 import { composeSegmentation, drawNervesProjected } from './overlays';
+import { drawPanoScans } from './scanContours';
 
 const CURVE_COLOR = '#4fb3ff';
 const CROSS_COLOR = '#c38cff';
@@ -1032,6 +1033,12 @@ export class PanoView extends View {
   protected setScroll(v: number) {
     this.app.panoOffset = Math.round(clamp(v, -15, 15) * 2) / 2;
     this.app.changed();
+  }
+
+  protected override drawScanOverlay(o: CanvasRenderingContext2D) {
+    const app = this.app;
+    if (!app.curve || !app.scans.length) return;
+    drawPanoScans(app, o, app.curve, app.panoOffset, (sv) => this.xOf(sv), (c) => this.yOf(c));
   }
 
   protected drawOverlay(o: CanvasRenderingContext2D) {

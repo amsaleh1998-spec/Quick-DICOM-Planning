@@ -377,6 +377,34 @@
             </div>
             <div class="muted small">Click the centre of the canal on the cross-sections (scroll along the curve) and/or in the panoramic, in any order – the points are joined into a smooth tube shown in every view and in 3D. Implants report their distance to it.</div>
           </section>
+
+          <section id="panel-scans" class="panel">
+            <h3>Intraoral scans</h3>
+            <div class="row">
+              <button id="btn-scan-import" class="primary" title="Import an intraoral scan, antagonist or wax-up (STL, PLY, OBJ)">Import scan…</button>
+              <input id="scan-input" type="file" accept=".stl,.ply,.obj" multiple hidden />
+            </div>
+            <ul id="scan-list" class="obj-list"></ul>
+            <div id="scan-edit" class="hidden edit-box">
+              <div class="row">
+                <label class="grow">Name <input id="scan-name" type="text" maxlength="40" /></label>
+                <input id="scan-color" type="color" title="Scan colour" />
+              </div>
+              <div class="row">
+                <label>Type <select id="scan-kind"></select></label>
+                <label class="grow">Opacity <input id="scan-opacity" type="range" min="0.15" max="1" step="0.05" /></label>
+              </div>
+              <label class="check small hidden" id="scan-vcol-row"><input id="scan-vcol" type="checkbox" /> Scan colours (from the file)</label>
+              <div id="scan-info" class="muted small"></div>
+              <div class="row">
+                <button id="btn-scan-align" title="Align to the CBCT by matching points or surfaces">Align…</button>
+                <button id="btn-scan-place" title="Original position, or copy the alignment of another scan">Place…</button>
+                <button id="btn-scan-delete" class="danger">Delete</button>
+              </div>
+            </div>
+            <label class="check small"><input id="scan-show-2d" type="checkbox" checked /> Show scan outlines in the slices</label>
+            <div class="muted small">Upper/lower jaw scans, antagonists and wax-ups (STL, PLY with colours, OBJ). Place each one in its original position, copy the alignment of a scan that is already aligned, or align it to the CBCT by points or surfaces.</div>
+          </section>
         </aside>
 
         <section id="viewport">

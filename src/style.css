@@ -1214,3 +1214,127 @@ a.btn-link {
 .export-stl select {
   margin-left: 6px;
 }
+
+/* ---- intraoral scans: placement dialog + alignment workspace ---- */
+.modal.scan-place {
+  max-width: 620px;
+}
+.scan-place .opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0;
+  line-height: 1.45;
+}
+.scan-place .opt.disabled {
+  opacity: 0.5;
+}
+.scan-place .opt select {
+  margin-left: 6px;
+}
+.scan-place label.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.modal.scan-align {
+  max-width: none;
+  width: 96vw;
+  height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.scan-align header {
+  gap: 12px;
+}
+.sa-tabs {
+  display: flex;
+  gap: 4px;
+  margin-right: auto;
+  margin-left: 18px;
+}
+.sa-tabs button.active {
+  background: var(--accent);
+  color: #04121f;
+  border-color: var(--accent);
+}
+.sa-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 10px 0 8px;
+}
+.sa-bar select {
+  max-width: 380px;
+}
+.sa-surface-only {
+  display: none;
+}
+.modal-backdrop.mode-surface .sa-surface-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.modal-backdrop.mode-surface .sa-points-only {
+  display: none;
+}
+.sa-panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.mv {
+  position: relative;
+  background: #0b0f17;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+}
+.mv canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.mv-ov {
+  pointer-events: none;
+}
+.mv-title {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  z-index: 2;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.sa-help {
+  min-height: 2.8em;
+  margin: 8px 2px 0;
+  line-height: 1.45;
+}
+.sa-help b {
+  color: var(--text);
+}
+.scan-align footer .sa-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+#sa-result.warn {
+  color: #ffb86b;
+}
+.sa-tool {
+  gap: 0 !important;
+}
+.sa-tool button.active {
+  background: var(--accent);
+  color: #04121f;
+  border-color: var(--accent);
+}

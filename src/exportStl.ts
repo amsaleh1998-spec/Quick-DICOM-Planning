@@ -8,6 +8,7 @@ import { addScaled, fromFrame, Vec3 } from './math';
 import { nervePath } from './nerve';
 import type { CropSpec } from './render';
 import { cropTester } from './segment';
+import { scanWorld } from './scans';
 import { ScalarGrid, Tris, concatTris, coneMesh, fillCavities, isoSurface, meshToTris, smoothMesh, stlBytes, tubeMesh } from './stl';
 import { affineDet, type Volume } from './volume';
 import { writeZip } from './zip';
@@ -49,7 +50,7 @@ const safe = (s: string) =>
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** Field of the 3D render: inside ⇔ lo ≤ value ≤ hi (and inside the crop box). */
-function thresholdField(vol: Volume, lo: number, hi: number, crop: CropSpec | null, step: number): ScalarGrid {
+export function thresholdField(vol: Volume, lo: number, hi: number, crop: CropSpec | null, step: number): ScalarGrid {
   const { nx, ny, nz, spacing: sp, data } = vol;
   let lo3: Vec3 = [0, 0, 0];
   let hi3: Vec3 = [nx - 1, ny - 1, nz - 1];
@@ -189,6 +190,29 @@ function collectItems(app: App): { groups: { title: string; items: Item[] }[]; b
     }
     groups.push({ title: 'Implants & abutments', items });
   }
+  const placedScans = app.scans.filter((sc) => sc.transform);
+  if (placedScans.length)
+    groups.push({
+      title: 'Intraoral scans (aligned)',
+      items: placedScans.map((sc) => ({
+        key: `scan${sc.id}`,
+        label: `${sc.name} (${(sc.mesh.idx.length / 3).toLocaleString()} triangles)`,
+        name: sc.name,
+        checked: sc.visible,
+        build: async () => {
+          const w = scanWorld(sc)!;
+          const idx = sc.mesh.idx;
+          const out = new Float32Array(idx.length * 3);
+          for (let t = 0; t < idx.length; t++) {
+            const v = idx[t] * 3;
+            out[t * 3] = w.pos[v];
+            out[t * 3 + 1] = w.pos[v + 1];
+            out[t * 3 + 2] = w.pos[v + 2];
+          }
+          return out;
+        },
+      })),
+    });
   const nerves = app.nerves.filter((n) => n.pts.length >= 2);
   if (nerves.length)
     groups.push({

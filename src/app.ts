@@ -21,9 +21,10 @@ import {
   toFrame,
 } from './math';
 import { Nerve, createNerve, implantNerveDistance, insertNervePoint } from './nerve';
+import { Scan, scansKey } from './scans';
 import { CropSpec } from './render';
 import { Cut, SEGMENT_PRESETS, Segment, Segmentation } from './segment';
-import { Volume, resampleVolume } from './volume';
+import { Volume, composeAffine, resampleVolume } from './volume';
 import { MprView } from './views/MprView';
 import { View3D } from './views/View3D';
 import { CrossView, PanoView, PlanAxialView, TangView } from './views/PlanViews';
@@ -139,6 +140,13 @@ export class App {
   /** 3D rendering settings */
   vr = { mode: 'surface' as RenderMode, lo: 0, hi: 0 };
 
+  /** intraoral scans / surface models placed in the CBCT */
+  scans: Scan[] = [];
+  /** draw scan outlines in the 2D views */
+  showScanContours = true;
+  /** scan selected in the side panel */
+  activeScanId: number | null = null;
+
   // segmentation & nerve tracing
   readonly seg = new Segmentation();
   nerves: Nerve[] = [];
@@ -251,6 +259,7 @@ export class App {
     this.tangAngle = 0;
     this.seg.reset(vol);
     this.nerves = [];
+    this.scans = [];
     this.activeSegId = null;
     this.activeNerveId = null;
     this.segTool = null;
@@ -402,6 +411,14 @@ export class App {
         : { ...c, O: toNew(c.O), F: c.F.map(dirToNew) as Frame },
     );
     const nerves = this.nerves.map((n) => ({ ...n, pts: n.pts.map(toNew) }));
+    // scans: world_new = R·(world_old − corner0)
+    const oldToNew = [
+      R[0][0], R[0][1], R[0][2], -(R[0][0] * corner0[0] + R[0][1] * corner0[1] + R[0][2] * corner0[2]),
+      R[1][0], R[1][1], R[1][2], -(R[1][0] * corner0[0] + R[1][1] * corner0[1] + R[1][2] * corner0[2]),
+      R[2][0], R[2][1], R[2][2], -(R[2][0] * corner0[0] + R[2][1] * corner0[1] + R[2][2] * corner0[2]),
+    ];
+    const scans = this.scans;
+    for (const sc of scans) if (sc.transform) sc.transform = composeAffine(oldToNew, sc.transform);
     const { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth } = this;
 
     this.setVolume(nv);
@@ -419,6 +436,7 @@ export class App {
     this.vr = vr;
     Object.assign(this, { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth });
     this.restoreSegmentation(segments, cuts, nerves);
+    this.scans = scans;
     this.onWindowChange();
     this.fitAll();
     this.changed();
@@ -980,6 +998,11 @@ export class App {
       }
     }
     return out;
+  }
+
+  /** Changes to the scans that affect drawing. */
+  scansKey(): string {
+    return scansKey(this.scans) + this.showScanContours;
   }
 
   implantsKey(): string {
