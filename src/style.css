@@ -1163,3 +1163,13 @@ a.btn-link {
   color: var(--accent, #4da3ff);
   word-break: break-all;
 }
+.install-help h3 {
+  margin: 16px 0 4px;
+  font-size: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.install-help header + h3 {
+  border-top: none;
+  padding-top: 0;
+}

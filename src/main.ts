@@ -3,6 +3,7 @@ import { MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronal
 import { NERVE_SAFETY_MM, nerveLength } from './nerve';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
+import { isZipFile, zipEntriesAsFiles } from './zip';
 import { findScanFolder, parentOf, rememberScanFolder, type FolderHit, type ScanDir } from './scanFolders';
 import { formatDicomDate, formatPatientName, joinPersonName, splitPersonName } from './dicomMeta';
 import { showTagViewer } from './tagViewer';
@@ -65,9 +66,14 @@ app.onBusy = (text) => (text ? showLoading(text, 0.6) : hideLoading());
 
 async function loadFiles(files: File[]) {
   if (!files.length) return;
-  if (files.length === 1 && /\.(zip|qdp)$/i.test(files[0].name)) {
-    await openProject(files[0]);
-    return;
+  if (files.length === 1 && (await isZipFile(files[0]))) {
+    // a project, or a ZIP of DICOM files (e.g. a whole series handed over by the Windows helper)
+    const entries = await zipEntriesAsFiles(files[0]).catch(() => null);
+    if (!entries || entries.some((f) => f.name === 'project.json')) {
+      await openProject(files[0]);
+      return;
+    }
+    files = entries;
   }
   try {
     showLoading('Reading files…', 0);
@@ -170,6 +176,7 @@ $('lb-folder').onclick = async () => {
   }
 };
 $('lb-close').onclick = hideLaunchBanner;
+$('lb-helper').onclick = () => showHelperHelp();
 
 type LaunchQueue = { setConsumer(cb: (p: { files?: FileSystemFileHandle[] }) => void): void };
 const launchQueue = (window as unknown as { launchQueue?: LaunchQueue }).launchQueue;
@@ -178,8 +185,9 @@ launchQueue?.setConsumer(async (params) => {
   if (!handles.length) return;
   hideLaunchBanner();
   const files = await Promise.all(handles.map((h) => h.getFile()));
-  if (files.length > 1 || /\.(zip|qdp)$/i.test(files[0].name)) {
-    // several files selected in Explorer, or a project: open them as they are
+  if (files.length > 1 || /\.(zip|qdp)$/i.test(files[0].name) || (await isZipFile(files[0]))) {
+    // several files selected in Explorer, a project, or a whole series bundled by the
+    // Windows helper (a ZIP named .dcm): open them as they are, no folder access needed
     await loadFiles(files);
     return;
   }
@@ -213,9 +221,48 @@ window.addEventListener('appinstalled', () => {
   setStatus('Installed. Double-click a .dcm file in Explorer (choose Quick DICOM Planning the first time) to open it here.');
 });
 
-let installModal: HTMLDivElement | null = null;
+let infoModal: HTMLDivElement | null = null;
 function hideInstallHelp() {
-  if (installModal) installModal.style.display = 'none';
+  if (infoModal) infoModal.style.display = 'none';
+}
+function showInfoModal(title: string, body: string) {
+  if (!infoModal) {
+    infoModal = document.createElement('div');
+    infoModal.className = 'modal-backdrop';
+    infoModal.addEventListener('pointerdown', (e) => {
+      if (e.target === infoModal) hideInstallHelp();
+    });
+    document.body.append(infoModal);
+  }
+  infoModal.innerHTML = `
+    <div class="modal install-help" role="dialog" aria-modal="true" aria-labelledby="ih-title">
+      <header>
+        <h2 id="ih-title">${title}</h2>
+        <button class="modal-close" title="Close (Esc)">×</button>
+      </header>
+      ${body}
+      <footer><span></span><button class="primary modal-ok">OK</button></footer>
+    </div>`;
+  infoModal.querySelector<HTMLButtonElement>('.modal-close')!.onclick = hideInstallHelp;
+  infoModal.querySelector<HTMLButtonElement>('.modal-ok')!.onclick = hideInstallHelp;
+  infoModal.style.display = '';
+  infoModal.querySelector<HTMLButtonElement>('.modal-ok')!.focus();
+}
+const HELPER_URL = './windows/Install-QuickDICOM-Helper.cmd';
+const helperSection = () => `
+  <h3>Never be asked for a folder (Windows helper)</h3>
+  <p class="muted">Browsers give a web app only the one file you double-click. This small helper (installs for your
+    Windows user only, no admin rights) packs the file's whole folder and hands it to the app, so a double-click opens
+    the full series with <b>no questions at all</b>.</p>
+  <ol>
+    <li>Install the app first, then <a href="${HELPER_URL}" download="Install-QuickDICOM-Helper.cmd"><b>download the helper</b></a>.</li>
+    <li>Double-click the downloaded file. If the browser or Windows warns about it, choose <b>Keep</b>, then
+      <b>More info → Run anyway</b>.</li>
+    <li>In the window that opens, choose <b>Quick DICOM Planning (whole series)</b> and tick <b>Always use this app</b>.</li>
+  </ol>
+  <p class="muted">To remove it later, run <b>uninstall.cmd</b> in <b>%LOCALAPPDATA%\\QuickDICOMPlanning</b>.</p>`;
+function showHelperHelp() {
+  showInfoModal('Open whole scans with a double-click', helperSection());
 }
 function showInstallHelp() {
   const ua = navigator.userAgent;
@@ -242,35 +289,19 @@ function showInstallHelp() {
     steps = `<p>This browser can't install web apps that open files. Open <a href="${appUrl}" target="_blank" rel="noopener">${appUrl}</a>
       in <b>Google Chrome</b> or <b>Microsoft Edge</b> (Edge is built into Windows) and click <b>Install app</b> there.</p>`;
   }
-  if (!installModal) {
-    installModal = document.createElement('div');
-    installModal.className = 'modal-backdrop';
-    installModal.addEventListener('pointerdown', (e) => {
-      if (e.target === installModal) hideInstallHelp();
-    });
-    document.body.append(installModal);
-  }
-  installModal.innerHTML = `
-    <div class="modal install-help" role="dialog" aria-modal="true" aria-labelledby="ih-title">
-      <header>
-        <h2 id="ih-title">Install Quick DICOM Planning</h2>
-        <button class="modal-close" title="Close (Esc)">×</button>
-      </header>
-      ${steps}
+  const isWindows = /Windows/.test(ua);
+  showInfoModal(
+    'Install Quick DICOM Planning',
+    `${steps}
       <p class="muted">After installing, right-click any <b>.dcm</b> file in Windows Explorer → <b>Open with</b> →
-        <b>Choose another app</b> → <b>Quick DICOM Planning</b> and tick <b>Always use this app</b>.
-        From then on a double-click opens the file here and the app offers to load the whole folder.</p>
-      <footer><span></span><button class="primary modal-ok">OK</button></footer>
-    </div>`;
-  installModal.querySelector<HTMLButtonElement>('.modal-close')!.onclick = hideInstallHelp;
-  installModal.querySelector<HTMLButtonElement>('.modal-ok')!.onclick = hideInstallHelp;
-  installModal.style.display = '';
-  installModal.querySelector<HTMLButtonElement>('.modal-ok')!.focus();
+        <b>Choose another app</b> → <b>Quick DICOM Planning</b> and tick <b>Always use this app</b>.</p>
+      ${isWindows && !inFrame ? helperSection() : ''}`,
+  );
 }
 window.addEventListener(
   'keydown',
   (e) => {
-    if (e.key === 'Escape' && installModal && installModal.style.display !== 'none') {
+    if (e.key === 'Escape' && infoModal && infoModal.style.display !== 'none') {
       e.stopImmediatePropagation();
       hideInstallHelp();
     }
