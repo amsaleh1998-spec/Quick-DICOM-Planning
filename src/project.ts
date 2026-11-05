@@ -5,6 +5,8 @@ import { Nerve, reserveNerveIds } from './nerve';
 import type { Cut, Segment } from './segment';
 import { Volume, VolumeInfo } from './volume';
 import { readZip, writeZip } from './zip';
+import { Placement, Scan, ScanKind, reserveScanIds } from './scans';
+import type { Affine } from './register';
 import type { ViewState } from './views/View';
 
 /**
@@ -67,7 +69,48 @@ interface ProjectFile {
     showCurveAxial?: boolean;
     showCurveCross?: boolean;
     cutDepth?: number | null;
+    // intraoral scans (meshes in scans/<id>.bin)
+    scans?: SavedScan[];
+    activeScanId?: number | null;
+    showScanContours?: boolean;
   };
+}
+
+interface SavedScan {
+  id: number;
+  name: string;
+  kind: ScanKind;
+  fileName: string;
+  transform: Affine | null;
+  placement: Placement | null;
+  color: [number, number, number];
+  vertexColors: boolean;
+  opacity: number;
+  visible: boolean;
+  /** layout of scans/<id>.bin: float32 xyz × vertices, uint32 × 3 × triangles, then rgb bytes if hasCol */
+  vertices: number;
+  triangles: number;
+  hasCol: boolean;
+}
+
+function scanBytes(sc: Scan): Uint8Array {
+  const { pos, idx, col } = sc.mesh;
+  const out = new Uint8Array(pos.byteLength + idx.byteLength + (col ? col.byteLength : 0));
+  out.set(new Uint8Array(pos.buffer, pos.byteOffset, pos.byteLength), 0);
+  out.set(new Uint8Array(idx.buffer, idx.byteOffset, idx.byteLength), pos.byteLength);
+  if (col) out.set(col, pos.byteLength + idx.byteLength);
+  return out;
+}
+
+function scanFromBytes(meta: SavedScan, data: Uint8Array): Scan {
+  // copy into aligned buffers
+  const nv = meta.vertices * 3;
+  const nt = meta.triangles * 3;
+  const pos = new Float32Array(data.slice(0, nv * 4).buffer);
+  const idx = new Uint32Array(data.slice(nv * 4, nv * 4 + nt * 4).buffer);
+  const col = meta.hasCol ? data.slice(nv * 4 + nt * 4, nv * 4 + nt * 4 + nv) : null;
+  const { vertices: _v, triangles: _t, hasCol: _h, ...rest } = meta;
+  return { ...rest, mesh: { pos, idx, col } };
 }
 
 export function projectFileName(app: App): string {
@@ -132,6 +175,23 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       showCurveAxial: app.showCurveAxial,
       showCurveCross: app.showCurveCross,
       cutDepth: app.cutDepth,
+      scans: app.scans.map((sc) => ({
+        id: sc.id,
+        name: sc.name,
+        kind: sc.kind,
+        fileName: sc.fileName,
+        transform: sc.transform,
+        placement: sc.placement,
+        color: sc.color,
+        vertexColors: sc.vertexColors,
+        opacity: sc.opacity,
+        visible: sc.visible,
+        vertices: sc.mesh.pos.length / 3,
+        triangles: sc.mesh.idx.length / 3,
+        hasCol: !!sc.mesh.col,
+      })),
+      activeScanId: app.activeScanId,
+      showScanContours: app.showScanContours,
     },
   };
   const json = new TextEncoder().encode(JSON.stringify(file, null, 1));
@@ -140,6 +200,7 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
     [
       { name: 'project.json', data: json },
       { name: 'volume.raw', data: raw },
+      ...app.scans.map((sc) => ({ name: `scans/${sc.id}.bin`, data: scanBytes(sc) })),
     ],
     onProgress,
   );
@@ -148,6 +209,8 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
 export interface LoadedProject {
   volume: Volume;
   file: ProjectFile;
+  /** binary entries (scans/<id>.bin …) */
+  entries: Map<string, Uint8Array>;
 }
 
 export async function readProject(buf: ArrayBuffer): Promise<LoadedProject> {
@@ -161,14 +224,14 @@ export async function readProject(buf: ArrayBuffer): Promise<LoadedProject> {
   const [nx, ny, nz] = file.volume.dims;
   if (raw.byteLength !== nx * ny * nz * 2) throw new Error('Project volume data is incomplete.');
   const data = new Int16Array(raw.buffer, raw.byteOffset, nx * ny * nz);
-  return { volume: new Volume([nx, ny, nz], file.volume.spacing, data, file.volume.info), file };
+  return { volume: new Volume([nx, ny, nz], file.volume.spacing, data, file.volume.info), file, entries };
 }
 
 /**
  * Restore the plan and view state. Call after app.setVolume(volume) and after
  * switching the layout to `file.state.mode`.
  */
-export function applyProjectState(app: App, file: ProjectFile) {
+export function applyProjectState(app: App, file: ProjectFile, entries?: Map<string, Uint8Array>) {
   const st = file.state;
   app.O = st.O;
   app.frame = st.frame;
@@ -227,6 +290,14 @@ export function applyProjectState(app: App, file: ProjectFile) {
   const nerves = (st.nerves ?? []).map((n) => ({ ...n, pts: n.pts.map((p) => [...p] as Vec3) }));
   reserveNerveIds(Math.max(0, ...nerves.map((n) => n.id)));
   app.restoreSegmentation(st.segments ?? [], st.cuts ?? [], nerves);
+  app.scans = [];
+  for (const meta of st.scans ?? []) {
+    const data = entries?.get(`scans/${meta.id}.bin`);
+    if (data) app.scans.push(scanFromBytes(meta, data));
+  }
+  reserveScanIds(Math.max(0, ...app.scans.map((x) => x.id)));
+  app.activeScanId = st.activeScanId ?? null;
+  app.showScanContours = st.showScanContours ?? true;
   app.resetImplantHistory();
   app.onWindowChange();
   app.changed();

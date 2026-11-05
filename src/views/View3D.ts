@@ -1,3 +1,5 @@
+import { MeshGL, viewProjection } from '../meshgl';
+import { Scan, scanWorld } from '../scans';
 import type { App } from '../app';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, PROSTHETIC_COLOR } from '../implant';
 import { NERVE_COLOR, nervePath } from '../nerve';
@@ -8,6 +10,8 @@ import { Pt, View, drawLabel } from './View';
 const MAX_CYL = 48;
 const MAX_NERVE_SEG = 1024;
 const FOV = (30 * Math.PI) / 180;
+const SCAN_NEAR = 0.5;
+const SCAN_FAR = 10000;
 
 const VS = `#version 300 es
 void main() {
@@ -40,6 +44,11 @@ uniform int uShowUnseg;
 uniform sampler2D uNerve;
 uniform int uNumNerve;
 uniform vec3 uNerveMin, uNerveMax, uNerveCol;
+// intraoral scans, rasterised beforehand: colour (alpha = opacity) and depth
+uniform sampler2D uScanCol;
+uniform sampler2D uScanDepth;
+uniform int uScanOn;
+uniform float uNear, uFar;
 out vec4 outColor;
 
 float vol(vec3 p) { return texture(uVol, p * uTexScale + uTexOffset).r; }
@@ -301,6 +310,17 @@ void main() {
   if (tGuide < min(tImp, tSurf)) col = mix(col, shade(cGuide, nGuide, rd, L, 0.3), 0.42);
   // nerve hidden behind bone: still visible as a ghost
   if (tNerve < 1e19 && tNerve > tSurf) col = mix(col, shade(uNerveCol, nNerve, rd, L, 0.3), 0.45);
+  if (uScanOn == 1) {
+    vec2 uv = gl_FragCoord.xy / uRes;
+    vec4 sc = texture(uScanCol, uv);
+    if (sc.a > 0.0) {
+      float zn = texture(uScanDepth, uv).r * 2.0 - 1.0;
+      float ze = 2.0 * uNear * uFar / (uFar + uNear - zn * (uFar - uNear));
+      float tS = ze / dot(rd, uFwd);
+      // a scan lying on the bone/teeth surface wins the tie (0.2 mm)
+      if (tS < min(tImp, tSurf + 0.2)) col = mix(col, sc.rgb, sc.a);
+    }
+  }
   outColor = vec4(col, 1.0);
 }`;
 
@@ -345,6 +365,13 @@ export class View3D extends View {
   private segError = '';
   private lastKey = '';
   private labTex: WebGLTexture | null = null;
+  // intraoral scans: mesh renderer + offscreen colour/depth target
+  private meshGl: MeshGL | null = null;
+  private scanFbo: WebGLFramebuffer | null = null;
+  private scanColTex: WebGLTexture | null = null;
+  private scanDepthTex: WebGLTexture | null = null;
+  private scanFboSize = '';
+  private uploaded = new WeakMap<Scan, string>();
   private segTabTex: WebGLTexture | null = null;
   private nerveTex: WebGLTexture | null = null;
   private labVersion = -1;
@@ -403,6 +430,7 @@ export class View3D extends View {
         'uVol', 'uTexScale', 'uTexOffset', 'uTexel', 'uBoxMax', 'uCam', 'uRight', 'uUp', 'uFwd', 'uTanHalf', 'uRes',
         'uFrame', 'uOrigin', 'uCropMin', 'uCropMax', 'uLo', 'uHi', 'uStep', 'uOpac', 'uWC', 'uWW', 'uMode', 'uNumCyl', 'uCyl',
         'uLab', 'uSegTab', 'uLabInv', 'uLabMax', 'uSegOn', 'uShowUnseg', 'uNerve', 'uNumNerve', 'uNerveMin', 'uNerveMax', 'uNerveCol',
+        'uScanCol', 'uScanDepth', 'uScanOn', 'uNear', 'uFar',
       ];
       for (const n of names) this.uni[n] = gl.getUniformLocation(p, n);
       gl.bindVertexArray(gl.createVertexArray());
@@ -413,6 +441,15 @@ export class View3D extends View {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 128, 2, 0, gl.RGBA, gl.FLOAT, new Float32Array(128 * 2 * 4));
       this.nerveTex = this.makeTex(gl.TEXTURE_2D);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 2, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array(8));
+      try {
+        this.meshGl = new MeshGL(gl);
+        this.scanFbo = gl.createFramebuffer();
+        this.scanColTex = this.makeTex(gl.TEXTURE_2D);
+        this.scanDepthTex = this.makeTex(gl.TEXTURE_2D);
+      } catch (e) {
+        console.warn('Scan rendering unavailable', e);
+        this.meshGl = null;
+      }
     } catch (e) {
       console.error(e);
       this.error = '3D shader failed to compile: ' + (e as Error).message;
@@ -835,7 +872,7 @@ export class View3D extends View {
       const cam = this.camera();
       const base = JSON.stringify([
         vol.id, this.w, this.h, this.right, this.up, this.fwd, cam.pos, app.vr, app.crop, app.frame, app.O,
-        app.vr.mode === 'mip' ? app.wl : 0, app.implantsKey(), app.segKey(),
+        app.vr.mode === 'mip' ? app.wl : 0, app.implantsKey(), app.segKey(), app.scansKey(),
       ]);
       if (base !== this.lastKey) {
         const now = performance.now();
@@ -924,7 +961,63 @@ export class View3D extends View {
     gl.uniform1i(u.uNumCyl, parts.length);
     gl.uniform4fv(u.uCyl, cyl);
     this.bindSegmentation();
+    const scansOn = this.drawScans(cam.pos, W, H);
+    gl.useProgram(this.prog);
+    gl.viewport(0, 0, W, H);
+    gl.uniform1i(u.uScanOn, scansOn ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, this.scanColTex);
+    gl.uniform1i(u.uScanCol, 6);
+    gl.activeTexture(gl.TEXTURE7);
+    gl.bindTexture(gl.TEXTURE_2D, this.scanDepthTex);
+    gl.uniform1i(u.uScanDepth, 7);
+    gl.uniform1f(u.uNear, SCAN_NEAR);
+    gl.uniform1f(u.uFar, SCAN_FAR);
+    gl.activeTexture(gl.TEXTURE0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /** Rasterise the visible, placed scans into the offscreen colour/depth target. */
+  private drawScans(camPos: Vec3, W: number, H: number): boolean {
+    const gl = this.gl!;
+    const mg = this.meshGl;
+    const app = this.app;
+    const scans = app.scans.filter((s) => s.visible && s.transform);
+    if (!mg || !this.scanFbo) return false;
+    mg.prune(new Set(app.scans));
+    if (!scans.length) return false;
+    const size = `${W}x${H}`;
+    if (size !== this.scanFboSize) {
+      gl.bindTexture(gl.TEXTURE_2D, this.scanColTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.bindTexture(gl.TEXTURE_2D, this.scanDepthTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, W, H, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.scanFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scanColTex, 0);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.scanDepthTex, 0);
+      this.scanFboSize = size;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.scanFbo);
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clearDepth(1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    const mvp = viewProjection(camPos, this.right, this.up, this.fwd, FOV, W / Math.max(1, H), SCAN_NEAR, SCAN_FAR);
+    // opaque first, so translucent scans in front still win the depth test with their own colour
+    for (const s of [...scans].sort((a, b) => b.opacity - a.opacity)) {
+      const key = s.transform!.join(',');
+      if (this.uploaded.get(s) !== key || !mg.has(s)) {
+        const w = scanWorld(s)!;
+        mg.upload(s, w.pos, w.nrm, s.mesh.idx, s.mesh.col);
+        this.uploaded.set(s, key);
+      }
+      mg.draw(s, mvp, camPos, { color: s.color, opacity: s.opacity, vertexColors: s.vertexColors });
+    }
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return true;
   }
 
   private drawOverlay3d() {

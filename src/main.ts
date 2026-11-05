@@ -13,6 +13,9 @@ import { isPhone } from './uiMode';
 
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
 import { createPhantom } from './volume';
+import { readMeshFile } from './meshio';
+import { SCAN_KINDS, Scan, ScanKind, createScan, placementLabel } from './scans';
+import { showAlignment, showPlacement } from './alignUi';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -443,11 +446,11 @@ async function openProject(file: File): Promise<string | null> {
     showLoading('Opening project…', 0.2);
     const buf = await file.arrayBuffer();
     showLoading('Unpacking project…', 0.5);
-    const { volume, file: pf } = await readProject(buf);
+    const { volume, file: pf, entries } = await readProject(buf);
     showLoading('Restoring views…', 0.9);
     app.setVolume(volume);
     setMode(pf.state.mode);
-    applyProjectState(app, pf);
+    applyProjectState(app, pf, entries);
     setStatus(`Project "${file.name}" restored (saved ${new Date(pf.savedAt).toLocaleString()})`);
     return null;
   } catch (e) {
@@ -590,6 +593,13 @@ window.addEventListener('drop', async (e) => {
   drop.classList.add('hidden');
   if (!e.dataTransfer) return;
   const files = await filesFromDataTransfer(e.dataTransfer);
+  // surface models (intraoral scans) go into the open CBCT
+  const meshes = files.filter((f) => /\.(stl|ply|obj)$/i.test(f.name));
+  if (meshes.length && meshes.length === files.length) {
+    if (!app.vol) setStatus('Open a CBCT first, then drop the intraoral scan onto it.', true);
+    else await importScans(meshes);
+    return;
+  }
   loadFiles(files);
 });
 void viewport;
@@ -1329,6 +1339,7 @@ function refreshUi() {
   if (document.activeElement !== vrHiNum) vrHiNum.value = String(Math.round(app.vr.hi));
 
   refreshSegUi();
+  refreshScanUi();
 }
 
 const segList = $('seg-list');
@@ -1446,3 +1457,142 @@ function escapeHtml(s: string) {
 refreshUi();
 app.onWindowChange();
 app.requestRender();
+
+
+// ---- intraoral scans ------------------------------------------------------------------
+const scanList = $('scan-list');
+const scanInput = $<HTMLInputElement>('scan-input');
+const scanName = $<HTMLInputElement>('scan-name');
+const scanColor = $<HTMLInputElement>('scan-color');
+const scanKind = $<HTMLSelectElement>('scan-kind');
+const scanOpacity = $<HTMLInputElement>('scan-opacity');
+const scanVcol = $<HTMLInputElement>('scan-vcol');
+const alignHooks = { setStatus, showLoading, hideLoading };
+scanKind.innerHTML = SCAN_KINDS.map((k) => `<option value="${k.kind}">${k.label}</option>`).join('');
+const activeScan = (): Scan | null => app.scans.find((s) => s.id === app.activeScanId) ?? null;
+
+$('btn-scan-import').onclick = () => {
+  if (!app.vol) {
+    setStatus('Open a CBCT first – the scan is placed in it.', true);
+    return;
+  }
+  scanInput.click();
+};
+scanInput.onchange = async () => {
+  const files = Array.from(scanInput.files ?? []);
+  scanInput.value = '';
+  await importScans(files);
+};
+
+/** Read STL / PLY / OBJ files and ask how to place each one. */
+async function importScans(files: File[]) {
+  for (const f of files) {
+    try {
+      showLoading(`Reading ${f.name}…`, 0.3);
+      await new Promise((r) => setTimeout(r, 0));
+      const mesh = await readMeshFile(f);
+      const scan = createScan(f.name, mesh);
+      app.scans.push(scan);
+      app.activeScanId = scan.id;
+      hideLoading();
+      app.changed();
+      setStatus(`${f.name}: ${(mesh.idx.length / 3).toLocaleString()} triangles${mesh.col ? ', with colours' : ''}`);
+      showPlacement(app, scan, alignHooks);
+    } catch (e) {
+      console.error(e);
+      setStatus(`${f.name}: ${(e as Error).message}`, true);
+    } finally {
+      hideLoading();
+    }
+  }
+}
+
+scanName.oninput = () => {
+  const s = activeScan();
+  if (s) {
+    s.name = scanName.value || s.fileName;
+    app.changed();
+  }
+};
+scanColor.oninput = () => {
+  const s = activeScan();
+  if (!s) return;
+  const h = scanColor.value;
+  s.color = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  s.vertexColors = false;
+  app.changed();
+};
+scanKind.onchange = () => {
+  const s = activeScan();
+  if (!s) return;
+  s.kind = scanKind.value as ScanKind;
+  app.changed();
+};
+scanOpacity.oninput = () => {
+  const s = activeScan();
+  if (!s) return;
+  s.opacity = Number(scanOpacity.value);
+  app.changed();
+};
+scanVcol.onchange = () => {
+  const s = activeScan();
+  if (!s) return;
+  s.vertexColors = scanVcol.checked;
+  app.changed();
+};
+$('btn-scan-align').onclick = () => {
+  const s = activeScan();
+  if (s) showAlignment(app, s, alignHooks);
+};
+$('btn-scan-place').onclick = () => {
+  const s = activeScan();
+  if (s) showPlacement(app, s, alignHooks);
+};
+$('btn-scan-delete').onclick = () => {
+  const s = activeScan();
+  if (!s || !confirm(`Delete “${s.name}”?`)) return;
+  app.scans = app.scans.filter((x) => x !== s);
+  app.activeScanId = null;
+  app.changed();
+};
+$<HTMLInputElement>('scan-show-2d').onchange = (e) => {
+  app.showScanContours = (e.target as HTMLInputElement).checked;
+  app.changed();
+};
+
+let scanUiReady = false;
+function refreshScanUi() {
+  // refreshUi() also runs during start-up, before this section has been set up
+  if (!scanUiReady) return;
+  setList(
+    scanList,
+    app.scans.map((s) => ({
+      key: String(s.id),
+      sel: s.id === app.activeScanId,
+      html: `<span class="swatch" style="background:${rgbCss(s.color)}"></span><span class="name">${escapeHtml(s.name)}</span><span class="dim">${s.transform ? '' : 'not placed'}</span><button data-act="eye" class="${s.visible ? '' : 'off'}" title="Show / hide">${s.visible ? 'Hide' : 'Show'}</button>`,
+      onClick: () => {
+        app.activeScanId = s.id === app.activeScanId ? null : s.id;
+        app.changed();
+      },
+      onButton: () => {
+        s.visible = !s.visible;
+        app.changed();
+      },
+    })),
+  );
+  $<HTMLInputElement>('scan-show-2d').checked = app.showScanContours;
+  const s = activeScan();
+  $('scan-edit').classList.toggle('hidden', !s);
+  $('btn-scan-import').toggleAttribute('disabled', !app.vol);
+  if (!s) return;
+  if (document.activeElement !== scanName) scanName.value = s.name;
+  if (document.activeElement !== scanColor) scanColor.value = toHex(s.color);
+  scanKind.value = s.kind;
+  if (document.activeElement !== scanOpacity) scanOpacity.value = String(s.opacity);
+  $('scan-vcol-row').classList.toggle('hidden', !s.mesh.col);
+  scanVcol.checked = s.vertexColors;
+  const fit = s.placement?.target ? ` on ${s.placement.target}` : '';
+  $('scan-info').textContent = `${s.fileName} · ${(s.mesh.idx.length / 3).toLocaleString()} triangles · ${placementLabel(s)}${fit}`;
+}
+scanUiReady = true;
+refreshScanUi();

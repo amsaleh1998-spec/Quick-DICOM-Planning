@@ -177,6 +177,34 @@ Alt/middle-drag = pan (also Shift-drag outside the MPR) · F = fit all views ·
 M or the ⤢ button = maximize/restore a view · Esc = cancel / deselect / leave the segmentation tool ·
 Enter = finish a cut · Del = delete selected implant.
 
+## Intraoral scans
+
+**Intraoral scans** (side panel → *Import scan…*, or drop the file on the viewer) imports upper/lower jaw scans,
+antagonists and wax-ups as STL (binary/ASCII), PLY (binary/ASCII, with vertex colours, e.g. TRIOS exports) or OBJ.
+The type is guessed from the file name (upper / lower / wax-up …) and can be changed. Each scan is then placed:
+
+- **Original position** – the file is already in this CBCT's coordinates (DICOM patient coordinates, e.g. an STL
+  exported from Quick DICOM Planning or another planning software).
+- **Copy the alignment of** an already aligned scan – scans from the same scanner session (upper, lower, bite) share
+  one coordinate system and a wax-up usually keeps the coordinates of its jaw scan, so e.g. the lower jaw scan and
+  the upper wax-up copy the alignment of the upper jaw scan.
+- **Align to the CBCT** in a two-pane workspace (scan | CBCT). The CBCT side is the surface you choose: any segment
+  (e.g. *Maxilla*) or the *3D render at the current threshold* (inside the crop box); closed hollow spaces are filled
+  so only the outer surface is matched.
+  - **Points** (like Blue Sky Plan, RealGuide, exoplan): click a point on the scan, then the same point on the CBCT;
+    at least 3 pairs. The fit is refined on the surface around the points (or on the painted areas).
+  - **Surfaces** (like coDiagnostiX): paint the areas of the scan that are visible in the CBCT (tooth surfaces, not
+    gingiva or metal artefacts) and press *Match* – the position is searched automatically (rotations around the
+    occlusal axis and heights, then ICP). For partial arches, or if the match is reported as uncertain, switch to
+    *Points* and click 1–2 matching points as a guide.
+  - The result is shown on the CBCT surface coloured by distance (green < 0.3 mm …) with the share of the matched
+    area within 0.5 mm; *Accept* keeps it.
+
+Placed scans are drawn in the 3D view (composited with the volume and implants) and as outlines in every slice, the
+cross-sections, the tangential view and the panoramic; colour, opacity, scan colours, visibility and outlines can be
+changed per scan. They are saved in projects, follow *Apply rotate + crop*, and can be exported with *Export STL*
+(aligned, in DICOM coordinates).
+
 ## Export STL
 
 **Export STL** (toolbar) writes binary STL files in millimetres in the **original DICOM patient coordinates**
@@ -283,6 +311,9 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/views/overlays.ts` | 2D overlays: segment tint/outlines, cut traces, nerve tube sections and projections |
 | `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
 | `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles, diameter/length dragging |
+| `src/meshio.ts`, `src/scans.ts` | STL / PLY / OBJ readers, scan model (placement, appearance, world-space cache) |
+| `src/register.ts`, `src/alignUi.ts`, `src/meshViewer.ts`, `src/meshgl.ts` | Scan alignment: point pairs (Horn), k-d tree ICP, automatic surface matching; placement dialog and two-pane alignment workspace; WebGL mesh rendering |
+| `src/views/scanContours.ts` | Scan outlines in planar views and the panoramic |
 | `src/stl.ts`, `src/exportStl.ts` | STL export: marching-tetrahedra iso-surfaces, cavity filling, cone/tube solids, binary STL writer, export dialog |
 
 ## Limitations
