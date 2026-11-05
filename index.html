@@ -382,9 +382,8 @@
           <div id="layout-plan" class="layout hidden"></div>
           <div id="drop-overlay" class="hidden">Drop DICOM files or a folder</div>
           <div id="launch-banner" class="launch-banner hidden" role="dialog" aria-live="polite">
-            <div class="lb-text"><b>Opened <span id="lb-file"></span></b><span class="muted">A CBCT is a series of files – load the whole folder to open the scan.</span></div>
-            <button id="lb-folder" class="primary" title="Opens the folder picker inside this file's folder – just confirm">Load whole folder</button>
-            <button id="lb-single" title="Only this file (for single-file / multi-frame scans)">Only this file</button>
+            <div class="lb-text"><b>Opened <span id="lb-file"></span></b><span class="muted" id="lb-msg"></span></div>
+            <button id="lb-folder" class="primary">Choose scans folder</button>
             <button id="lb-close" class="modal-close" title="Close">×</button>
           </div>
           <div id="loading" class="hidden"><div class="box"><div id="loading-text">Loading…</div><div class="bar"><div id="loading-bar"></div></div></div></div>

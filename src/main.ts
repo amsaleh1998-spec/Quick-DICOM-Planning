@@ -3,6 +3,7 @@ import { MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronal
 import { NERVE_SAFETY_MM, nerveLength } from './nerve';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
+import { findScanFolder, parentOf, rememberScanFolder, type FolderHit, type ScanDir } from './scanFolders';
 import { formatDicomDate, formatPatientName, joinPersonName, splitPersonName } from './dicomMeta';
 import { showTagViewer } from './tagViewer';
 import { SpaceMouse } from './spacemouse';
@@ -83,72 +84,114 @@ async function loadFiles(files: File[]) {
 }
 
 // ---- installed app: open DICOM files from Windows Explorer ------------------------
-// The manifest registers .dcm/.dicom/.dic/.ima; Chrome/Edge hand the double-clicked
-// file(s) to the app through the launch queue. A web app is never given the other
-// files of that folder automatically, so for a single file we offer "Load whole
-// folder", which opens the folder picker right inside that file's folder.
+// The manifest registers .dcm/.dicom/.dic/.ima; Chrome/Edge hand the double-clicked file to
+// the app through the launch queue, but never the other files of its folder. So the user
+// grants access to a scans folder once (remembered, see scanFolders.ts); after that every
+// file double-clicked inside it loads its whole folder straight away.
 
 type DirHandle = { kind: 'directory'; name: string; values(): AsyncIterable<FileHandleLike | DirHandle> };
 type FileHandleLike = { kind: 'file'; name: string; getFile(): Promise<File> };
 
-async function filesFromDirectory(dir: DirHandle, depth = 0): Promise<File[]> {
+async function filesFromDirectory(dir: DirHandle, maxDepth = 4, depth = 0): Promise<File[]> {
   const out: File[] = [];
   for await (const entry of dir.values()) {
     if (entry.kind === 'file') out.push(await entry.getFile());
-    else if (depth < 4) out.push(...(await filesFromDirectory(entry, depth + 1)));
+    else if (depth < maxDepth) out.push(...(await filesFromDirectory(entry, maxDepth, depth + 1)));
   }
   return out;
 }
 
-let launchHandle: FileHandleLike | null = null;
+let launchHandle: FileSystemFileHandle | null = null;
 let launchFile: File | null = null;
+let pendingHit: FolderHit | null = null;
 const launchBanner = $('launch-banner');
 const hideLaunchBanner = () => launchBanner.classList.add('hidden');
 
+/** Load every file in the folder that contains the launched file (that folder only). */
+async function loadFolderOf(hit: { root: ScanDir; path: string[] }) {
+  hideLaunchBanner();
+  try {
+    showLoading('Reading folder…', 0);
+    const dir = await parentOf(hit);
+    const files = await filesFromDirectory(dir as unknown as DirHandle, 0);
+    await loadFiles(files.length ? files : launchFile ? [launchFile] : []);
+  } catch (e) {
+    setStatus((e as Error).message, true);
+    if (launchFile) await loadFiles([launchFile]);
+  } finally {
+    hideLoading();
+  }
+}
+
+function showLaunchBanner(kind: 'setup' | 'allow', folderName = '') {
+  $('lb-file').textContent = launchFile ? `“${launchFile.name}”` : '';
+  $('lb-msg').innerHTML =
+    kind === 'setup'
+      ? 'One-time setup: choose the folder where your scans are saved (e.g. <b>D:\\CBCT</b> or <b>Documents\\Scans</b> – ' +
+        'the higher up, the better). From then on, double-clicking a scan anywhere inside it opens the whole series directly.'
+      : `Allow access to your scans folder <b>${escapeHtml(folderName)}</b> again to open the series. ` +
+        'Choose <b>Allow on every visit</b> if offered, so it opens directly next time.';
+  $('lb-folder').textContent = kind === 'setup' ? 'Choose scans folder' : 'Allow';
+  launchBanner.dataset.kind = kind;
+  launchBanner.classList.remove('hidden');
+}
+
 $('lb-folder').onclick = async () => {
-  const picker = (window as unknown as { showDirectoryPicker?: (o: unknown) => Promise<DirHandle> }).showDirectoryPicker;
+  if (launchBanner.dataset.kind === 'allow' && pendingHit) {
+    const hit = pendingHit;
+    const perm = await hit.root.requestPermission?.({ mode: 'read' });
+    if (perm === 'granted') await loadFolderOf(hit);
+    else setStatus('Folder access was not allowed.', true);
+    return;
+  }
+  const picker = (window as unknown as { showDirectoryPicker?: (o: unknown) => Promise<ScanDir> }).showDirectoryPicker;
   if (!picker) {
     hideLaunchBanner();
     folderInput.click(); // browsers without the picker: ordinary folder dialog
     return;
   }
   try {
-    const dir = await picker({ startIn: launchHandle ?? undefined, id: 'dicom-folder', mode: 'read' });
+    const dir = await picker({ startIn: launchHandle ?? undefined, id: 'scans-folder', mode: 'read' });
+    await rememberScanFolder(dir);
+    const path = launchHandle ? await dir.resolve(launchHandle) : null;
+    if (path) {
+      await loadFolderOf({ root: dir, path });
+      setStatus(`“${dir.name}” remembered – double-clicked scans inside it now open directly.`);
+      return;
+    }
+    // the chosen folder doesn't contain the file: load what was chosen
     hideLaunchBanner();
     showLoading('Reading folder…', 0);
-    const files = await filesFromDirectory(dir);
-    await loadFiles(files);
+    await loadFiles(await filesFromDirectory(dir as unknown as DirHandle));
   } catch (e) {
     if ((e as Error).name !== 'AbortError') setStatus((e as Error).message, true);
   } finally {
     hideLoading();
   }
 };
-$('lb-single').onclick = () => {
-  hideLaunchBanner();
-  if (launchFile) loadFiles([launchFile]);
-};
 $('lb-close').onclick = hideLaunchBanner;
 
-type LaunchQueue = { setConsumer(cb: (p: { files?: FileHandleLike[] }) => void): void };
+type LaunchQueue = { setConsumer(cb: (p: { files?: FileSystemFileHandle[] }) => void): void };
 const launchQueue = (window as unknown as { launchQueue?: LaunchQueue }).launchQueue;
 launchQueue?.setConsumer(async (params) => {
   const handles = params.files ?? [];
   if (!handles.length) return;
+  hideLaunchBanner();
   const files = await Promise.all(handles.map((h) => h.getFile()));
-  if (files.length > 1) {
-    // several files selected in Explorer (e.g. Ctrl+A, Enter): open them directly
-    await loadFiles(files);
-    return;
-  }
-  if (/\.(zip|qdp)$/i.test(files[0].name)) {
+  if (files.length > 1 || /\.(zip|qdp)$/i.test(files[0].name)) {
+    // several files selected in Explorer, or a project: open them as they are
     await loadFiles(files);
     return;
   }
   launchHandle = handles[0];
   launchFile = files[0];
-  $('lb-file').textContent = `“${files[0].name}”`;
-  launchBanner.classList.remove('hidden');
+  const hit = await findScanFolder(handles[0]);
+  if (hit?.permission === 'granted') {
+    await loadFolderOf(hit);
+    return;
+  }
+  pendingHit = hit;
+  showLaunchBanner(hit ? 'allow' : 'setup', hit?.root.name);
 });
 
 // "Install app" button. Chrome / Edge hand us an install prompt through `beforeinstallprompt`; when they
