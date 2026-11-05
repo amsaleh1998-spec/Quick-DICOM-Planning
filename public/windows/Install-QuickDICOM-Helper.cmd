@@ -78,19 +78,30 @@ if (-not $pick) {
   exit 1
 }
 Write-Host "  Found the installed app: $($pick.Name)"
+Write-Host "  Start command: $($pick.Command)"
 
 # --- 2. write the launcher ---------------------------------------------------------
 New-Item -ItemType Directory -Force -Path $Base | Out-Null
 [IO.File]::WriteAllText((Join-Path $Base 'launch.txt'), $pick.Command)
+Add-Content -LiteralPath (Join-Path $Base 'log.txt') -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '  installed; app ' + $pick.Name + ' (' + $pick.ProgId + '); command ' + $pick.Command)
 
 $launcherPs1 = @'
 # Quick DICOM Planning - opens the whole folder of a double-clicked DICOM file.
 param([string]$File)
 $ErrorActionPreference = 'Stop'
 $Base = Join-Path $env:LOCALAPPDATA 'QuickDICOMPlanning'
-if (-not $File) { exit 0 }
-if ($File.StartsWith((Join-Path $Base 'example'), [StringComparison]::OrdinalIgnoreCase)) { exit 0 }
+$Log = Join-Path $Base 'log.txt'
+function Log([string]$Msg) {
+  try {
+    if ((Test-Path -LiteralPath $Log) -and (Get-Item -LiteralPath $Log).Length -gt 200KB) { Remove-Item -LiteralPath $Log -Force }
+    Add-Content -LiteralPath $Log -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '  ' + $Msg)
+  } catch { }
+}
+Log ('---- double-click: ' + $File)
+if (-not $File) { Log 'no file argument'; exit 0 }
+if ($File.StartsWith((Join-Path $Base 'example'), [StringComparison]::OrdinalIgnoreCase)) { Log 'example file, ignored'; exit 0 }
 $template = ([IO.File]::ReadAllText((Join-Path $Base 'launch.txt'))).Trim()
+Log ('app command template: ' + $template)
 
 function Start-App([string]$Path) {
   $quoted = '"' + $Path + '"'
@@ -103,8 +114,13 @@ function Start-App([string]$Path) {
   if (-not $done) { $cmd = $cmd + ' ' + $quoted }
   if ($cmd -match '^\s*"([^"]+)"\s*(.*)$') { $exe = $Matches[1]; $rest = $Matches[2] }
   elseif ($cmd -match '^\s*(\S+)\s*(.*)$') { $exe = $Matches[1]; $rest = $Matches[2] }
-  else { return }
-  [void][Diagnostics.Process]::Start($exe, $rest)
+  else { Log ('could not parse command: ' + $cmd); return }
+  Log ('starting: [' + $exe + '] ' + $rest)
+  if (-not (Test-Path -LiteralPath $exe)) { Log 'WARNING: that program does not exist (app reinstalled? run the helper installer again)' }
+  try {
+    $p = [Diagnostics.Process]::Start($exe, $rest)
+    Log ('started, process id ' + $(if ($p) { $p.Id } else { '(handed to running browser)' }))
+  } catch { Log ('START FAILED: ' + $_.Exception.Message) }
 }
 
 try {
@@ -112,9 +128,11 @@ try {
   $skip = '(?i)\.(txt|xml|ini|htm|html|pdf|jpg|jpeg|png|bmp|gif|tif|tiff|exe|dll|lnk|zip|rar|7z|db|log|json|csv|inf|bat|cmd|ps1|vbs|url|iso|stl|ply|obj|mp4|avi|doc|docx|xls|xlsx)$'
   $all = @(Get-ChildItem -LiteralPath $dir -File -Force | Where-Object {
       $_.Name -notmatch $skip -and -not $_.Name.StartsWith('._') -and $_.Length -gt 0 })
+  $total = 0; foreach ($f in $all) { $total += $f.Length }
+  Log ('folder: ' + $dir + '  -> ' + $all.Count + ' files, ' + [math]::Round($total / 1MB, 1) + ' MB')
   if ($all.Count -le 1) { Start-App $File; exit 0 }
 
-  # one uncompressed bundle (a ZIP named .dcm, which the app unpacks) in %TEMP%
+  # one bundle (a ZIP named .dcm, which the app unpacks) in %TEMP%
   $out = Join-Path $env:TEMP 'QuickDICOMPlanning'
   New-Item -ItemType Directory -Force -Path $out | Out-Null
   Get-ChildItem -LiteralPath $out -File -ErrorAction SilentlyContinue |
@@ -123,6 +141,7 @@ try {
   $leaf = ([IO.Path]::GetFileName($dir)) -replace '[^\w\-\. ]', '_'
   if (-not $leaf) { $leaf = 'series' }
   $bundle = Join-Path $out ($leaf + '_' + (Get-Date -Format 'yyyyMMdd_HHmmss') + '.dcm')
+  $sw = [Diagnostics.Stopwatch]::StartNew()
   Add-Type -AssemblyName System.IO.Compression
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zip = [IO.Compression.ZipFile]::Open($bundle, [IO.Compression.ZipArchiveMode]::Create)
@@ -131,8 +150,10 @@ try {
       [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $f.FullName, $f.Name, [IO.Compression.CompressionLevel]::NoCompression)
     }
   } finally { $zip.Dispose() }
+  Log ('bundle: ' + $bundle + '  ' + [math]::Round((Get-Item -LiteralPath $bundle).Length / 1MB, 1) + ' MB in ' + $sw.ElapsedMilliseconds + ' ms')
   Start-App $bundle
 } catch {
+  Log ('ERROR: ' + $_.Exception.Message + ' -> opening only the clicked file')
   Start-App $File
 }
 '@
