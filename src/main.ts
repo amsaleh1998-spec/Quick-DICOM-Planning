@@ -242,6 +242,9 @@ const isStandalone = () =>
   window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: window-controls-overlay)').matches;
 if (isStandalone()) $('btn-install').classList.add('hidden');
 else $('btn-install').classList.remove('hidden');
+// inside the installed app on Windows: keep the helper one click away
+if (isStandalone() && /Windows/.test(navigator.userAgent)) $('btn-helper').classList.remove('hidden');
+$('btn-helper').onclick = () => showHelperHelp();
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   installPrompt = e as typeof installPrompt;
@@ -288,14 +291,38 @@ const helperSection = () => `
     Windows user only, no admin rights) packs the file's whole folder and hands it to the app, so a double-click opens
     the full series with <b>no questions at all</b>.</p>
   <ol>
-    <li>Install the app first, then <a href="${HELPER_URL}" download="Install-QuickDICOM-Helper.cmd"><b>download the helper</b></a>.</li>
+    <li>${isStandalone() ? '' : 'Install the app first, then '}<button class="primary dl-helper">Download the helper</button>
+      <span class="muted">(or <a href="${HELPER_URL}" download="Install-QuickDICOM-Helper.cmd">this link</a>; it is saved to your Downloads folder)</span></li>
     <li>Double-click the downloaded file. If the browser or Windows warns about it, choose <b>Keep</b>, then
       <b>More info → Run anyway</b>.</li>
     <li>In the window that opens, choose <b>Quick DICOM Planning (whole series)</b> and tick <b>Always use this app</b>.</li>
   </ol>
   <p class="muted">To remove it later, run <b>uninstall.cmd</b> in <b>%LOCALAPPDATA%\\QuickDICOMPlanning</b>.</p>`;
+/** Save the helper via a blob: works the same in a browser tab and in the installed app window. */
+async function downloadHelper() {
+  try {
+    const res = await fetch(HELPER_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`download failed (${res.status})`);
+    const blob = new Blob([await res.arrayBuffer()], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Install-QuickDICOM-Helper.cmd';
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    setStatus('Helper downloaded – open it from your Downloads folder (or the download list, Ctrl+J).');
+  } catch (e) {
+    setStatus(`Could not download the helper: ${(e as Error).message}`, true);
+  }
+}
+function bindHelperButtons() {
+  infoModal?.querySelectorAll<HTMLButtonElement>('.dl-helper').forEach((b) => (b.onclick = () => downloadHelper()));
+}
 function showHelperHelp() {
   showInfoModal('Open whole scans with a double-click', helperSection());
+  bindHelperButtons();
 }
 function showInstallHelp() {
   const ua = navigator.userAgent;
@@ -330,6 +357,7 @@ function showInstallHelp() {
         <b>Choose another app</b> → <b>Quick DICOM Planning</b> and tick <b>Always use this app</b>.</p>
       ${isWindows && !inFrame ? helperSection() : ''}`,
   );
+  bindHelperButtons();
 }
 window.addEventListener(
   'keydown',
