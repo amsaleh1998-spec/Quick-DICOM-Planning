@@ -185,10 +185,12 @@ The app can be installed from Chrome or Microsoft Edge and then registered for `
    ⋯ → *Apps* → *Install this site as an app*).
 2. Double-click a `.dcm` file in Explorer. The first time, Windows asks which app to use: choose
    **Quick DICOM Planning** and tick *Always*. The browser may also ask once to allow the app to open these files.
-3. The app opens with that file and offers **Load whole folder**: the folder picker opens inside the file's folder,
-   so one click on *Select folder* loads the whole series. (A web app is never given the other files of a folder
-   automatically – that is a browser security rule.) Selecting all files in Explorer (Ctrl+A) and pressing Enter
-   opens them directly.
+3. **One-time setup:** the first time, the app asks you to choose the folder where your scans are saved
+   (e.g. `D:\CBCT` – the higher up, the better). The app remembers it. From then on, double-clicking any scan inside
+   that folder loads the whole series straight away – no question, no folder window. (A web app is never handed the
+   other files of a folder by itself; the remembered folder access is what makes this possible.) If Chrome/Edge
+   later asks again, choose **Allow on every visit**. Selecting several files in Explorer and pressing Enter opens
+   exactly those files.
 
 Files without an extension cannot be associated in Windows; open their folder with *Open folder* or drag & drop.
 The installed app also works offline.
