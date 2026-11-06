@@ -8,7 +8,8 @@ import { showExportStl } from './exportStl';
 import { findScanFolder, parentOf, rememberScanFolder, type FolderHit, type ScanDir } from './scanFolders';
 import { formatDicomDate, formatPatientName, joinPersonName, splitPersonName } from './dicomMeta';
 import { showTagViewer } from './tagViewer';
-import { SpaceMouse } from './spacemouse';
+import { SpaceMouse, SpaceMouseTarget } from './spacemouse';
+import { MeshViewer } from './meshViewer';
 import { isPhone } from './uiMode';
 
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
@@ -877,9 +878,27 @@ document.querySelectorAll<HTMLButtonElement>('.presets button').forEach(
   (b) => (b.onclick = () => app.view3d.setPreset(b.dataset.preset as 'front')),
 );
 // ---- 3Dconnexion SpaceMouse --------------------------------------------------------
-const spaceMouse = new SpaceMouse(app.view3d);
+// The cap drives whatever is under the mouse pointer: a pane of the scan alignment window, a 2D
+// view (pan along the slice, push/pull = zoom) or the 3D view (also the default).
+let smPointerEl: Element | null = null;
+let smLastViewer: MeshViewer | null = null;
+window.addEventListener('pointermove', (e) => (smPointerEl = e.target as Element), { capture: true, passive: true });
+function spaceMouseTarget(): SpaceMouseTarget {
+  const el = smPointerEl;
+  if (MeshViewer.active.size) {
+    // alignment window open: the pane under the pointer (or the last one used)
+    for (const mv of MeshViewer.active) if (el && mv.el.contains(el)) return (smLastViewer = mv);
+    return smLastViewer && MeshViewer.active.has(smLastViewer) ? smLastViewer : [...MeshViewer.active][0];
+  }
+  if (el) for (const v of app.views) if (v.visible && v.el.contains(el)) return v;
+  return app.view3d;
+}
+const spaceMouse = new SpaceMouse({
+  spaceMotion: (t, r, dt) => spaceMouseTarget().spaceMotion(t, r, dt),
+  spaceButton: (i) => spaceMouseTarget().spaceButton(i),
+});
 // the 3Dconnexion driver also scrolls/zooms with the cap: ignore wheel events meanwhile
-spaceMouse.onActivity = () => (app.wheelBlockedUntil = performance.now() + 300);
+spaceMouse.onActivity = () => (app.wheelBlockedUntil = MeshViewer.wheelBlockedUntil = performance.now() + 300);
 (window as unknown as { spaceMouse: SpaceMouse }).spaceMouse = spaceMouse; // debugging / tests
 const smButton = $<HTMLButtonElement>('btn-spacemouse');
 const smSpeed = $<HTMLInputElement>('sm-speed');
