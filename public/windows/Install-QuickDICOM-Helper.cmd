@@ -135,8 +135,9 @@ try {
   Log ('folder: ' + $dir + '  -> ' + $all.Count + ' files, ' + [math]::Round($total / 1MB, 1) + ' MB')
   if ($all.Count -le 1) { Start-App $File; exit 0 }
 
-  # one bundle (a ZIP named .dcm, which the app unpacks) in %TEMP%
-  $out = Join-Path $env:TEMP 'QuickDICOMPlanning'
+  # one bundle (a ZIP named .dcm, which the app unpacks). Not in %TEMP%: Chrome refuses to let web
+  # apps read files under AppData (SecurityError), so it goes to %USERPROFILE%\.quick-dicom-planning
+  $out = Join-Path $env:USERPROFILE '.quick-dicom-planning\bundles'
   New-Item -ItemType Directory -Force -Path $out | Out-Null
   Get-ChildItem -LiteralPath $out -File -ErrorAction SilentlyContinue |
     Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-12) } |
@@ -178,6 +179,7 @@ for %%e in (.dcm .dicom .dic .ima) do reg delete "HKCU\Software\Classes\%%e\Open
 echo Done. Double-clicked DICOM files now open with the app as before (Open with - Choose another app).
 pause
 cd /d "%TEMP%"
+rmdir /s /q "%USERPROFILE%\.quick-dicom-planning" >nul 2>&1
 rmdir /s /q "%LOCALAPPDATA%\QuickDICOMPlanning"
 '@
 

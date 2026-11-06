@@ -240,7 +240,12 @@ launchQueue?.setConsumer(async (params) => {
     showLaunchBanner(hit ? 'allow' : 'setup', hit?.root.name);
   } catch (e) {
     console.error(e);
-    showLaunchBanner('error', `${(e as Error).name}: ${(e as Error).message}`);
+    showLaunchBanner(
+      'error',
+      (e as Error).name === 'SecurityError'
+        ? 'the browser does not let web apps read files in this location (system folders such as AppData or the temp folder). If you use the Windows / Mac helper, install its latest version (Install app → helper) – it now keeps its files in a permitted folder; otherwise move the scan to a normal folder such as Documents.'
+        : `${(e as Error).name}: ${(e as Error).message}`,
+    );
   } finally {
     hideLoading();
   }
