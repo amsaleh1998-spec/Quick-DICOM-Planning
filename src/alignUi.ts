@@ -572,6 +572,8 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     viewTarget($<HTMLSelectElement>('#sa-target').value);
     clearResult();
   };
+  // test hook: the two viewers
+  (root as unknown as { __viewers: MeshViewer[] }).__viewers = [left, right];
   // test hook: add a patch (scan coordinates / world)
   (root as unknown as { __addPatch: (side: 'scan' | 'cbct', c: Vec3, r: number) => void }).__addPatch = (side, c, r) => {
     patchR = r;
@@ -619,7 +621,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     markers();
     const pct = (stats.within05 * 100).toFixed(0);
     const sure = stats.within05 >= 0.8;
-    $('#sa-result').innerHTML = `${sure ? '✓' : '⚠'} ${pct} % of the ${method === 'surface' ? 'painted' : 'matched'} area within 0.5 mm · RMS ${stats.rms.toFixed(2)} mm${
+    $('#sa-result').innerHTML = `${sure ? '✓' : '⚠'} ${pct} % of the ${method === 'surface' ? 'selected' : 'matched'} area within 0.5 mm · RMS ${stats.rms.toFixed(2)} mm${
       sure ? '' : ' – <b>uncertain match</b>: add 1–2 matching points (scan, then CBCT) or paint more tooth surface, then Match again'
     }`;
     $('#sa-result').classList.toggle('warn', !sure);
