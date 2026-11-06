@@ -96,8 +96,8 @@ log "folder: $DIR  -> ${#NAMES[@]} files"
 if [ "${#NAMES[@]}" -le 1 ]; then start_app "$FILE"; exit 0; fi
 
 # one uncompressed bundle (a ZIP named .dcm, which the app unpacks) in the temp folder
-OUT="${TMPDIR:-/tmp}"
-OUT="${OUT%/}/QuickDICOMPlanning"
+# not in the system temp folder: Chrome may refuse to let web apps read files there
+OUT="$HOME/.quick-dicom-planning/bundles"
 mkdir -p "$OUT"
 find "$OUT" -type f -mmin +720 -delete 2>/dev/null
 LEAF="$(printf '%s' "$(basename "$DIR")" | tr -c 'A-Za-z0-9._ -' '_')"
@@ -119,7 +119,7 @@ LAUNCHER
 #!/bin/bash
 echo "Removing the $NAME macOS helper..."
 "$LSREG" -u "$DEST" >/dev/null 2>&1
-rm -rf "$DEST" "$BASE"
+rm -rf "$DEST" "$BASE" "$HOME/.quick-dicom-planning"
 echo "Done. DICOM files open with $NAME directly again (Finder - Get Info - Open with)."
 UNINSTALL
   chmod +x "$BASE/uninstall.sh"
