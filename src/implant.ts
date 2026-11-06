@@ -43,6 +43,8 @@ export interface Implant {
 }
 
 export const MIN_APICAL_DIAMETER = 1.5;
+/** longest implant that can be planned (zygomatic implants: ~30–57.5 mm) */
+export const MAX_IMPLANT_LENGTH = 60;
 
 export function apicalDiameterOf(imp: Implant): number {
   return imp.apicalDiameter ?? imp.diameter;
