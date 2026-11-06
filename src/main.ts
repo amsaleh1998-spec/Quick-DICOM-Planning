@@ -1,5 +1,5 @@
 import { App, Jaw, Mode, MprTool, RenderMode, saveInputPreference } from './app';
-import { MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronalDiameter } from './implant';
+import { MAX_IMPLANT_LENGTH, MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronalDiameter } from './implant';
 import { NERVE_SAFETY_MM, nerveLength } from './nerve';
 import { applyProjectState, buildProject, projectFileName, readProject } from './project';
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
@@ -748,7 +748,7 @@ const defL = $<HTMLInputElement>('def-l');
 defD.onchange = () => (app.defaultDiameter = clampNum(defD.value, 2, 8, 4));
 const defTapered = $<HTMLInputElement>('def-tapered');
 defTapered.onchange = () => (app.defaultTapered = defTapered.checked);
-defL.onchange = () => (app.defaultLength = clampNum(defL.value, 4, 20, 10));
+defL.onchange = () => (app.defaultLength = clampNum(defL.value, 4, MAX_IMPLANT_LENGTH, 10));
 const impName = $<HTMLInputElement>('imp-name');
 impName.oninput = () => {
   const imp = app.selectedImplant();
@@ -792,7 +792,7 @@ impD.oninput = () => {
 };
 impL.oninput = () => {
   const imp = app.selectedImplant();
-  if (imp && impL.value) app.setLength(imp.id, clampNum(impL.value, 2, 30, imp.length));
+  if (imp && impL.value) app.setLength(imp.id, clampNum(impL.value, 2, MAX_IMPLANT_LENGTH, imp.length));
 };
 
 // parallel placement

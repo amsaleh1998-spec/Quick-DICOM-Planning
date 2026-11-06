@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import {
   Implant,
+  MAX_IMPLANT_LENGTH,
   MUA_HEAD_HEIGHT,
   apexOf,
   apicalDiameterOf,
@@ -180,7 +181,7 @@ export class ImplantEditor {
       case 'length': {
         const { h } = this.ad.radialAxial(p, imp);
         const v = d.startValue + (h + imp.length / 2 - d.startMeasure) * DIM_GAIN;
-        setImplantLength(imp, clamp(Math.round(v * 2) / 2, 4, 25));
+        setImplantLength(imp, clamp(Math.round(v * 2) / 2, 4, MAX_IMPLANT_LENGTH));
         break;
       }
     }
@@ -264,7 +265,7 @@ export class ImplantEditor {
     const isDia = st.kind !== 'length';
     input.step = isDia ? '0.1' : '0.5';
     input.min = st.kind === 'diameter' ? '2.5' : st.kind === 'apicalDiameter' ? '1.5' : '4';
-    input.max = st.kind === 'diameter' ? '9' : st.kind === 'apicalDiameter' ? String(st.imp.diameter) : '25';
+    input.max = st.kind === 'diameter' ? '9' : st.kind === 'apicalDiameter' ? String(st.imp.diameter) : String(MAX_IMPLANT_LENGTH);
     input.value = (st.kind === 'diameter' ? st.imp.diameter : st.kind === 'apicalDiameter' ? apicalDiameterOf(st.imp) : st.imp.length).toFixed(1);
     b.textContent = st.kind === 'diameter' ? 'Ø ' : st.kind === 'apicalDiameter' ? 'Ø apex ' : 'L ';
     b.append(input, document.createTextNode(' mm'));
@@ -278,7 +279,7 @@ export class ImplantEditor {
       if (apply && input.value !== '' && Number.isFinite(v)) {
         if (st.kind === 'diameter') setCoronalDiameter(st.imp, clamp(Math.round(v * 10) / 10, 2.5, 9));
         else if (st.kind === 'apicalDiameter') setApicalDiameter(st.imp, Math.round(v * 10) / 10);
-        else setImplantLength(st.imp, clamp(Math.round(v * 10) / 10, 4, 25));
+        else setImplantLength(st.imp, clamp(Math.round(v * 10) / 10, 4, MAX_IMPLANT_LENGTH));
         this.app.implantChanged(st.imp, true);
       }
       this.hideBadge();
