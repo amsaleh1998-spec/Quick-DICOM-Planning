@@ -21,7 +21,7 @@ export interface AlignHooks {
 
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-function modalShell(cls: string, html: string): { root: HTMLDivElement; close: () => void } {
+function modalShell(cls: string, html: string, onClose?: () => void): { root: HTMLDivElement; close: () => void } {
   const root = document.createElement('div');
   root.className = 'modal-backdrop';
   root.innerHTML = `<div class="modal ${cls}" role="dialog" aria-modal="true">${html}</div>`;
@@ -33,6 +33,7 @@ function modalShell(cls: string, html: string): { root: HTMLDivElement; close: (
     }
   };
   const close = () => {
+    onClose?.();
     root.remove();
     window.removeEventListener('keydown', onKey, true);
   };
@@ -205,6 +206,36 @@ class PaintLayer {
         }
     this.viewer.updateColors(this.mesh, this.col);
   }
+  /** Select the vertices within each patch (centre, radius); the active patch is tinted brighter. */
+  setPatches(patches: { c: Vec3; r: number }[], active: number) {
+    this.mask.fill(0);
+    this.count = 0;
+    this.col.set(this.base);
+    const P = this.mesh.pos;
+    const C = PaintLayer.CELL;
+    patches.forEach((pt, pi) => {
+      const tint = pi === active ? [255, 120, 20] : PAINT;
+      const mix = pi === active ? 0.75 : 0.6;
+      const r2 = pt.r * pt.r;
+      const n = Math.ceil(pt.r / C);
+      const cx = Math.floor(pt.c[0] / C), cy = Math.floor(pt.c[1] / C), cz = Math.floor(pt.c[2] / C);
+      for (let dx = -n; dx <= n; dx++)
+        for (let dy = -n; dy <= n; dy++)
+          for (let dz = -n; dz <= n; dz++) {
+            const b = this.bucket(cx + dx, cy + dy, cz + dz);
+            for (let k = this.start[b]; k < this.start[b + 1]; k++) {
+              const i = this.items[k];
+              const d2 = (P[i * 3] - pt.c[0]) ** 2 + (P[i * 3 + 1] - pt.c[1]) ** 2 + (P[i * 3 + 2] - pt.c[2]) ** 2;
+              if (d2 > r2) continue;
+              if (!this.mask[i]) this.count++;
+              this.mask[i] = 1;
+              for (let c = 0; c < 3; c++) this.col[i * 3 + c] = Math.round(this.base[i * 3 + c] * (1 - mix) + tint[c] * mix);
+            }
+          }
+    });
+    this.viewer.updateColors(this.mesh, this.col);
+  }
+
   clear() {
     this.mask.fill(0);
     this.count = 0;
@@ -252,11 +283,11 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     <div class="sa-bar">
       <label>CBCT surface <select id="sa-target">${choices.map((c) => `<option value="${c.key}" ${c === defChoice ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>
       <label>Jaw <select id="sa-jaw"><option value="upper" ${defaultJaw === 'upper' ? 'selected' : ''}>Upper</option><option value="lower" ${defaultJaw === 'lower' ? 'selected' : ''}>Lower</option></select></label>
-      <span class="sa-surface-only sa-tool"><button data-tool="paint" class="active" title="Left drag paints the areas to match">Paint</button><button data-tool="points" title="Click matching points (optional guide for the automatic match)">Points</button></span>
-      <span class="sa-surface-only">Brush <input id="sa-brush" type="range" min="1" max="8" step="0.5" value="3" /> <span id="sa-brush-v">3 mm</span></span>
-      <button id="sa-clear-paint" class="sa-surface-only">Clear painting</button>
-      <button id="sa-undo">Undo point</button>
-      <button id="sa-clear-pts">Clear points</button>
+      <span class="sa-surface-only small" id="sa-patch-info"></span>
+      <button id="sa-undo-patch" class="sa-surface-only">Undo patch</button>
+      <button id="sa-clear-paint" class="sa-surface-only">Clear patches</button>
+      <button id="sa-undo" class="sa-points-only">Undo point</button>
+      <button id="sa-clear-pts" class="sa-points-only">Clear points</button>
     </div>
     <div class="sa-panes"></div>
     <div class="sa-help muted small" id="sa-help"></div>
@@ -268,6 +299,10 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
         <button id="sa-accept" class="primary hidden">Accept</button>
       </span>
     </footer>`,
+    () => {
+      left.dispose();
+      right.dispose();
+    },
   );
   const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
   const panes = $('.sa-panes');
@@ -275,7 +310,14 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   const right = new MeshViewer('CBCT');
   panes.append(left.el, right.el);
   let mode: 'points' | 'surface' = 'points';
-  let surfaceTool: 'paint' | 'points' = 'paint';
+  // surface patches: patch i on the scan corresponds to patch i on the CBCT
+  type Patch = { c: Vec3; r: number };
+  const scanPatches: Patch[] = [];
+  const cbctPatches: Patch[] = [];
+  const patchClicks: ('scan' | 'cbct')[] = [];
+  let activeScan = -1;
+  let activeCbct = -1;
+  let patchR = 3;
   const pairs: Pair[] = [];
   const clicks: ('scan' | 'world')[] = [];
   const nv = scan.mesh.pos.length / 3;
@@ -304,11 +346,53 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   const scanPaint = new PaintLayer(scanMesh, left, baseCol);
   left.updateColors(scanMesh, scanMesh.col!);
   let targetPaint: PaintLayer | null = null;
-  const brush = () => Number($<HTMLInputElement>('#sa-brush').value);
+  const refreshPatches = () => {
+    scanPaint.setPatches(scanPatches, activeScan);
+    targetPaint?.setPatches(cbctPatches, activeCbct);
+    markers();
+    update();
+  };
+  /** Click on a surface in Surfaces mode: select the patch under it, or add a new one. */
+  const patchClick = (side: 'scan' | 'cbct', p: Vec3) => {
+    clearResult();
+    const list = side === 'scan' ? scanPatches : cbctPatches;
+    let i = list.findIndex((q) => Math.hypot(p[0] - q.c[0], p[1] - q.c[1], p[2] - q.c[2]) < q.r);
+    if (i < 0) {
+      list.push({ c: p, r: patchR });
+      patchClicks.push(side);
+      i = list.length - 1;
+    }
+    if (side === 'scan') activeScan = i;
+    else activeCbct = i;
+    refreshPatches();
+  };
+  /** Wheel over a pane in Surfaces mode: grow (scroll up) or shrink the selected patch of that side. */
+  const patchWheel = (side: 'scan' | 'cbct', dir: number): boolean => {
+    if (mode !== 'surface') return false;
+    const list = side === 'scan' ? scanPatches : cbctPatches;
+    const pt = list[side === 'scan' ? activeScan : activeCbct];
+    if (!pt) return false;
+    clearResult();
+    pt.r = Math.min(20, Math.max(0.5, pt.r * Math.exp(-dir * 0.12)));
+    patchR = pt.r;
+    refreshPatches();
+    return true;
+  };
+  left.onWheel = (dir) => patchWheel('scan', dir);
+  right.onWheel = (dir) => patchWheel('cbct', dir);
 
   const markers = () => {
     const lm: Marker[] = [];
     const rm: Marker[] = [];
+    if (mode === 'surface') {
+      scanPatches.forEach((q, i) => lm.push({ p: q.c, label: String(i + 1), color: i === activeScan ? '#7cc4ff' : cbctPatches[i] ? '#5fd38d' : '#ffd166' }));
+      if (!result) cbctPatches.forEach((q, i) => rm.push({ p: q.c, label: String(i + 1), color: i === activeCbct ? '#7cc4ff' : scanPatches[i] ? '#5fd38d' : '#ffd166' }));
+      left.markers = lm;
+      right.markers = rm;
+      left.request();
+      right.request();
+      return;
+    }
     pairs.forEach((p, i) => {
       const done = !!(p.scan && p.world);
       const color = done ? '#5fd38d' : '#ffd166';
@@ -323,6 +407,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   const complete = () => pairs.filter((p) => p.scan && p.world) as { scan: Vec3; world: Vec3 }[];
 
   left.onPick = (p) => {
+    if (mode === 'surface') return patchClick('scan', p);
     clearResult();
     const open = pairs.find((q) => !q.scan);
     if (open) open.scan = p;
@@ -333,6 +418,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   };
   right.onPick = (p) => {
     if (!target) return;
+    if (mode === 'surface') return patchClick('cbct', p);
     if (result) clearResult();
     const open = pairs.find((q) => !q.world);
     if (open) open.world = p;
@@ -341,37 +427,15 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     markers();
     update();
   };
-  left.onPaint = (p, _m, erase) => {
-    clearResult();
-    scanPaint.paint(p, brush(), erase);
-    update();
-  };
-  right.onPaint = (p, _m, erase) => {
-    if (!targetPaint) return;
-    clearResult();
-    targetPaint.paint(p, brush(), erase);
-    update();
-  };
-
   const setMode = (m: 'points' | 'surface') => {
     mode = m;
     root.querySelectorAll<HTMLButtonElement>('.sa-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.mode === m));
     root.classList.toggle('mode-surface', m === 'surface');
-    left.paintMode = right.paintMode = m === 'surface' && surfaceTool === 'paint';
     clearResult();
+    markers();
     update();
   };
   root.querySelectorAll<HTMLButtonElement>('.sa-tabs button').forEach((b) => (b.onclick = () => setMode(b.dataset.mode as 'points' | 'surface')));
-  root.querySelectorAll<HTMLButtonElement>('.sa-tool button').forEach(
-    (b) =>
-      (b.onclick = () => {
-        surfaceTool = b.dataset.tool as 'paint' | 'points';
-        root.querySelectorAll<HTMLButtonElement>('.sa-tool button').forEach((x) => x.classList.toggle('active', x === b));
-        left.paintMode = right.paintMode = mode === 'surface' && surfaceTool === 'paint';
-        update();
-      }),
-  );
-
   const update = () => {
     const n = complete().length;
     const help = $('#sa-help');
@@ -383,12 +447,16 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     } else if (mode === 'points') {
       help.innerHTML = `Click a point on the <b>scan</b>, then the <b>same point on the CBCT</b> (cusp tips, incisal edges, distinct fissures – spread over the arch). At least 3 pairs; 4–6 are better. ${n} pair${n === 1 ? '' : 's'} so far. Left drag = rotate, right drag = pan, wheel = zoom.`;
     } else {
-      help.innerHTML =
-        surfaceTool === 'paint'
-          ? `<b>Paint the same areas on both sides</b> – on the scan and on the CBCT – that are clearly visible in both: tooth surfaces (avoid gingiva and metal restorations with artefacts). Scan: ${scanPaint.count ? `${scanPaint.count.toLocaleString()} points` : 'nothing yet'} · CBCT: ${targetPaint?.count ? `${targetPaint.count.toLocaleString()} points` : 'nothing yet (optional – then the whole surface is searched)'}. Alt/Ctrl + drag erases, right drag rotates, middle drag pans, wheel zooms. Then <b>Match</b>. Still uncertain? Switch to <b>Points</b> and click 1–2 matching points as a guide.`
-          : `<b>Guide points</b> (optional): click a point on the scan, then the same point on the CBCT – one or two pairs are enough to guide the automatic match. ${n} pair${n === 1 ? '' : 's'} so far. Switch back to <b>Paint</b> to change the areas.`;
+      const pairsN = Math.min(scanPatches.length, cbctPatches.length);
+      help.innerHTML = `<b>Click a tooth surface</b> on the scan to select a circular patch around it, <b>scroll</b> to make the circle bigger or smaller (Ctrl + scroll zooms). Then click <b>the same place on the CBCT</b> – patch 1 on the scan matches patch 1 on the CBCT. Use 3 or more patches on each side, spread over the arch (both molar regions and the front teeth), on surfaces visible in both (no gingiva, no metal artefacts). Click inside a patch to select it again. Scan: ${scanPatches.length} patch${scanPatches.length === 1 ? '' : 'es'} · CBCT: ${cbctPatches.length} · ${pairsN} matching. Then <b>Match</b> – only the selected surfaces are used.`;
+      const pt = activeScan >= 0 ? scanPatches[activeScan] : null;
+      const pc = activeCbct >= 0 ? cbctPatches[activeCbct] : null;
+      $('#sa-patch-info').textContent = [pt ? `Scan patch ${activeScan + 1}: Ø ${(pt.r * 2).toFixed(1)} mm` : '', pc ? `CBCT patch ${activeCbct + 1}: Ø ${(pc.r * 2).toFixed(1)} mm` : '']
+        .filter(Boolean)
+        .join(' · ');
     }
-    matchBtn.disabled = !target || (mode === 'points' ? n < 3 : scanPaint.count < 50 && n < 3);
+    $<HTMLButtonElement>('#sa-undo-patch').disabled = !patchClicks.length;
+    matchBtn.disabled = !target || (mode === 'points' ? n < 3 : !scanPatches.length);
     matchBtn.classList.toggle('hidden', !!result);
     $('#sa-accept').classList.toggle('hidden', !result);
     $<HTMLButtonElement>('#sa-undo').disabled = !clicks.length || !!result;
@@ -425,12 +493,24 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     update();
   };
   $<HTMLButtonElement>('#sa-clear-paint').onclick = () => {
-    scanPaint.clear();
-    targetPaint?.clear();
+    scanPatches.length = cbctPatches.length = patchClicks.length = 0;
+    activeScan = activeCbct = -1;
     clearResult();
-    update();
+    refreshPatches();
   };
-  $<HTMLInputElement>('#sa-brush').oninput = () => ($('#sa-brush-v').textContent = `${$<HTMLInputElement>('#sa-brush').value} mm`);
+  $<HTMLButtonElement>('#sa-undo-patch').onclick = () => {
+    const side = patchClicks.pop();
+    if (!side) return;
+    if (side === 'scan') {
+      scanPatches.pop();
+      activeScan = scanPatches.length - 1;
+    } else {
+      cbctPatches.pop();
+      activeCbct = cbctPatches.length - 1;
+    }
+    clearResult();
+    refreshPatches();
+  };
 
   // ---- target surface
   const jawSel = $<HTMLSelectElement>('#sa-jaw');
@@ -456,6 +536,9 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
       for (let i = 0; i < tBase.length; i += 3) (tBase[i] = 226), (tBase[i + 1] = 220), (tBase[i + 2] = 205);
       right.setMeshes([]);
       targetPaint = new PaintLayer(targetMesh, right, tBase);
+      cbctPatches.length = 0;
+      activeCbct = -1;
+      for (let i = patchClicks.length - 1; i >= 0; i--) if (patchClicks[i] === 'cbct') patchClicks.splice(i, 1);
       // world pairs no longer lie on the new surface
       for (const p of pairs) delete p.world;
       for (let i = pairs.length - 1; i >= 0; i--) if (!pairs[i].scan) pairs.splice(i, 1);
@@ -488,6 +571,11 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   jawSel.onchange = () => {
     viewTarget($<HTMLSelectElement>('#sa-target').value);
     clearResult();
+  };
+  // test hook: add a patch (scan coordinates / world)
+  (root as unknown as { __addPatch: (side: 'scan' | 'cbct', c: Vec3, r: number) => void }).__addPatch = (side, c, r) => {
+    patchR = r;
+    patchClick(side, c);
   };
   // test hook: add an exactly known pair (scan coordinates, world)
   (root as unknown as { __addPair: (a: Vec3, b: Vec3) => void }).__addPair = (a, b) => {
@@ -579,7 +667,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
         }
         showResult(T, fitStats(fine, T, target), 'points');
       } else {
-        // painted points (or the whole scan if hints were given without painting)
+        // the selected scan patches only
         const sel: number[] = [];
         const selN: number[] = [];
         for (let i = 0; i < nv; i++) {
@@ -589,13 +677,27 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
         }
         const c = [0, 0, 0];
         for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) c[k] += P[i + k];
-        // both sides painted (and no guide points): the painted areas pin the start position
-        const sSel = scanPaint.count ? scanPaint.selection(N) : null;
-        const hints = pp.length
-          ? { scan: pp.map((p) => p.scan), world: pp.map((p) => p.world) }
-          : sSel && tSel
-            ? { scan: [sSel.center], world: [tSel.center] }
-            : undefined;
+        // matching patches (same number on both sides): their centres pin the start position
+        const k = Math.min(scanPatches.length, cbctPatches.length);
+        let hints: { scan: Vec3[]; world: Vec3[] } | undefined = k
+          ? { scan: scanPatches.slice(0, k).map((q) => q.c), world: cbctPatches.slice(0, k).map((q) => q.c) }
+          : undefined;
+        let note = '';
+        if (hints && k >= 3) {
+          // patch centres that cannot be fitted rigidly were numbered differently on the two sides
+          const T0 = fitRigid(hints.scan, hints.world);
+          const tmp3 = new Float64Array(3);
+          const err = Math.sqrt(
+            hints.scan.reduce((acc, q, i) => {
+              apply(T0, q[0], q[1], q[2], tmp3);
+              return acc + (tmp3[0] - hints!.world[i][0]) ** 2 + (tmp3[1] - hints!.world[i][1]) ** 2 + (tmp3[2] - hints!.world[i][2]) ** 2;
+            }, 0) / k,
+          );
+          if (err > 4) {
+            note = ` The patch centres do not correspond (${err.toFixed(1)} mm apart after fitting) – check that patch 1, 2, 3 … are the same places on both sides; searched automatically instead.`;
+            hints = undefined;
+          }
+        }
         const res = await globalMatch(Float32Array.from(sel), Float32Array.from(selN), tgt, {
           scanOcclusal: occ.axis,
           occlusalConfident: occ.confident,
@@ -605,8 +707,9 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
           hints,
           onProgress: progress,
         });
-        // fit measured on the whole CBCT surface (painted CBCT areas may cover less than the painted scan)
+        // fit of the selected scan surfaces, measured on the CBCT surface
         showResult(res.T, fitStats(subsample(Float32Array.from(sel), 3000, 11), res.T, target), 'surface');
+        if (note) $('#sa-result').innerHTML += esc(note);
       }
     } catch (e) {
       console.error(e);

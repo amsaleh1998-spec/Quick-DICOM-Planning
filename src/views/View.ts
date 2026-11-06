@@ -242,6 +242,27 @@ export abstract class View {
   protected onLeftDrag(_p: Pt, _last: Pt, _e: PointerEvent): void {}
   protected onLeftUp(_p: Pt, _e: PointerEvent, _moved: boolean): void {}
   protected onScroll(_dir: number, _p: Pt, _e: WheelEvent): void {}
+
+  /**
+   * 3Dconnexion SpaceMouse over a 2D view ("object mode": the image follows the cap):
+   * sliding the cap pans along the slice, pushing / pulling zooms. t in screen axes
+   * (X right, Y up, Z towards the user), ±1 = full deflection.
+   */
+  spaceMotion(t: Vec3, _r: Vec3, dt: number) {
+    if (!this.app.vol) return;
+    const pan = this.h * this.vs.scale * 0.8 * dt;
+    this.vs.panU -= t[0] * pan;
+    this.vs.panV += t[1] * pan;
+    this.vs.scale = Math.min(5, Math.max(0.005, this.vs.scale * Math.exp(-t[2] * 1.6 * dt)));
+    this.app.requestRender();
+  }
+
+  /** SpaceMouse button: left = fit the view. */
+  spaceButton(i: number) {
+    if (i !== 0 || !this.app.vol) return;
+    this.fit();
+    this.app.requestRender();
+  }
   /** Horizontal trackpad swipe step; defaults to the vertical action. */
   protected onScrollH(dir: number, p: Pt, e: WheelEvent): void {
     this.onScroll(dir, p, e);

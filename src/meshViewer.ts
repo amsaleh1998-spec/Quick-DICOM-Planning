@@ -27,6 +27,12 @@ export interface Marker {
 }
 
 export class MeshViewer {
+  /** viewers currently on screen (the SpaceMouse drives the one under the pointer) */
+  static active = new Set<MeshViewer>();
+  /** the 3Dconnexion driver also sends wheel events while the cap moves: ignore them meanwhile */
+  static wheelBlockedUntil = 0;
+  /** wheel over the viewer: return true when handled (otherwise it zooms); dir > 0 = scroll down */
+  onWheel: ((dir: number, e: WheelEvent) => boolean) | null = null;
   readonly el: HTMLDivElement;
   private canvas: HTMLCanvasElement;
   private ov: HTMLCanvasElement;
@@ -66,6 +72,39 @@ export class MeshViewer {
       }
     this.bind();
     new ResizeObserver(() => this.request()).observe(this.el);
+    MeshViewer.active.add(this);
+  }
+
+  /** Free the GPU resources and stop receiving SpaceMouse input. */
+  dispose() {
+    MeshViewer.active.delete(this);
+    if (this.mg) this.mg.prune(new Set());
+    this.gl?.getExtension('WEBGL_lose_context')?.loseContext();
+  }
+
+  /** SpaceMouse ("object mode": the model follows the cap), like the main 3D view. */
+  spaceMotion(t: Vec3, r: Vec3, dt: number) {
+    const s = this.dist * Math.tan(FOV / 2) * 1.6 * dt;
+    for (let k = 0; k < 3; k++) this.target[k] -= (this.right[k] * t[0] + this.up[k] * t[1]) * s;
+    this.dist *= Math.exp(-t[2] * 1.6 * dt); // pulling the cap towards you brings the model closer
+    const axis: Vec3 = [
+      this.right[0] * r[0] + this.up[0] * r[1] - this.fwd[0] * r[2],
+      this.right[1] * r[0] + this.up[1] * r[1] - this.fwd[1] * r[2],
+      this.right[2] * r[0] + this.up[2] * r[1] - this.fwd[2] * r[2],
+    ];
+    const mag = Math.hypot(axis[0], axis[1], axis[2]);
+    if (mag > 1e-6) {
+      const a: Vec3 = [axis[0] / mag, axis[1] / mag, axis[2] / mag];
+      const ang = -mag * 2.2 * dt;
+      this.fwd = normalize(rotate(this.fwd, a, ang));
+      this.right = normalize(rotate(this.right, a, ang));
+      this.up = cross(this.right, this.fwd);
+    }
+    this.request();
+  }
+
+  spaceButton(i: number) {
+    if (i === 0) this.fit();
   }
 
   setTitle(t: string) {
@@ -316,6 +355,9 @@ export class MeshViewer {
       'wheel',
       (e) => {
         e.preventDefault();
+        if (performance.now() < MeshViewer.wheelBlockedUntil) return;
+        // Ctrl / Cmd + wheel (and trackpad pinch) always zooms
+        if (!e.ctrlKey && !e.metaKey && this.onWheel?.(Math.sign(e.deltaY), e)) return;
         this.dist *= Math.exp(Math.sign(e.deltaY) * Math.min(1, Math.abs(e.deltaY) / 100) * 0.12);
         this.request();
       },
