@@ -33,6 +33,11 @@ export class MeshViewer {
   static wheelBlockedUntil = 0;
   /** wheel over the viewer: return true when handled (otherwise it zooms); dir > 0 = scroll down */
   onWheel: ((dir: number, e: WheelEvent) => boolean) | null = null;
+  /** left press on the surface: return true to drag something (e.g. a patch) instead of rotating */
+  onGrab: ((p: Vec3) => boolean) | null = null;
+  /** while grabbing: the surface point under the pointer */
+  onGrabMove: ((p: Vec3) => void) | null = null;
+  onGrabEnd: (() => void) | null = null;
   readonly el: HTMLDivElement;
   private canvas: HTMLCanvasElement;
   private ov: HTMLCanvasElement;
@@ -301,18 +306,41 @@ export class MeshViewer {
 
   private bind() {
     const el = this.el;
-    let drag: { btn: number; x: number; y: number; moved: boolean; erase: boolean } | null = null;
+    let drag: { btn: number; x: number; y: number; moved: boolean; erase: boolean; grab: boolean } | null = null;
+    let grabQueued: PointerEvent | null = null;
+    const local = (e: PointerEvent): [number, number] => {
+      const r = el.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('pointerdown', (e) => {
       el.setPointerCapture(e.pointerId);
-      drag = { btn: e.button, x: e.clientX, y: e.clientY, moved: false, erase: e.altKey || e.button === 0 && e.ctrlKey };
+      drag = { btn: e.button, x: e.clientX, y: e.clientY, moved: false, erase: e.altKey || (e.button === 0 && e.ctrlKey), grab: false };
       if (this.paintMode && e.button === 0) this.paintAt(e, drag.erase);
+      else if (e.button === 0 && !e.shiftKey && this.onGrab) {
+        const hit = this.pickAt(...local(e));
+        if (hit && this.onGrab(hit.p)) drag.grab = true;
+      }
     });
     let paintQueued: PointerEvent | null = null;
     el.addEventListener('pointermove', (e) => {
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+      if (drag.grab) {
+        // slide the grabbed item along the surface (one pick per frame)
+        if (!drag.moved) return;
+        if (!grabQueued)
+          requestAnimationFrame(() => {
+            const ev = grabQueued;
+            grabQueued = null;
+            if (!ev || !drag?.grab) return;
+            const hit = this.pickAt(...local(ev));
+            if (hit) this.onGrabMove?.(hit.p);
+          });
+        grabQueued = e;
+        return;
+      }
       if (this.paintMode && drag.btn === 0) {
         if (!paintQueued) {
           paintQueued = e;
@@ -344,6 +372,14 @@ export class MeshViewer {
       this.request();
     });
     el.addEventListener('pointerup', (e) => {
+      if (drag?.grab) {
+        grabQueued = null;
+        if (drag.moved) {
+          this.onGrabEnd?.();
+          drag = null;
+          return;
+        }
+      }
       if (drag && !drag.moved && drag.btn === 0 && !this.paintMode && this.onPick) {
         const r = el.getBoundingClientRect();
         const hit = this.pickAt(e.clientX - r.left, e.clientY - r.top);

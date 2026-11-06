@@ -275,8 +275,8 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     `<header>
       <h2>Align “${esc(scan.name)}” to the CBCT</h2>
       <div class="sa-tabs" role="tablist">
-        <button data-mode="points" class="active">Points</button>
-        <button data-mode="surface">Surfaces</button>
+        <button data-mode="surface" class="active">Surfaces</button>
+        <button data-mode="points">Points</button>
       </div>
       <button class="modal-close" title="Cancel (Esc)">×</button>
     </header>
@@ -309,7 +309,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   const left = new MeshViewer('Intraoral scan');
   const right = new MeshViewer('CBCT');
   panes.append(left.el, right.el);
-  let mode: 'points' | 'surface' = 'points';
+  let mode: 'points' | 'surface' = 'surface';
   // surface patches: patch i on the scan corresponds to patch i on the CBCT
   type Patch = { c: Vec3; r: number };
   const scanPatches: Patch[] = [];
@@ -377,6 +377,34 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     patchR = pt.r;
     refreshPatches();
     return true;
+  };
+  /** Press inside a patch and drag: the patch slides along the surface (fine-tuning its position). */
+  let grabbed: { side: 'scan' | 'cbct'; i: number; off: Vec3 } | null = null;
+  const patchGrab = (side: 'scan' | 'cbct', p: Vec3): boolean => {
+    if (mode !== 'surface') return false;
+    const list = side === 'scan' ? scanPatches : cbctPatches;
+    const i = list.findIndex((q) => Math.hypot(p[0] - q.c[0], p[1] - q.c[1], p[2] - q.c[2]) < q.r);
+    if (i < 0) return false;
+    grabbed = { side, i, off: [list[i].c[0] - p[0], list[i].c[1] - p[1], list[i].c[2] - p[2]] };
+    if (side === 'scan') activeScan = i;
+    else activeCbct = i;
+    return true;
+  };
+  const patchMove = (p: Vec3) => {
+    if (!grabbed) return;
+    clearResult();
+    const list = grabbed.side === 'scan' ? scanPatches : cbctPatches;
+    list[grabbed.i].c = [p[0] + grabbed.off[0], p[1] + grabbed.off[1], p[2] + grabbed.off[2]];
+    if (grabbed.side === 'scan') scanPaint.setPatches(scanPatches, activeScan);
+    else targetPaint?.setPatches(cbctPatches, activeCbct);
+    markers();
+  };
+  left.onGrab = (p) => patchGrab('scan', p);
+  right.onGrab = (p) => patchGrab('cbct', p);
+  left.onGrabMove = right.onGrabMove = patchMove;
+  left.onGrabEnd = right.onGrabEnd = () => {
+    grabbed = null;
+    refreshPatches();
   };
   left.onWheel = (dir) => patchWheel('scan', dir);
   right.onWheel = (dir) => patchWheel('cbct', dir);
@@ -448,7 +476,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
       help.innerHTML = `Click a point on the <b>scan</b>, then the <b>same point on the CBCT</b> (cusp tips, incisal edges, distinct fissures – spread over the arch). At least 3 pairs; 4–6 are better. ${n} pair${n === 1 ? '' : 's'} so far. Left drag = rotate, right drag = pan, wheel = zoom.`;
     } else {
       const pairsN = Math.min(scanPatches.length, cbctPatches.length);
-      help.innerHTML = `<b>Click a tooth surface</b> on the scan to select a circular patch around it, <b>scroll</b> to make the circle bigger or smaller (Ctrl + scroll zooms). Then click <b>the same place on the CBCT</b> – patch 1 on the scan matches patch 1 on the CBCT. Use 3 or more patches on each side, spread over the arch (both molar regions and the front teeth), on surfaces visible in both (no gingiva, no metal artefacts). Click inside a patch to select it again. Scan: ${scanPatches.length} patch${scanPatches.length === 1 ? '' : 'es'} · CBCT: ${cbctPatches.length} · ${pairsN} matching. Then <b>Match</b> – only the selected surfaces are used.`;
+      help.innerHTML = `<b>Click a tooth surface</b> on the scan to select a circular patch around it, <b>scroll</b> to make the circle bigger or smaller (Ctrl + scroll zooms). Then click <b>the same place on the CBCT</b> – patch 1 on the scan matches patch 1 on the CBCT. Use 3 or more patches on each side, spread over the arch (both molar regions and the front teeth), on surfaces visible in both (no gingiva, no metal artefacts). Drag a patch to fine-tune its position; click inside a patch to select it again. Scan: ${scanPatches.length} patch${scanPatches.length === 1 ? '' : 'es'} · CBCT: ${cbctPatches.length} · ${pairsN} matching. Then <b>Match</b> – only the selected surfaces are used.`;
       const pt = activeScan >= 0 ? scanPatches[activeScan] : null;
       const pc = activeCbct >= 0 ? cbctPatches[activeCbct] : null;
       $('#sa-patch-info').textContent = [pt ? `Scan patch ${activeScan + 1}: Ø ${(pt.r * 2).toFixed(1)} mm` : '', pc ? `CBCT patch ${activeCbct + 1}: Ø ${(pc.r * 2).toFixed(1)} mm` : '']
@@ -731,6 +759,6 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     close();
   };
   $<HTMLButtonElement>('.modal-close').onclick = close;
-  setMode('points');
+  setMode('surface');
   void loadTarget();
 }
