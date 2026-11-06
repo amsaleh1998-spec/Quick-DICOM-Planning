@@ -2,7 +2,7 @@
 // orbit / pan / zoom, click to pick a surface point, drag to paint, numbered markers.
 
 import { cross, normalize, rotate, Vec3 } from './math';
-import { MeshGL, pixelRay, rayMesh, viewProjection } from './meshgl';
+import { MeshGL, drawPick, pixelRay, rayMesh, viewProjection } from './meshgl';
 
 const FOV = (30 * Math.PI) / 180;
 
@@ -200,17 +200,64 @@ export class MeshViewer {
     return [(w / 2) * (1 + x), (h / 2) * (1 - y)];
   }
 
-  /** Surface point under a screen position (pickable meshes only). */
+  private pickFbo: WebGLFramebuffer | null = null;
+  private pickTex: WebGLTexture | null = null;
+  private pickDepth: WebGLRenderbuffer | null = null;
+  private pickSize = '';
+
+  /** Surface point under a screen position (pickable meshes only), read back from the GPU. */
   pickAt(x: number, y: number): { p: Vec3; mesh: ViewerMesh } | null {
     const w = this.el.clientWidth, h = this.el.clientHeight;
+    const gl = this.gl;
+    const pickable = this.meshes.filter((m) => m.pickable && m.visible !== false);
+    if (!pickable.length) return null;
     const ray = pixelRay(x, y, w, h, this.camPos(), this.right, this.up, this.fwd, FOV);
-    let best: { p: Vec3; mesh: ViewerMesh; t: number } | null = null;
-    for (const m of this.meshes) {
-      if (!m.pickable || m.visible === false) continue;
-      const hit = rayMesh(m.pos, m.idx, ray.o, ray.d);
-      if (hit && (!best || hit.t < best.t)) best = { p: hit.p, mesh: m, t: hit.t };
+    if (!gl || !this.mg) {
+      // no WebGL: CPU ray test
+      let best: { p: Vec3; mesh: ViewerMesh; t: number } | null = null;
+      for (const m of pickable) {
+        const hit = rayMesh(m.pos, m.idx, ray.o, ray.d);
+        if (hit && (!best || hit.t < best.t)) best = { p: hit.p, mesh: m, t: hit.t };
+      }
+      return best;
     }
-    return best;
+    const W = this.canvas.width, H = this.canvas.height;
+    const size = `${W}x${H}`;
+    if (!this.pickFbo) {
+      this.pickFbo = gl.createFramebuffer();
+      this.pickTex = gl.createTexture();
+      this.pickDepth = gl.createRenderbuffer();
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.pickFbo);
+    if (size !== this.pickSize) {
+      gl.bindTexture(gl.TEXTURE_2D, this.pickTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.pickTex, 0);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, this.pickDepth);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, W, H);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.pickDepth);
+      this.pickSize = size;
+    }
+    const px = Math.min(W - 1, Math.max(0, Math.floor((x / w) * W)));
+    const py = Math.min(H - 1, Math.max(0, H - 1 - Math.floor((y / h) * H)));
+    gl.viewport(0, 0, W, H);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(px, py, 1, 1);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    const pos = this.camPos();
+    const far = this.dist * 20;
+    const mvp = viewProjection(pos, this.right, this.up, this.fwd, FOV, w / h, Math.max(0.1, this.dist * 0.01), far);
+    pickable.forEach((m, i) => drawPick(this.mg!, m.key, mvp, pos, far, i + 1));
+    const px4 = new Uint8Array(4);
+    gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px4);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!px4[3]) return null;
+    const d = ((px4[0] * 65536 + px4[1] * 256 + px4[2]) / 16777215) * far;
+    return { p: [pos[0] + ray.d[0] * d, pos[1] + ray.d[1] * d, pos[2] + ray.d[2] * d], mesh: pickable[px4[3] - 1] };
   }
 
   private bind() {

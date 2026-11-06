@@ -11,7 +11,7 @@ import {
   Affine, FitStats, Target, apply, fitRigid, fitStats, globalMatch, icp, scanOcclusalAxis, subsample, subsampleSame, thinPoints,
 } from './register';
 import { SCAN_KINDS, Scan, ScanKind, originalTransform, placementLabel, scanNormals } from './scans';
-import { fillCavities, isoSurface } from './stl';
+import { fillCavities, isoSurface, smoothMesh } from './stl';
 
 export interface AlignHooks {
   setStatus(msg: string, error?: boolean): void;
@@ -109,10 +109,13 @@ function targetChoices(app: App): TargetChoice[] {
       key: `seg${sg.id}`,
       label: `Segment: ${sg.name}`,
       build: async (pr) => {
-        const g = app.seg.segmentField(sg, 2, MAX_SAMPLES / 2);
+        // full CT resolution, smoothed (same quality as the High STL export)
+        const g = app.seg.segmentField(sg, 1, MAX_SAMPLES);
         if (!g) return null;
         fillCavities(g);
-        return isoSurface(g, pr);
+        const m = await isoSurface(g, (f) => pr(f * 0.8));
+        await smoothMesh(m, 10, 0.5, -0.53, (f) => pr(0.8 + f * 0.2));
+        return m;
       },
     });
   }
@@ -123,9 +126,11 @@ function targetChoices(app: App): TargetChoice[] {
     key: 'render',
     label: `3D render at the current threshold (${lo} – ${hi}${crop ? ', inside the crop box' : ''})`,
     build: async (pr) => {
-      const g = thresholdField(vol, lo, hi, crop, 2);
+      const g = thresholdField(vol, lo, hi, crop, 1);
       fillCavities(g);
-      return isoSurface(g, pr);
+      const m = await isoSurface(g, (f) => pr(f * 0.8));
+      await smoothMesh(m, 10, 0.5, -0.53, (f) => pr(0.8 + f * 0.2));
+      return m;
     },
   });
   return out;
@@ -139,6 +144,93 @@ interface Pair {
 }
 
 const PAINT: [number, number, number] = [255, 140, 40];
+
+/** Painted selection on a viewer mesh: vertex mask + colours, with a hashed vertex grid for the brush. */
+class PaintLayer {
+  readonly mask: Uint8Array;
+  count = 0;
+  private col: Uint8Array;
+  private start: Uint32Array;
+  private items: Uint32Array;
+  private static CELL = 1.5;
+  private static BUCKETS = 1 << 20;
+  constructor(
+    private mesh: ViewerMesh,
+    private viewer: MeshViewer,
+    private base: Uint8Array,
+  ) {
+    const P = mesh.pos;
+    const n = P.length / 3;
+    this.mask = new Uint8Array(n);
+    this.col = base.slice();
+    mesh.col = this.col;
+    // CSR buckets of vertex indices
+    const B = PaintLayer.BUCKETS;
+    const cnt = new Uint32Array(B + 1);
+    const bucketOf = new Uint32Array(n);
+    for (let i = 0; i < n; i++) {
+      const b = this.bucket(Math.floor(P[i * 3] / PaintLayer.CELL), Math.floor(P[i * 3 + 1] / PaintLayer.CELL), Math.floor(P[i * 3 + 2] / PaintLayer.CELL));
+      bucketOf[i] = b;
+      cnt[b + 1]++;
+    }
+    for (let b = 0; b < B; b++) cnt[b + 1] += cnt[b];
+    this.start = cnt.slice();
+    this.items = new Uint32Array(n);
+    const fill = cnt.slice(0, B);
+    for (let i = 0; i < n; i++) this.items[fill[bucketOf[i]]++] = i;
+  }
+  private bucket(x: number, y: number, z: number) {
+    return ((Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) >>> 0) & (PaintLayer.BUCKETS - 1);
+  }
+  /** Paint (or erase) every vertex within r mm of p. */
+  paint(p: Vec3, r: number, erase: boolean) {
+    const P = this.mesh.pos;
+    const C = PaintLayer.CELL;
+    const r2 = r * r;
+    const n = Math.ceil(r / C);
+    const cx = Math.floor(p[0] / C), cy = Math.floor(p[1] / C), cz = Math.floor(p[2] / C);
+    for (let dx = -n; dx <= n; dx++)
+      for (let dy = -n; dy <= n; dy++)
+        for (let dz = -n; dz <= n; dz++) {
+          const b = this.bucket(cx + dx, cy + dy, cz + dz);
+          for (let k = this.start[b]; k < this.start[b + 1]; k++) {
+            const i = this.items[k];
+            const d2 = (P[i * 3] - p[0]) ** 2 + (P[i * 3 + 1] - p[1]) ** 2 + (P[i * 3 + 2] - p[2]) ** 2;
+            if (d2 > r2 || (erase ? !this.mask[i] : this.mask[i])) continue;
+            this.mask[i] = erase ? 0 : 1;
+            this.count += erase ? -1 : 1;
+            for (let c = 0; c < 3; c++)
+              this.col[i * 3 + c] = erase ? this.base[i * 3 + c] : Math.round(this.base[i * 3 + c] * 0.35 + PAINT[c] * 0.65);
+          }
+        }
+    this.viewer.updateColors(this.mesh, this.col);
+  }
+  clear() {
+    this.mask.fill(0);
+    this.count = 0;
+    this.col.set(this.base);
+    this.viewer.updateColors(this.mesh, this.col);
+  }
+  /** Painted vertices (and their normals) as flat arrays, plus their centroid. */
+  selection(nrm: Float32Array): { pos: Float32Array; nrm: Float32Array; center: Vec3 } {
+    const P = this.mesh.pos;
+    const pos = new Float32Array(this.count * 3);
+    const nn = new Float32Array(this.count * 3);
+    const c: Vec3 = [0, 0, 0];
+    let o = 0;
+    for (let i = 0; i < this.mask.length; i++) {
+      if (!this.mask[i]) continue;
+      for (let k = 0; k < 3; k++) {
+        pos[o + k] = P[i * 3 + k];
+        nn[o + k] = nrm[i * 3 + k];
+        c[k] += P[i * 3 + k];
+      }
+      o += 3;
+    }
+    const n = Math.max(1, this.count);
+    return { pos, nrm: nn, center: [c[0] / n, c[1] / n, c[2] / n] };
+  }
+}
 
 export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   if (!app.vol) return;
@@ -187,8 +279,6 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   const pairs: Pair[] = [];
   const clicks: ('scan' | 'world')[] = [];
   const nv = scan.mesh.pos.length / 3;
-  const painted = new Uint8Array(nv);
-  let paintedCount = 0;
   let target: Target | null = null;
   let targetMesh: ViewerMesh | null = null;
   let targetLabel = '';
@@ -204,48 +294,17 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     baseCol[i * 3 + 2] = c[2];
   }
   const scanMesh: ViewerMesh = {
-    key: 'scan', pos: scan.mesh.pos, nrm: scanNormals(scan.mesh), idx: scan.mesh.idx, col: baseCol.slice(), color: scan.color,
+    key: 'scan', pos: scan.mesh.pos, nrm: scanNormals(scan.mesh), idx: scan.mesh.idx, col: null, color: scan.color,
     opacity: 1, vertexColors: true, pickable: true,
   };
   left.setMeshes([scanMesh]);
   const occ = scanOcclusalAxis(scan.mesh.pos, scanMesh.nrm);
   left.fit([-occ.axis[0], -occ.axis[1], -occ.axis[2]]);
 
-  // spatial hash of the scan vertices for painting
-  const CELL = 2;
-  const grid = new Map<number, number[]>();
-  const cellKey = (x: number, y: number, z: number) => (Math.floor(x / CELL) + 4096) + (Math.floor(y / CELL) + 4096) * 8192 + (Math.floor(z / CELL) + 4096) * 67108864;
-  for (let i = 0; i < nv; i++) {
-    const k = cellKey(scan.mesh.pos[i * 3], scan.mesh.pos[i * 3 + 1], scan.mesh.pos[i * 3 + 2]);
-    let a = grid.get(k);
-    if (!a) grid.set(k, (a = []));
-    a.push(i);
-  }
-  const paintAt = (p: Vec3, erase: boolean) => {
-    const r = Number($<HTMLInputElement>('#sa-brush').value);
-    const r2 = r * r;
-    const P = scan.mesh.pos;
-    const col = scanMesh.col!;
-    const n = Math.ceil(r / CELL);
-    for (let dx = -n; dx <= n; dx++)
-      for (let dy = -n; dy <= n; dy++)
-        for (let dz = -n; dz <= n; dz++) {
-          const list = grid.get(cellKey(p[0] + dx * CELL, p[1] + dy * CELL, p[2] + dz * CELL));
-          if (!list) continue;
-          for (const i of list) {
-            const d2 = (P[i * 3] - p[0]) ** 2 + (P[i * 3 + 1] - p[1]) ** 2 + (P[i * 3 + 2] - p[2]) ** 2;
-            if (d2 > r2) continue;
-            if (erase ? painted[i] : !painted[i]) {
-              painted[i] = erase ? 0 : 1;
-              paintedCount += erase ? -1 : 1;
-              for (let k = 0; k < 3; k++) col[i * 3 + k] = erase ? baseCol[i * 3 + k] : Math.round(baseCol[i * 3 + k] * 0.35 + PAINT[k] * 0.65);
-            }
-          }
-        }
-    left.updateColors(scanMesh, col);
-    clearResult();
-    update();
-  };
+  const scanPaint = new PaintLayer(scanMesh, left, baseCol);
+  left.updateColors(scanMesh, scanMesh.col!);
+  let targetPaint: PaintLayer | null = null;
+  const brush = () => Number($<HTMLInputElement>('#sa-brush').value);
 
   const markers = () => {
     const lm: Marker[] = [];
@@ -284,14 +343,21 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   };
   left.onPaint = (p, _m, erase) => {
     clearResult();
-    paintAt(p, erase);
+    scanPaint.paint(p, brush(), erase);
+    update();
+  };
+  right.onPaint = (p, _m, erase) => {
+    if (!targetPaint) return;
+    clearResult();
+    targetPaint.paint(p, brush(), erase);
+    update();
   };
 
   const setMode = (m: 'points' | 'surface') => {
     mode = m;
     root.querySelectorAll<HTMLButtonElement>('.sa-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.mode === m));
     root.classList.toggle('mode-surface', m === 'surface');
-    left.paintMode = m === 'surface' && surfaceTool === 'paint';
+    left.paintMode = right.paintMode = m === 'surface' && surfaceTool === 'paint';
     clearResult();
     update();
   };
@@ -301,7 +367,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
       (b.onclick = () => {
         surfaceTool = b.dataset.tool as 'paint' | 'points';
         root.querySelectorAll<HTMLButtonElement>('.sa-tool button').forEach((x) => x.classList.toggle('active', x === b));
-        left.paintMode = mode === 'surface' && surfaceTool === 'paint';
+        left.paintMode = right.paintMode = mode === 'surface' && surfaceTool === 'paint';
         update();
       }),
   );
@@ -319,10 +385,10 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     } else {
       help.innerHTML =
         surfaceTool === 'paint'
-          ? `<b>Paint</b> the areas of the scan that are also visible in the CBCT – tooth surfaces (avoid gingiva and metal restorations with artefacts). ${paintedCount ? `${paintedCount.toLocaleString()} points painted.` : ''} Alt/Ctrl + drag erases, right drag rotates, middle drag pans, wheel zooms. Then <b>Match</b>: the fit is found automatically. Partial arch, or the match is uncertain? Switch to <b>Points</b> and click 1–2 matching points as a guide.`
+          ? `<b>Paint the same areas on both sides</b> – on the scan and on the CBCT – that are clearly visible in both: tooth surfaces (avoid gingiva and metal restorations with artefacts). Scan: ${scanPaint.count ? `${scanPaint.count.toLocaleString()} points` : 'nothing yet'} · CBCT: ${targetPaint?.count ? `${targetPaint.count.toLocaleString()} points` : 'nothing yet (optional – then the whole surface is searched)'}. Alt/Ctrl + drag erases, right drag rotates, middle drag pans, wheel zooms. Then <b>Match</b>. Still uncertain? Switch to <b>Points</b> and click 1–2 matching points as a guide.`
           : `<b>Guide points</b> (optional): click a point on the scan, then the same point on the CBCT – one or two pairs are enough to guide the automatic match. ${n} pair${n === 1 ? '' : 's'} so far. Switch back to <b>Paint</b> to change the areas.`;
     }
-    matchBtn.disabled = !target || (mode === 'points' ? n < 3 : paintedCount < 50 && n < 3);
+    matchBtn.disabled = !target || (mode === 'points' ? n < 3 : scanPaint.count < 50 && n < 3);
     matchBtn.classList.toggle('hidden', !!result);
     $('#sa-accept').classList.toggle('hidden', !result);
     $<HTMLButtonElement>('#sa-undo').disabled = !clicks.length || !!result;
@@ -359,10 +425,8 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     update();
   };
   $<HTMLButtonElement>('#sa-clear-paint').onclick = () => {
-    painted.fill(0);
-    paintedCount = 0;
-    left.updateColors(scanMesh, baseCol.slice());
-    scanMesh.col = baseCol.slice();
+    scanPaint.clear();
+    targetPaint?.clear();
     clearResult();
     update();
   };
@@ -381,13 +445,17 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     $('#sa-help').textContent = 'Extracting the CBCT surface…';
     await new Promise((r) => setTimeout(r, 30));
     try {
-      const m = await ch.build(() => {});
+      const m = await ch.build((f) => ($('#sa-help').textContent = `Extracting the CBCT surface at full resolution… ${Math.round(f * 100)} %`));
       if (!m || !m.idx.length) throw new Error('This surface is empty – adjust the threshold or the segment.');
       const nrm = vertexNormals(m.pos, m.idx);
       const thin = thinPoints(m.pos, nrm, 0.5);
       target = new Target(thin.pts, thin.nrm);
       targetLabel = ch.label;
-      targetMesh = { key: `t-${ch.key}`, pos: m.pos, nrm, idx: m.idx, col: null, color: [226, 220, 205], opacity: 1, vertexColors: false, pickable: true };
+      targetMesh = { key: `t-${ch.key}`, pos: m.pos, nrm, idx: m.idx, col: null, color: [226, 220, 205], opacity: 1, vertexColors: true, pickable: true };
+      const tBase = new Uint8Array(m.pos.length);
+      for (let i = 0; i < tBase.length; i += 3) (tBase[i] = 226), (tBase[i + 1] = 220), (tBase[i + 2] = 205);
+      right.setMeshes([]);
+      targetPaint = new PaintLayer(targetMesh, right, tBase);
       // world pairs no longer lie on the new surface
       for (const p of pairs) delete p.world;
       for (let i = pairs.length - 1; i >= 0; i--) if (!pairs[i].scan) pairs.splice(i, 1);
@@ -481,6 +549,14 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     try {
       const P = scan.mesh.pos;
       const N = scanMesh.nrm;
+      const painted = scanPaint.mask;
+      // painted CBCT areas: match only against those
+      let tgt = target;
+      const tSel = targetPaint && targetPaint.count >= 50 ? targetPaint.selection(targetMesh!.nrm) : null;
+      if (tSel) {
+        const thin = thinPoints(tSel.pos, tSel.nrm, 0.5);
+        tgt = new Target(thin.pts, thin.nrm);
+      }
       if (mode === 'points') {
         if (pp.length < 3) return;
         let T = fitRigid(pp.map((p) => p.scan), pp.map((p) => p.world));
@@ -488,7 +564,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
         const src: number[] = [];
         const srcN: number[] = [];
         for (let i = 0; i < P.length; i += 3) {
-          const near = paintedCount
+          const near = scanPaint.count
             ? painted[i / 3] === 1
             : pp.some((p) => (P[i] - p.scan[0]) ** 2 + (P[i + 1] - p.scan[1]) ** 2 + (P[i + 2] - p.scan[2]) ** 2 < 64);
           if (near) {
@@ -499,27 +575,34 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
         const sp = Float32Array.from(src);
         const fine = subsample(sp, 3000, 11);
         if ($<HTMLInputElement>('#sa-refine').checked && sp.length >= 30) {
-          T = icp(fine, subsampleSame(sp, Float32Array.from(srcN), 3000, 11), T, target, { gate0: 2, iterations: 30, gate1: 0.6 });
+          T = icp(fine, subsampleSame(sp, Float32Array.from(srcN), 3000, 11), T, tgt, { gate0: 2, iterations: 30, gate1: 0.6 });
         }
-        showResult(T, fitStats(fine, T, target), 'points');
+        showResult(T, fitStats(fine, T, tgt), 'points');
       } else {
         // painted points (or the whole scan if hints were given without painting)
         const sel: number[] = [];
         const selN: number[] = [];
         for (let i = 0; i < nv; i++) {
-          if (paintedCount && !painted[i]) continue;
+          if (scanPaint.count && !painted[i]) continue;
           sel.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
           selN.push(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]);
         }
         const c = [0, 0, 0];
         for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) c[k] += P[i + k];
-        const res = await globalMatch(Float32Array.from(sel), Float32Array.from(selN), target, {
+        // both sides painted (and no guide points): the painted areas pin the start position
+        const sSel = scanPaint.count ? scanPaint.selection(N) : null;
+        const hints = pp.length
+          ? { scan: pp.map((p) => p.scan), world: pp.map((p) => p.world) }
+          : sSel && tSel
+            ? { scan: [sSel.center], world: [tSel.center] }
+            : undefined;
+        const res = await globalMatch(Float32Array.from(sel), Float32Array.from(selN), tgt, {
           scanOcclusal: occ.axis,
           occlusalConfident: occ.confident,
           scanCenter: c.map((v) => v / nv) as Vec3,
           targetOcclusal: occlusalWorld(),
           allowFlip: false,
-          hints: pp.length ? { scan: pp.map((p) => p.scan), world: pp.map((p) => p.world) } : undefined,
+          hints,
           onProgress: progress,
         });
         showResult(res.T, res.stats, 'surface');

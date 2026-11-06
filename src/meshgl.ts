@@ -40,6 +40,24 @@ void main() {
   outColor = vec4(base * (0.28 + 0.72 * diff) + spec, uOpacity);
 }`;
 
+// picking: distance from the eye packed into rgb (24 bit), mesh id in alpha
+const PICK_FS = `#version 300 es
+precision highp float;
+in vec3 vPos;
+in vec3 vNrm;
+in vec3 vCol;
+uniform vec3 uEye;
+uniform float uFar;
+uniform float uId;
+out vec4 outColor;
+void main() {
+  float v = floor(clamp(length(vPos - uEye) / uFar, 0.0, 1.0) * 16777215.0);
+  float r = floor(v / 65536.0);
+  float g = floor((v - r * 65536.0) / 256.0);
+  float b = v - r * 65536.0 - g * 256.0;
+  outColor = vec4(r / 255.0, g / 255.0, b / 255.0, uId / 255.0);
+}`;
+
 interface GpuMesh {
   vao: WebGLVertexArrayObject;
   bufs: WebGLBuffer[];
@@ -51,6 +69,8 @@ interface GpuMesh {
 export class MeshGL {
   private prog: WebGLProgram;
   private loc: Record<string, WebGLUniformLocation | null> = {};
+  private pickProg: WebGLProgram;
+  private pickLoc: Record<string, WebGLUniformLocation | null> = {};
   private meshes = new Map<unknown, GpuMesh>();
 
   constructor(readonly gl: WebGL2RenderingContext) {
@@ -61,16 +81,21 @@ export class MeshGL {
       if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) ?? 'mesh shader error');
       return sh;
     };
-    const p = gl.createProgram()!;
-    gl.attachShader(p, compile(gl.VERTEX_SHADER, VS));
-    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, FS));
-    gl.bindAttribLocation(p, 0, 'aPos');
-    gl.bindAttribLocation(p, 1, 'aNrm');
-    gl.bindAttribLocation(p, 2, 'aCol');
-    gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) ?? 'mesh link error');
-    this.prog = p;
-    for (const n of ['uMVP', 'uEye', 'uColor', 'uOpacity', 'uUseVertexColor']) this.loc[n] = gl.getUniformLocation(p, n);
+    const link = (fs: string) => {
+      const p = gl.createProgram()!;
+      gl.attachShader(p, compile(gl.VERTEX_SHADER, VS));
+      gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+      gl.bindAttribLocation(p, 0, 'aPos');
+      gl.bindAttribLocation(p, 1, 'aNrm');
+      gl.bindAttribLocation(p, 2, 'aCol');
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) ?? 'mesh link error');
+      return p;
+    };
+    this.prog = link(FS);
+    for (const n of ['uMVP', 'uEye', 'uColor', 'uOpacity', 'uUseVertexColor']) this.loc[n] = gl.getUniformLocation(this.prog, n);
+    this.pickProg = link(PICK_FS);
+    for (const n of ['uMVP', 'uEye', 'uFar', 'uId']) this.pickLoc[n] = gl.getUniformLocation(this.pickProg, n);
   }
 
   has(key: unknown) {
@@ -130,6 +155,20 @@ export class MeshGL {
     for (const k of [...this.meshes.keys()]) if (!keep.has(k)) this.delete(k);
   }
 
+  pickDraw(key: unknown, mvp: Float32Array, eye: Vec3, far: number, id: number) {
+    const m = this.meshes.get(key);
+    if (!m) return;
+    const gl = this.gl;
+    gl.useProgram(this.pickProg);
+    gl.uniformMatrix4fv(this.pickLoc.uMVP, false, mvp);
+    gl.uniform3fv(this.pickLoc.uEye, eye);
+    gl.uniform1f(this.pickLoc.uFar, far);
+    gl.uniform1f(this.pickLoc.uId, id);
+    gl.bindVertexArray(m.vao);
+    gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
+    gl.bindVertexArray(null);
+  }
+
   draw(key: unknown, mvp: Float32Array, eye: Vec3, opts: { color: [number, number, number]; opacity: number; vertexColors: boolean }) {
     const m = this.meshes.get(key);
     if (!m) return;
@@ -144,6 +183,11 @@ export class MeshGL {
     gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
     gl.bindVertexArray(null);
   }
+}
+
+/** Draw a mesh into the current (pick) target: distance from the eye / far, and the id (1..255). */
+export function drawPick(mg: MeshGL, key: unknown, mvp: Float32Array, eye: Vec3, far: number, id: number) {
+  (mg as unknown as { pickDraw: (k: unknown, m: Float32Array, e: Vec3, f: number, i: number) => void }).pickDraw(key, mvp, eye, far, id);
 }
 
 /** Column-major view-projection for a camera given by position and right/up/forward vectors. */
