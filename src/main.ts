@@ -539,13 +539,13 @@ async function saveProject() {
 
 const projectInput = $<HTMLInputElement>('project-input');
 $('btn-save-project').onclick = () => saveProject();
-$('btn-export-stl').onclick = () =>
-  showExportStl(app, {
-    showLoading,
-    hideLoading,
-    setStatus,
-    deliver: (blob, name, type) => deliverFile(blob, name, type),
-  });
+const exportHooks = {
+  showLoading,
+  hideLoading,
+  setStatus,
+  deliver: (blob: Blob, name: string, type: FileTypeSpec) => deliverFile(blob, name, type),
+};
+$('btn-export-stl').onclick = () => showExportStl(app, exportHooks);
 $('btn-open-project').onclick = () => projectInput.click();
 projectInput.onchange = () => {
   const f = projectInput.files?.[0];
@@ -1572,6 +1572,14 @@ $('btn-scan-place').onclick = () => {
   const s = activeScan();
   if (s) showPlacement(app, s, alignHooks);
 };
+$('btn-scan-export').onclick = () => {
+  const s = activeScan();
+  if (!s?.transform) {
+    setStatus('Place the scan first (Align… or Place…).', true);
+    return;
+  }
+  showExportStl(app, exportHooks, { scanId: s.id });
+};
 $('btn-scan-delete').onclick = () => {
   const s = activeScan();
   if (!s || !confirm(`Delete “${s.name}”?`)) return;
@@ -1614,6 +1622,7 @@ function refreshScanUi() {
   scanKind.value = s.kind;
   if (document.activeElement !== scanOpacity) scanOpacity.value = String(s.opacity);
   $('scan-vcol-row').classList.toggle('hidden', !s.mesh.col);
+  $('btn-scan-export').toggleAttribute('disabled', !s.transform);
   scanVcol.checked = s.vertexColors;
   const fit = s.placement?.target ? ` on ${s.placement.target}` : '';
   $('scan-info').textContent = `${s.fileName} · ${(s.mesh.idx.length / 3).toLocaleString()} triangles · ${placementLabel(s)}${fit}`;

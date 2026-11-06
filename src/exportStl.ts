@@ -9,6 +9,7 @@ import { nervePath } from './nerve';
 import type { CropSpec } from './render';
 import { cropTester } from './segment';
 import { scanWorld } from './scans';
+import { invert } from './register';
 import { ScalarGrid, Tris, concatTris, coneMesh, fillCavities, isoSurface, meshToTris, smoothMesh, stlBytes, tubeMesh } from './stl';
 import { affineDet, type Volume } from './volume';
 import { writeZip } from './zip';
@@ -231,7 +232,8 @@ function collectItems(app: App): { groups: { title: string; items: Item[] }[]; b
 
 let modal: HTMLDivElement | null = null;
 
-export function showExportStl(app: App, hooks: ExportHooks) {
+/** `preset.scanId`: that scan + all implants and abutments, in that scan's own coordinates. */
+export function showExportStl(app: App, hooks: ExportHooks, preset?: { scanId: number }) {
   if (!app.vol) {
     hooks.setStatus('Open a CBCT first.', true);
     return;
@@ -258,6 +260,17 @@ export function showExportStl(app: App, hooks: ExportHooks) {
         ${g.items.map((it) => `<label class="check"><input type="checkbox" data-k="${it.key}" ${it.checked ? 'checked' : ''}/> ${esc(it.label)}</label>`).join('')}`,
         )
         .join('')}
+      <h4>Coordinates</h4>
+      <label class="check">Export in
+        <select id="xs-coords">
+          <option value="dicom">${app.vol.info.patientAffine ? 'CBCT – DICOM patient coordinates' : 'CBCT coordinates'}</option>
+          ${app.scans
+            .filter((sc) => sc.transform)
+            .map((sc) => `<option value="scan${sc.id}" ${preset?.scanId === sc.id ? 'selected' : ''}>Intraoral scan: ${esc(sc.name)} (coordinates of its file)</option>`)
+            .join('')}
+        </select>
+      </label>
+      <p class="muted small" id="xs-coords-note"></p>
       <h4>Options</h4>
       <label class="check">Detail of bone surfaces
         <select id="xs-step">
@@ -297,6 +310,20 @@ export function showExportStl(app: App, hooks: ExportHooks) {
     info.textContent = n ? `${n} object${n > 1 ? 's' : ''} selected` : 'Nothing selected';
     m.querySelector<HTMLButtonElement>('#xs-go')!.disabled = !n;
   };
+  const coordsSel = m.querySelector<HTMLSelectElement>('#xs-coords')!;
+  const coordsScan = () => app.scans.find((sc) => `scan${sc.id}` === coordsSel.value && sc.transform) ?? null;
+  const updateCoords = () => {
+    const sc = coordsScan();
+    m.querySelector('#xs-coords-note')!.textContent = sc
+      ? `Everything is placed in the coordinate system of “${sc.fileName}”: the scan comes out exactly as in its original file, and the implants and abutments line up with that file in lab / guide-design software.`
+      : 'The files line up with the CBCT (and with each other) in other software.';
+  };
+  coordsSel.onchange = updateCoords;
+  updateCoords();
+  if (preset) {
+    for (const cb of m.querySelectorAll<HTMLInputElement>('input[type=checkbox][data-k]'))
+      cb.checked = cb.dataset.k === `scan${preset.scanId}` || /^(imp|ab)\d+$/.test(cb.dataset.k ?? '');
+  }
   m.addEventListener('change', updateInfo);
   updateInfo();
 
@@ -308,9 +335,11 @@ export function showExportStl(app: App, hooks: ExportHooks) {
       smooth: m.querySelector<HTMLInputElement>('#xs-smooth')!.checked,
     };
     const combined = m.querySelector<HTMLInputElement>('input[name="xs-files"][value="one"]')!.checked;
+    const inScan = coordsScan();
     close();
-    const affine = app.vol?.info.patientAffine;
-    const space = affine ? 'LPS' : null;
+    // world -> output coordinates: DICOM patient (LPS), or the chosen scan's file coordinates
+    const affine = inScan ? invert(inScan.transform!) : app.vol?.info.patientAffine;
+    const space = !inScan && affine ? 'LPS' : null;
     try {
       const meshes: { name: string; tris: Tris }[] = [];
       for (let i = 0; i < items.length; i++) {
@@ -348,7 +377,7 @@ export function showExportStl(app: App, hooks: ExportHooks) {
           return { name: fn, data: stlBytes(x.tris, x.name, space) };
         });
         blob = await writeZip(entries, (f) => hooks.showLoading('Compressing…', 0.95 + 0.05 * f));
-        filename = `${base}_STL.zip`;
+        filename = `${base}_STL${inScan ? `_${safe(inScan.name)}-coords` : ''}.zip`;
         type = { description: 'ZIP of STL files', accept: { 'application/zip': ['.zip'] } };
       }
       hooks.hideLoading();
