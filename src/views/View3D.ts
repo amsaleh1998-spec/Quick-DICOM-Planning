@@ -6,6 +6,8 @@ import { NERVE_COLOR, nervePath } from '../nerve';
 import { Frame, Vec3, add, cross, dot, fromFrame, neg, normalize, reorthonormalize, rotate, scale, sub, toFrame } from '../math';
 import { Volume } from '../volume';
 import { Pt, View, drawLabel } from './View';
+import { ImplantEditor } from './implantEdit';
+import { Implant, implantParts } from '../implant';
 
 const MAX_CYL = 48;
 const MAX_NERVE_SEG = 1024;
@@ -712,12 +714,101 @@ export class View3D extends View {
     return { pos: add(t, scale(this.fwd, -dist)), target: t };
   }
 
-  protected onLeftDown(): boolean {
+  // ---- implant editing (same handles and gestures as the 2D views) ----------------
+
+  /** Ray through a screen point (CSS px). */
+  private rayAt(p: Pt): { o: Vec3; d: Vec3 } {
+    const th = Math.tan(FOV / 2);
+    const nx = (p[0] / this.w) * 2 - 1;
+    const ny = 1 - (p[1] / this.h) * 2;
+    return { o: this.camera().pos, d: normalize(add(add(this.fwd, scale(this.right, nx * th * (this.w / this.h))), scale(this.up, ny * th))) };
+  }
+
+  /** Closest approach of a ray and the line c + axis·h: axial coordinate h, distance, ray parameter t. */
+  private rayAxis(p: Pt, c: Vec3, axis: Vec3): { h: number; rad: number; t: number } {
+    const { o, d } = this.rayAt(p);
+    const w0 = sub(o, c);
+    const b = dot(d, axis);
+    const dd = dot(d, w0);
+    const e = dot(axis, w0);
+    const den = 1 - b * b;
+    let t: number, h: number;
+    if (den < 1e-9) {
+      t = 0;
+      h = e;
+    } else {
+      t = (b * e - dd) / den;
+      h = (e - b * dd) / den;
+    }
+    const pr = add(o, scale(d, t));
+    const pa = add(c, scale(axis, h));
+    return { h, rad: Math.hypot(pr[0] - pa[0], pr[1] - pa[1], pr[2] - pa[2]), t };
+  }
+
+  /** mm per CSS pixel at the depth of the selected implant (or the rotation centre). */
+  private mmPerPx(): number {
+    const cam = this.camera();
+    const sel = this.app.selectedImplant();
+    const z = sel ? Math.max(1, dot(sub(sel.center, cam.pos), this.fwd)) : Math.max(1, dot(sub(cam.target, cam.pos), this.fwd));
+    return (2 * z * Math.tan(FOV / 2)) / Math.max(1, this.h);
+  }
+
+  private editor = new ImplantEditor(this.app, {
+    project: (w) => {
+      const s = this.projectPoint(w);
+      return { x: s ? s[0] : -1e5, y: s ? s[1] : -1e5, depth: 0 };
+    },
+    basis: () => {
+      const u = this.right;
+      const v = neg(this.up);
+      return { u, v, n: cross(u, v) };
+    },
+    scale: () => this.mmPerPx(),
+    radialAxial: (p, imp) => {
+      const r = this.rayAxis(p, imp.center, imp.axis);
+      return { rad: r.rad, h: r.h };
+    },
+    hitBody: (p) => this.implantAt(p),
+    visible: (imp) => !imp.hidden,
+    container: this.el,
+  });
+  private editingImplant = false;
+
+  /** Nearest implant (body or abutment) under a screen point. */
+  private implantAt(p: Pt): Implant | null {
+    let best: Implant | null = null;
+    let bestT = Infinity;
+    for (const imp of this.app.implants) {
+      for (const part of implantParts(imp, this.app.abutmentDir(imp))) {
+        if (part.kind === 'prosthetic') continue;
+        const r = this.rayAxis(p, part.center, part.axis);
+        if (Math.abs(r.h) > part.half || r.t <= 0) continue;
+        const f = (r.h + part.half) / (2 * part.half);
+        const radius = part.r0 + (part.r1 - part.r0) * f;
+        if (r.rad <= radius + this.mmPerPx() * 2 && r.t < bestT) {
+          bestT = r.t;
+          best = imp;
+        }
+      }
+    }
+    return best;
+  }
+
+  protected onLeftDown(p: Pt): boolean {
+    // implants (body = move, C/A handles = rotate, outline = resize) unless a segmentation tool is active
+    if (!this.app.segTool && this.editor.start(p)) {
+      this.editingImplant = true;
+      return true;
+    }
     this.orbiting = true;
     return true;
   }
 
   protected onLeftDrag(p: Pt, last: Pt) {
+    if (this.editingImplant) {
+      this.editor.move(p, last);
+      return;
+    }
     this.orbit(p[0] - last[0], p[1] - last[1]);
   }
 
@@ -792,6 +883,11 @@ export class View3D extends View {
   /** A click (no drag) with the grow tool picks the surface under the cursor as a seed. */
   protected onLeftUp(p: Pt, _e: PointerEvent, moved: boolean) {
     const app = this.app;
+    if (this.editingImplant) {
+      this.editingImplant = false;
+      this.editor.end();
+      return;
+    }
     this.orbiting = false;
     this.app.requestRender();
     if (moved || app.segTool !== 'grow') return;
@@ -800,8 +896,12 @@ export class View3D extends View {
     else app.onStatus('No surface under the cursor – click on the rendered bone.', true);
   }
 
-  protected onHover() {
-    this.el.style.cursor = this.app.segTool === 'grow' ? 'crosshair' : '';
+  protected onHover(p: Pt) {
+    if (this.app.segTool) {
+      this.el.style.cursor = this.app.segTool === 'grow' ? 'crosshair' : '';
+      return;
+    }
+    this.el.style.cursor = (this.app.vol && this.editor.hoverCursor(p)) || '';
   }
 
   /** First rendered surface point under the screen point (CPU ray cast, same rules as the shader). */
@@ -1039,6 +1139,7 @@ export class View3D extends View {
     const thr = app.vr.mode === 'mip' ? `W ${Math.round(app.wl.width)} L ${Math.round(app.wl.center)}` : `${Math.round(app.vr.lo)} – ${Math.round(app.vr.hi)}`;
     drawLabel(o, `${modeName} · ${thr}`, this.w - 62, 16, '#9fb0c8', 'right');
     this.drawPivot(o);
+    this.editor.draw(o);
     if (this.texFactor > 1) drawLabel(o, `rendered at 1/${this.texFactor} resolution`, this.w - 8, this.h - 10, '#9fb0c8', 'right');
     if (this.segError) drawLabel(o, this.segError, this.w - 8, this.h - 28, '#ff8a8a', 'right');
     const tool = app.segTool;
