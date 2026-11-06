@@ -577,7 +577,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
         if ($<HTMLInputElement>('#sa-refine').checked && sp.length >= 30) {
           T = icp(fine, subsampleSame(sp, Float32Array.from(srcN), 3000, 11), T, tgt, { gate0: 2, iterations: 30, gate1: 0.6 });
         }
-        showResult(T, fitStats(fine, T, tgt), 'points');
+        showResult(T, fitStats(fine, T, target), 'points');
       } else {
         // painted points (or the whole scan if hints were given without painting)
         const sel: number[] = [];
@@ -605,7 +605,8 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
           hints,
           onProgress: progress,
         });
-        showResult(res.T, res.stats, 'surface');
+        // fit measured on the whole CBCT surface (painted CBCT areas may cover less than the painted scan)
+        showResult(res.T, fitStats(subsample(Float32Array.from(sel), 3000, 11), res.T, target), 'surface');
       }
     } catch (e) {
       console.error(e);
