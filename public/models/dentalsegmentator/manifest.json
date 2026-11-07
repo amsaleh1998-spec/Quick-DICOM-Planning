@@ -1,0 +1,49 @@
+{
+ "name": "DentalSegmentator",
+ "version": "1.0.0",
+ "graph": {
+  "file": "model.onnx",
+  "bytes": 36149,
+  "sha256": "4ec87db57abd867891b0de4e8548c54b2f5a9aa6d86fdf7ccbab76ac2d60da95"
+ },
+ "weights": {
+  "externalPath": "weights.bin",
+  "fp16Bytes": 61569164,
+  "chunks": [
+   {
+    "file": "weights16.00.bin",
+    "bytes": 16777216,
+    "sha256": "b9cb8a37ac8e799497d774b1aecb0c03f19f7a36d5dd8138c6fd3bb4bf59aed8"
+   },
+   {
+    "file": "weights16.01.bin",
+    "bytes": 16777216,
+    "sha256": "c1a40487030169223d91119ebd3e146050b9de24f5e1ec2ab624323771729341"
+   },
+   {
+    "file": "weights16.02.bin",
+    "bytes": 16777216,
+    "sha256": "3b17e3ad18fdb7bc57474b14654701c749ae454a64eaa33d06ebf306840e4ea4"
+   },
+   {
+    "file": "weights16.03.bin",
+    "bytes": 11237516,
+    "sha256": "6a4d209c9b687a42f044164471f2bdf2487449c68fbdeacbf1090eae9f7a1f6d"
+   }
+  ]
+ },
+ "graph2d": {
+  "file": "model2d.onnx",
+  "bytes": 80737,
+  "sha256": "9c3db0d0798cd2d6a0ce3f908624d521eec79872d97039f42b424b987fa63001"
+ },
+ "source": {
+  "title": "DentalSegmentator nnU-Net pretrained model for CBCT image segmentation",
+  "doi": "10.5281/zenodo.10829675",
+  "file": "Dataset112_DentalSegmentator_v100.zip",
+  "fold": 0,
+  "checkpoint": "checkpoint_final.pth",
+  "license": "CC-BY-4.0"
+ },
+ "changes": "Converted from PyTorch to ONNX (opset 17), weights stored as float16; model2d.onnx runs the same network as 2D convolutions over depth slices (same weights)."
+}

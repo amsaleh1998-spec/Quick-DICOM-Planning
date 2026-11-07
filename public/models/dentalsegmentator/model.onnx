@@ -1,0 +1,786 @@
+ZDentalSegmentator (Dot et al. 2024) â€“ nnU-Net v2 3d_fullres fold 0, exported for the web2.15.0:Ç™
+Ð
+input
+&encoder.stages.0.0.convs.0.conv.weight
+$encoder.stages.0.0.convs.0.conv.biasI/encoder/stages.0/stages.0.0/convs/convs.0/all_modules/conv/Conv_output_0@/encoder/stages.0/stages.0.0/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.0/stages.0.0/convs/convs.0/all_modules/conv/Conv_output_0
+&encoder.stages.0.0.convs.0.norm.weight
+$encoder.stages.0.0.convs.0.norm.biasZ/encoder/stages.0/stages.0.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.0/stages.0.0/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.0/stages.0.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.0/stages.0.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.0/stages.0.0/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.0/stages.0.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.0.0.convs.1.conv.weight
+$encoder.stages.0.0.convs.1.conv.biasI/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/conv/Conv_output_0@/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/conv/Conv_output_0
+&encoder.stages.0.0.convs.1.norm.weight
+$encoder.stages.0.0.convs.1.norm.biasZ/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.1.0.convs.0.conv.weight
+$encoder.stages.1.0.convs.0.conv.biasI/encoder/stages.1/stages.1.0/convs/convs.0/all_modules/conv/Conv_output_0@/encoder/stages.1/stages.1.0/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.1/stages.1.0/convs/convs.0/all_modules/conv/Conv_output_0
+&encoder.stages.1.0.convs.0.norm.weight
+$encoder.stages.1.0.convs.0.norm.biasZ/encoder/stages.1/stages.1.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.1/stages.1.0/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.1/stages.1.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.1/stages.1.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.1/stages.1.0/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.1/stages.1.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.1.0.convs.1.conv.weight
+$encoder.stages.1.0.convs.1.conv.biasI/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/conv/Conv_output_0@/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/conv/Conv_output_0
+&encoder.stages.1.0.convs.1.norm.weight
+$encoder.stages.1.0.convs.1.norm.biasZ/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.2.0.convs.0.conv.weight
+$encoder.stages.2.0.convs.0.conv.biasI/encoder/stages.2/stages.2.0/convs/convs.0/all_modules/conv/Conv_output_0@/encoder/stages.2/stages.2.0/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.2/stages.2.0/convs/convs.0/all_modules/conv/Conv_output_0
+&encoder.stages.2.0.convs.0.norm.weight
+$encoder.stages.2.0.convs.0.norm.biasZ/encoder/stages.2/stages.2.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.2/stages.2.0/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.2/stages.2.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.2/stages.2.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.2/stages.2.0/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.2/stages.2.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.2.0.convs.1.conv.weight
+$encoder.stages.2.0.convs.1.conv.biasI/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/conv/Conv_output_0@/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/conv/Conv_output_0
+&encoder.stages.2.0.convs.1.norm.weight
+$encoder.stages.2.0.convs.1.norm.biasZ/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.3.0.convs.0.conv.weight
+$encoder.stages.3.0.convs.0.conv.biasI/encoder/stages.3/stages.3.0/convs/convs.0/all_modules/conv/Conv_output_0@/encoder/stages.3/stages.3.0/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.3/stages.3.0/convs/convs.0/all_modules/conv/Conv_output_0
+&encoder.stages.3.0.convs.0.norm.weight
+$encoder.stages.3.0.convs.0.norm.biasZ/encoder/stages.3/stages.3.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.3/stages.3.0/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.3/stages.3.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.3/stages.3.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.3/stages.3.0/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.3/stages.3.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.3.0.convs.1.conv.weight
+$encoder.stages.3.0.convs.1.conv.biasI/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/conv/Conv_output_0@/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/conv/Conv_output_0
+&encoder.stages.3.0.convs.1.norm.weight
+$encoder.stages.3.0.convs.1.norm.biasZ/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.4.0.convs.0.conv.weight
+$encoder.stages.4.0.convs.0.conv.biasI/encoder/stages.4/stages.4.0/convs/convs.0/all_modules/conv/Conv_output_0@/encoder/stages.4/stages.4.0/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.4/stages.4.0/convs/convs.0/all_modules/conv/Conv_output_0
+&encoder.stages.4.0.convs.0.norm.weight
+$encoder.stages.4.0.convs.0.norm.biasZ/encoder/stages.4/stages.4.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.4/stages.4.0/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.4/stages.4.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.4/stages.4.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.4/stages.4.0/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.4/stages.4.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.4.0.convs.1.conv.weight
+$encoder.stages.4.0.convs.1.conv.biasI/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/conv/Conv_output_0@/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/conv/Conv_output_0
+&encoder.stages.4.0.convs.1.norm.weight
+$encoder.stages.4.0.convs.1.norm.biasZ/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.5.0.convs.0.conv.weight
+$encoder.stages.5.0.convs.0.conv.biasI/encoder/stages.5/stages.5.0/convs/convs.0/all_modules/conv/Conv_output_0@/encoder/stages.5/stages.5.0/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.5/stages.5.0/convs/convs.0/all_modules/conv/Conv_output_0
+&encoder.stages.5.0.convs.0.norm.weight
+$encoder.stages.5.0.convs.0.norm.biasZ/encoder/stages.5/stages.5.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.5/stages.5.0/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.5/stages.5.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.5/stages.5.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.5/stages.5.0/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+›
+P/encoder/stages.5/stages.5.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+&encoder.stages.5.0.convs.1.conv.weight
+$encoder.stages.5.0.convs.1.conv.biasI/encoder/stages.5/stages.5.0/convs/convs.1/all_modules/conv/Conv_output_0@/encoder/stages.5/stages.5.0/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+ò
+I/encoder/stages.5/stages.5.0/convs/convs.1/all_modules/conv/Conv_output_0
+&encoder.stages.5.0.convs.1.norm.weight
+$encoder.stages.5.0.convs.1.norm.biasZ/encoder/stages.5/stages.5.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0Q/encoder/stages.5/stages.5.0/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+“
+Z/encoder/stages.5/stages.5.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0P/encoder/stages.5/stages.5.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0G/encoder/stages.5/stages.5.0/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+Ø
+P/encoder/stages.5/stages.5.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+decoder.transpconvs.0.weight
+decoder.transpconvs.0.bias-/decoder/transpconvs.0/ConvTranspose_output_0$/decoder/transpconvs.0/ConvTranspose"ConvTranspose*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@ @ @ @ @ @  *
+strides@@@ 
+Á
+-/decoder/transpconvs.0/ConvTranspose_output_0
+P/encoder/stages.4/stages.4.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0/decoder/Concat_output_0/decoder/Concat"Concat*
+axis 
+É
+/decoder/Concat_output_0
+$decoder.stages.0.convs.0.conv.weight
+"decoder.stages.0.convs.0.conv.bias>/decoder/stages.0/convs/convs.0/all_modules/conv/Conv_output_05/decoder/stages.0/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.0/convs/convs.0/all_modules/conv/Conv_output_0
+$decoder.stages.0.convs.0.norm.weight
+"decoder.stages.0.convs.0.norm.biasO/decoder/stages.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.0/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.0/convs/convs.0/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.0/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+ö
+E/decoder/stages.0/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+$decoder.stages.0.convs.1.conv.weight
+"decoder.stages.0.convs.1.conv.bias>/decoder/stages.0/convs/convs.1/all_modules/conv/Conv_output_05/decoder/stages.0/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.0/convs/convs.1/all_modules/conv/Conv_output_0
+$decoder.stages.0.convs.1.norm.weight
+"decoder.stages.0.convs.1.norm.biasO/decoder/stages.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.0/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.0/convs/convs.1/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.0/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+Í
+E/decoder/stages.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+decoder.transpconvs.1.weight
+decoder.transpconvs.1.bias-/decoder/transpconvs.1/ConvTranspose_output_0$/decoder/transpconvs.1/ConvTranspose"ConvTranspose*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@ @ @ @ @ @  *
+strides@@@ 
+Å
+-/decoder/transpconvs.1/ConvTranspose_output_0
+P/encoder/stages.3/stages.3.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0/decoder/Concat_1_output_0/decoder/Concat_1"Concat*
+axis 
+Ë
+/decoder/Concat_1_output_0
+$decoder.stages.1.convs.0.conv.weight
+"decoder.stages.1.convs.0.conv.bias>/decoder/stages.1/convs/convs.0/all_modules/conv/Conv_output_05/decoder/stages.1/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.1/convs/convs.0/all_modules/conv/Conv_output_0
+$decoder.stages.1.convs.0.norm.weight
+"decoder.stages.1.convs.0.norm.biasO/decoder/stages.1/convs/convs.0/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.1/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.1/convs/convs.0/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.1/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.1/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+ö
+E/decoder/stages.1/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+$decoder.stages.1.convs.1.conv.weight
+"decoder.stages.1.convs.1.conv.bias>/decoder/stages.1/convs/convs.1/all_modules/conv/Conv_output_05/decoder/stages.1/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.1/convs/convs.1/all_modules/conv/Conv_output_0
+$decoder.stages.1.convs.1.norm.weight
+"decoder.stages.1.convs.1.norm.biasO/decoder/stages.1/convs/convs.1/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.1/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.1/convs/convs.1/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.1/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.1/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+Í
+E/decoder/stages.1/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+decoder.transpconvs.2.weight
+decoder.transpconvs.2.bias-/decoder/transpconvs.2/ConvTranspose_output_0$/decoder/transpconvs.2/ConvTranspose"ConvTranspose*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@ @ @ @ @ @  *
+strides@@@ 
+Å
+-/decoder/transpconvs.2/ConvTranspose_output_0
+P/encoder/stages.2/stages.2.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0/decoder/Concat_2_output_0/decoder/Concat_2"Concat*
+axis 
+Ë
+/decoder/Concat_2_output_0
+$decoder.stages.2.convs.0.conv.weight
+"decoder.stages.2.convs.0.conv.bias>/decoder/stages.2/convs/convs.0/all_modules/conv/Conv_output_05/decoder/stages.2/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.2/convs/convs.0/all_modules/conv/Conv_output_0
+$decoder.stages.2.convs.0.norm.weight
+"decoder.stages.2.convs.0.norm.biasO/decoder/stages.2/convs/convs.0/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.2/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.2/convs/convs.0/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.2/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.2/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+ö
+E/decoder/stages.2/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+$decoder.stages.2.convs.1.conv.weight
+"decoder.stages.2.convs.1.conv.bias>/decoder/stages.2/convs/convs.1/all_modules/conv/Conv_output_05/decoder/stages.2/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.2/convs/convs.1/all_modules/conv/Conv_output_0
+$decoder.stages.2.convs.1.norm.weight
+"decoder.stages.2.convs.1.norm.biasO/decoder/stages.2/convs/convs.1/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.2/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.2/convs/convs.1/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.2/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.2/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+Í
+E/decoder/stages.2/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+decoder.transpconvs.3.weight
+decoder.transpconvs.3.bias-/decoder/transpconvs.3/ConvTranspose_output_0$/decoder/transpconvs.3/ConvTranspose"ConvTranspose*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@ @ @ @ @ @  *
+strides@@@ 
+Å
+-/decoder/transpconvs.3/ConvTranspose_output_0
+P/encoder/stages.1/stages.1.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0/decoder/Concat_3_output_0/decoder/Concat_3"Concat*
+axis 
+Ë
+/decoder/Concat_3_output_0
+$decoder.stages.3.convs.0.conv.weight
+"decoder.stages.3.convs.0.conv.bias>/decoder/stages.3/convs/convs.0/all_modules/conv/Conv_output_05/decoder/stages.3/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.3/convs/convs.0/all_modules/conv/Conv_output_0
+$decoder.stages.3.convs.0.norm.weight
+"decoder.stages.3.convs.0.norm.biasO/decoder/stages.3/convs/convs.0/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.3/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.3/convs/convs.0/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.3/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.3/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+ö
+E/decoder/stages.3/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+$decoder.stages.3.convs.1.conv.weight
+"decoder.stages.3.convs.1.conv.bias>/decoder/stages.3/convs/convs.1/all_modules/conv/Conv_output_05/decoder/stages.3/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.3/convs/convs.1/all_modules/conv/Conv_output_0
+$decoder.stages.3.convs.1.norm.weight
+"decoder.stages.3.convs.1.norm.biasO/decoder/stages.3/convs/convs.1/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.3/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.3/convs/convs.1/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.3/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.3/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+Í
+E/decoder/stages.3/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+decoder.transpconvs.4.weight
+decoder.transpconvs.4.bias-/decoder/transpconvs.4/ConvTranspose_output_0$/decoder/transpconvs.4/ConvTranspose"ConvTranspose*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@ @ @ @ @ @  *
+strides@@@ 
+Å
+-/decoder/transpconvs.4/ConvTranspose_output_0
+P/encoder/stages.0/stages.0.0/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0/decoder/Concat_4_output_0/decoder/Concat_4"Concat*
+axis 
+Ë
+/decoder/Concat_4_output_0
+$decoder.stages.4.convs.0.conv.weight
+"decoder.stages.4.convs.0.conv.bias>/decoder/stages.4/convs/convs.0/all_modules/conv/Conv_output_05/decoder/stages.4/convs/convs.0/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.4/convs/convs.0/all_modules/conv/Conv_output_0
+$decoder.stages.4.convs.0.norm.weight
+"decoder.stages.4.convs.0.norm.biasO/decoder/stages.4/convs/convs.0/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.4/convs/convs.0/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.4/convs/convs.0/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.4/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.4/convs/convs.0/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+ö
+E/decoder/stages.4/convs/convs.0/all_modules/nonlin/LeakyRelu_output_0
+$decoder.stages.4.convs.1.conv.weight
+"decoder.stages.4.convs.1.conv.bias>/decoder/stages.4/convs/convs.1/all_modules/conv/Conv_output_05/decoder/stages.4/convs/convs.1/all_modules/conv/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@@@@@@ *
+strides@@@ 
+Í
+>/decoder/stages.4/convs/convs.1/all_modules/conv/Conv_output_0
+$decoder.stages.4.convs.1.norm.weight
+"decoder.stages.4.convs.1.norm.biasO/decoder/stages.4/convs/convs.1/all_modules/norm/InstanceNormalization_output_0F/decoder/stages.4/convs/convs.1/all_modules/norm/InstanceNormalization"InstanceNormalization*
+epsilon¬Å'7 
+ò
+O/decoder/stages.4/convs/convs.1/all_modules/norm/InstanceNormalization_output_0E/decoder/stages.4/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0</decoder/stages.4/convs/convs.1/all_modules/nonlin/LeakyRelu"	LeakyRelu*
+alpha
+×#< 
+‘
+E/decoder/stages.4/convs/convs.1/all_modules/nonlin/LeakyRelu_output_0
+decoder.seg_layers.4.weight
+decoder.seg_layers.4.biaslogits/decoder/seg_layers.4/Conv"Conv*
+	dilations@@@ *
+group *
+kernel_shape@@@ *
+pads@ @ @ @ @ @  *
+strides@@@ 
+main_graph*l B&encoder.stages.0.0.convs.0.conv.weightj
+locationweights.binj
+offset0j
+length3456p*d B$encoder.stages.0.0.convs.0.conv.biasj
+locationweights.binj
+offset3456j
+length128p*f B&encoder.stages.0.0.convs.0.norm.weightj
+locationweights.binj
+offset3584j
+length128p*d B$encoder.stages.0.0.convs.0.norm.biasj
+locationweights.binj
+offset3712j
+length128p*q  B&encoder.stages.0.0.convs.1.conv.weightj
+locationweights.binj
+offset3840j
+length110592p*f B$encoder.stages.0.0.convs.1.conv.biasj
+locationweights.binj
+offset114432j
+length128p*h B&encoder.stages.0.0.convs.1.norm.weightj
+locationweights.binj
+offset114560j
+length128p*f B$encoder.stages.0.0.convs.1.norm.biasj
+locationweights.binj
+offset114688j
+length128p*s@ B&encoder.stages.1.0.convs.0.conv.weightj
+locationweights.binj
+offset114816j
+length221184p*f@B$encoder.stages.1.0.convs.0.conv.biasj
+locationweights.binj
+offset336000j
+length256p*h@B&encoder.stages.1.0.convs.0.norm.weightj
+locationweights.binj
+offset336256j
+length256p*f@B$encoder.stages.1.0.convs.0.norm.biasj
+locationweights.binj
+offset336512j
+length256p*s@@B&encoder.stages.1.0.convs.1.conv.weightj
+locationweights.binj
+offset336768j
+length442368p*f@B$encoder.stages.1.0.convs.1.conv.biasj
+locationweights.binj
+offset779136j
+length256p*h@B&encoder.stages.1.0.convs.1.norm.weightj
+locationweights.binj
+offset779392j
+length256p*f@B$encoder.stages.1.0.convs.1.norm.biasj
+locationweights.binj
+offset779648j
+length256p*t€@B&encoder.stages.2.0.convs.0.conv.weightj
+locationweights.binj
+offset779904j
+length884736p*h€B$encoder.stages.2.0.convs.0.conv.biasj
+locationweights.binj
+offset1664640j
+length512p*j€B&encoder.stages.2.0.convs.0.norm.weightj
+locationweights.binj
+offset1665152j
+length512p*h€B$encoder.stages.2.0.convs.0.norm.biasj
+locationweights.binj
+offset1665664j
+length512p*w€€B&encoder.stages.2.0.convs.1.conv.weightj
+locationweights.binj
+offset1666176j
+length1769472p*h€B$encoder.stages.2.0.convs.1.conv.biasj
+locationweights.binj
+offset3435648j
+length512p*j€B&encoder.stages.2.0.convs.1.norm.weightj
+locationweights.binj
+offset3436160j
+length512p*h€B$encoder.stages.2.0.convs.1.norm.biasj
+locationweights.binj
+offset3436672j
+length512p*w€€B&encoder.stages.3.0.convs.0.conv.weightj
+locationweights.binj
+offset3437184j
+length3538944p*i€B$encoder.stages.3.0.convs.0.conv.biasj
+locationweights.binj
+offset6976128j
+length1024p*k€B&encoder.stages.3.0.convs.0.norm.weightj
+locationweights.binj
+offset6977152j
+length1024p*i€B$encoder.stages.3.0.convs.0.norm.biasj
+locationweights.binj
+offset6978176j
+length1024p*w€€B&encoder.stages.3.0.convs.1.conv.weightj
+locationweights.binj
+offset6979200j
+length7077888p*j€B$encoder.stages.3.0.convs.1.conv.biasj
+locationweights.binj
+offset14057088j
+length1024p*l€B&encoder.stages.3.0.convs.1.norm.weightj
+locationweights.binj
+offset14058112j
+length1024p*j€B$encoder.stages.3.0.convs.1.norm.biasj
+locationweights.binj
+offset14059136j
+length1024p*xÀ€B&encoder.stages.4.0.convs.0.conv.weightj
+locationweights.binj
+offset14060160j
+length8847360p*jÀB$encoder.stages.4.0.convs.0.conv.biasj
+locationweights.binj
+offset22907520j
+length1280p*lÀB&encoder.stages.4.0.convs.0.norm.weightj
+locationweights.binj
+offset22908800j
+length1280p*jÀB$encoder.stages.4.0.convs.0.norm.biasj
+locationweights.binj
+offset22910080j
+length1280p*yÀÀB&encoder.stages.4.0.convs.1.conv.weightj
+locationweights.binj
+offset22911360j
+length11059200p*jÀB$encoder.stages.4.0.convs.1.conv.biasj
+locationweights.binj
+offset33970560j
+length1280p*lÀB&encoder.stages.4.0.convs.1.norm.weightj
+locationweights.binj
+offset33971840j
+length1280p*jÀB$encoder.stages.4.0.convs.1.norm.biasj
+locationweights.binj
+offset33973120j
+length1280p*yÀÀB&encoder.stages.5.0.convs.0.conv.weightj
+locationweights.binj
+offset33974400j
+length11059200p*jÀB$encoder.stages.5.0.convs.0.conv.biasj
+locationweights.binj
+offset45033600j
+length1280p*lÀB&encoder.stages.5.0.convs.0.norm.weightj
+locationweights.binj
+offset45034880j
+length1280p*jÀB$encoder.stages.5.0.convs.0.norm.biasj
+locationweights.binj
+offset45036160j
+length1280p*yÀÀB&encoder.stages.5.0.convs.1.conv.weightj
+locationweights.binj
+offset45037440j
+length11059200p*jÀB$encoder.stages.5.0.convs.1.conv.biasj
+locationweights.binj
+offset56096640j
+length1280p*lÀB&encoder.stages.5.0.convs.1.norm.weightj
+locationweights.binj
+offset56097920j
+length1280p*jÀB$encoder.stages.5.0.convs.1.norm.biasj
+locationweights.binj
+offset56099200j
+length1280p*wÀ€B$decoder.stages.0.convs.0.conv.weightj
+locationweights.binj
+offset56100480j
+length22118400p*hÀB"decoder.stages.0.convs.0.conv.biasj
+locationweights.binj
+offset78218880j
+length1280p*jÀB$decoder.stages.0.convs.0.norm.weightj
+locationweights.binj
+offset78220160j
+length1280p*hÀB"decoder.stages.0.convs.0.norm.biasj
+locationweights.binj
+offset78221440j
+length1280p*wÀÀB$decoder.stages.0.convs.1.conv.weightj
+locationweights.binj
+offset78222720j
+length11059200p*hÀB"decoder.stages.0.convs.1.conv.biasj
+locationweights.binj
+offset89281920j
+length1280p*jÀB$decoder.stages.0.convs.1.norm.weightj
+locationweights.binj
+offset89283200j
+length1280p*hÀB"decoder.stages.0.convs.1.norm.biasj
+locationweights.binj
+offset89284480j
+length1280p*w€€B$decoder.stages.1.convs.0.conv.weightj
+locationweights.binj
+offset89285760j
+length14155776p*i€B"decoder.stages.1.convs.0.conv.biasj
+locationweights.binj
+offset	103441536j
+length1024p*k€B$decoder.stages.1.convs.0.norm.weightj
+locationweights.binj
+offset	103442560j
+length1024p*i€B"decoder.stages.1.convs.0.norm.biasj
+locationweights.binj
+offset	103443584j
+length1024p*w€€B$decoder.stages.1.convs.1.conv.weightj
+locationweights.binj
+offset	103444608j
+length7077888p*i€B"decoder.stages.1.convs.1.conv.biasj
+locationweights.binj
+offset	110522496j
+length1024p*k€B$decoder.stages.1.convs.1.norm.weightj
+locationweights.binj
+offset	110523520j
+length1024p*i€B"decoder.stages.1.convs.1.norm.biasj
+locationweights.binj
+offset	110524544j
+length1024p*w€€B$decoder.stages.2.convs.0.conv.weightj
+locationweights.binj
+offset	110525568j
+length3538944p*h€B"decoder.stages.2.convs.0.conv.biasj
+locationweights.binj
+offset	114064512j
+length512p*j€B$decoder.stages.2.convs.0.norm.weightj
+locationweights.binj
+offset	114065024j
+length512p*h€B"decoder.stages.2.convs.0.norm.biasj
+locationweights.binj
+offset	114065536j
+length512p*w€€B$decoder.stages.2.convs.1.conv.weightj
+locationweights.binj
+offset	114066048j
+length1769472p*h€B"decoder.stages.2.convs.1.conv.biasj
+locationweights.binj
+offset	115835520j
+length512p*j€B$decoder.stages.2.convs.1.norm.weightj
+locationweights.binj
+offset	115836032j
+length512p*h€B"decoder.stages.2.convs.1.norm.biasj
+locationweights.binj
+offset	115836544j
+length512p*u@€B$decoder.stages.3.convs.0.conv.weightj
+locationweights.binj
+offset	115837056j
+length884736p*g@B"decoder.stages.3.convs.0.conv.biasj
+locationweights.binj
+offset	116721792j
+length256p*i@B$decoder.stages.3.convs.0.norm.weightj
+locationweights.binj
+offset	116722048j
+length256p*g@B"decoder.stages.3.convs.0.norm.biasj
+locationweights.binj
+offset	116722304j
+length256p*t@@B$decoder.stages.3.convs.1.conv.weightj
+locationweights.binj
+offset	116722560j
+length442368p*g@B"decoder.stages.3.convs.1.conv.biasj
+locationweights.binj
+offset	117164928j
+length256p*i@B$decoder.stages.3.convs.1.norm.weightj
+locationweights.binj
+offset	117165184j
+length256p*g@B"decoder.stages.3.convs.1.norm.biasj
+locationweights.binj
+offset	117165440j
+length256p*t @B$decoder.stages.4.convs.0.conv.weightj
+locationweights.binj
+offset	117165696j
+length221184p*g B"decoder.stages.4.convs.0.conv.biasj
+locationweights.binj
+offset	117386880j
+length128p*i B$decoder.stages.4.convs.0.norm.weightj
+locationweights.binj
+offset	117387008j
+length128p*g B"decoder.stages.4.convs.0.norm.biasj
+locationweights.binj
+offset	117387136j
+length128p*t  B$decoder.stages.4.convs.1.conv.weightj
+locationweights.binj
+offset	117387264j
+length110592p*g B"decoder.stages.4.convs.1.conv.biasj
+locationweights.binj
+offset	117497856j
+length128p*i B$decoder.stages.4.convs.1.norm.weightj
+locationweights.binj
+offset	117497984j
+length128p*g B"decoder.stages.4.convs.1.norm.biasj
+locationweights.binj
+offset	117498112j
+length128p*oÀÀBdecoder.transpconvs.0.weightj
+locationweights.binj
+offset	117498240j
+length1638400p*aÀBdecoder.transpconvs.0.biasj
+locationweights.binj
+offset	119136640j
+length1280p*oÀ€Bdecoder.transpconvs.1.weightj
+locationweights.binj
+offset	119137920j
+length2621440p*a€Bdecoder.transpconvs.1.biasj
+locationweights.binj
+offset	121759360j
+length1024p*o€€Bdecoder.transpconvs.2.weightj
+locationweights.binj
+offset	121760384j
+length1048576p*`€Bdecoder.transpconvs.2.biasj
+locationweights.binj
+offset	122808960j
+length512p*m€@Bdecoder.transpconvs.3.weightj
+locationweights.binj
+offset	122809472j
+length262144p*_@Bdecoder.transpconvs.3.biasj
+locationweights.binj
+offset	123071616j
+length256p*k@ Bdecoder.transpconvs.4.weightj
+locationweights.binj
+offset	123071872j
+length65536p*_ Bdecoder.transpconvs.4.biasj
+locationweights.binj
+offset	123137408j
+length128p*h Bdecoder.seg_layers.4.weightj
+locationweights.binj
+offset	123137536j
+length768p*]Bdecoder.seg_layers.4.biasj
+locationweights.binj
+offset	123138304j
+length24pZ%
+input
+
+
+
+€
+ 
+pb&
+logits
+
+
+
+€
+ 
+pB

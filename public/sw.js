@@ -1,14 +1,33 @@
 // Minimal service worker: makes the app installable (so Windows can open .dcm
 // files with it) and lets it start offline. Network first, cached copy as fallback.
 // Scans are never cached – they are opened from local files, not fetched.
+//
+// It also marks the pages cross-origin isolated (COOP / COEP headers – GitHub Pages cannot send
+// them), which lets the automatic segmentation use every CPU core when there is no usable GPU.
+// The app only loads files from its own origin, so nothing is blocked by this.
 const CACHE = 'qdp-v1';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
+function isolated(res) {
+  if (!res || res.status === 0 || res.type === 'opaque' || res.type === 'opaqueredirect') return res;
+  const h = new Headers(res.headers);
+  h.set('Cross-Origin-Opener-Policy', 'same-origin');
+  h.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  h.set('Cross-Origin-Resource-Policy', 'same-origin');
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  // the AI model keeps its own cache (downloaded once, checked): do not store it twice
+  if (url.pathname.includes('/models/')) {
+    e.respondWith(fetch(req).then(isolated));
+    return;
+  }
   e.respondWith(
     fetch(req)
       .then((res) => {
@@ -16,8 +35,13 @@ self.addEventListener('fetch', (e) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
-        return res;
+        return isolated(res);
       })
-      .catch(() => caches.match(req).then((r) => r || caches.match('./'))),
+      .catch(() =>
+        caches
+          .match(req)
+          .then((r) => r || caches.match('./'))
+          .then(isolated),
+      ),
   );
 });

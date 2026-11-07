@@ -41,6 +41,10 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   rotation centre.
 - Implants and abutments are drawn in 3D; the crop box clips the rendering (e.g. to hide the opposing jaw).
 
+**Automatic segmentation (AI)** (Segmentation panel → *Automatic segmentation (AI)*) – see
+[Automatic segmentation](#automatic-segmentation-dentalsegmentator) below: maxilla & upper skull, mandible, upper teeth,
+lower teeth and mandibular canals in one go, with the DentalSegmentator model by Dot et al. (2024).
+
 **Segmentation** (3D render panel → *Segmentation*; works in both layouts)
 - Adjust the 3D *lower/upper threshold* until the structures are separated, add a segment (*+ Maxilla*, *+ Mandible*,
   *+ Tooth*, *+ Implant*, *+ Other*) and click the structure in the 3D view or in any slice. The connected voxels within the
@@ -176,6 +180,45 @@ the toolbar switch makes right-drag adjust brightness/contrast instead · Shift+
 Alt/middle-drag = pan (also Shift-drag outside the MPR) · F = fit all views ·
 M or the ⤢ button = maximize/restore a view · Esc = cancel / deselect / leave the segmentation tool ·
 Enter = finish a cut · Del = delete selected implant.
+
+## Automatic segmentation (DentalSegmentator)
+
+*Segmentation* panel → **Automatic segmentation (AI)** segments the **maxilla & upper skull**, the **mandible**, the
+**upper teeth**, the **lower teeth** and the **mandibular canals** of a CBCT or CT with
+**[DentalSegmentator](https://doi.org/10.1016/j.jdent.2024.105130)**, the open deep-learning model by Gauthier Dot et al.
+It runs entirely in the browser (ONNX Runtime Web – on the graphics card with WebGPU in Chrome / Edge, otherwise on the
+CPU); the scan is never uploaded. The model (62 MB) is downloaded on first use, checked, and kept in the browser cache.
+
+- **Region**: the whole scan or the crop box (faster; the network still sees 10 mm of context around the box and
+  writes labels only inside it).
+- **Quality**: *Standard* uses overlapping tiles exactly like nnU-Net (tile step 0.5); *Fast* uses non-overlapping
+  tiles (about 4× quicker; on a test CBCT the result agreed with Standard at Dice 0.94–0.98).
+- The run happens in a background worker with progress, time estimate and *Cancel*; *Run in background* lets you keep
+  working.
+- The result appears as five ordinary segments (marked *AI*): show / hide, recolour, rename, delete, add parts by
+  clicking, use them as the CBCT surface when aligning intraoral scans, and export them with *Export STL*. Their
+  surfaces are smooth (the network's class margins are interpolated, not the voxel staircase). They are saved in
+  projects and follow *Apply rotate + crop*. Running it again replaces the previous automatic segments.
+
+Fidelity: the pre- and post-processing of nnU-Net is re-implemented (crop to the non-zero region, resampling to the
+model's 0.43 × 0.31 × 0.43 mm grid, CT normalisation, sliding window with Gaussian weighting, logits resampled back
+before the argmax). On a public test CBCT (3D Slicer's *PreDentalSurgery* sample) the browser version agreed with
+the official nnU-Net prediction on 99.92 % of the voxels (Dice 0.986–0.992 for bone and teeth, 0.968 for the canals).
+Like any automatic method it can be wrong (metal artefacts, unusual anatomy, low dose) – **check every segment**.
+
+**Credits – please cite when you use the results:**
+
+- Dot G, et al. DentalSegmentator: robust open source deep learning-based CT and CBCT image segmentation.
+  *Journal of Dentistry* (2024). doi:[10.1016/j.jdent.2024.105130](https://doi.org/10.1016/j.jdent.2024.105130)
+- Model weights: Dot G. *DentalSegmentator nnU-Net pretrained model for CBCT image segmentation.* Zenodo (2024).
+  doi:[10.5281/zenodo.10829675](https://doi.org/10.5281/zenodo.10829675) – licensed
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The copy in `public/models/dentalsegmentator/` is converted
+  to ONNX with half-precision weights (see the README there for all changes; conversion scripts in
+  `tools/dentalsegmentator/`).
+- Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep
+  learning-based biomedical image segmentation. *Nat Methods* 2021;18(2):203-211.
+  doi:[10.1038/s41592-020-01008-z](https://doi.org/10.1038/s41592-020-01008-z)
+- The same model for 3D Slicer: [SlicerDentalSegmentator](https://github.com/gaudot/SlicerDentalSegmentator).
 
 ## Intraoral scans
 
@@ -315,6 +358,9 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/register.ts`, `src/alignUi.ts`, `src/meshViewer.ts`, `src/meshgl.ts` | Scan alignment: point pairs (Horn), k-d tree ICP, automatic surface matching; placement dialog and two-pane alignment workspace; WebGL mesh rendering |
 | `src/views/scanContours.ts` | Scan outlines in planar views and the panoramic |
 | `src/stl.ts`, `src/exportStl.ts` | STL export: marching-tetrahedra iso-surfaces, cavity filling, cone/tube solids, binary STL writer, export dialog |
+| `src/ai/dsPlan.ts`, `src/ai/dsEngine.ts` | DentalSegmentator: nnU-Net constants, tile grid, Gaussian weights; sliding-window engine (tile input, blending ring buffer, resampling to the label grid) |
+| `src/ai/dsWorker.ts`, `src/ai/dentalSegmentator.ts` | Model download/cache, ONNX Runtime Web (WebGPU / WebAssembly) in a worker; dialog, progress and credits |
+| `public/models/dentalsegmentator/`, `tools/dentalsegmentator/` | The converted model (CC BY 4.0, Dot et al.) and the conversion scripts |
 
 ## Limitations
 
@@ -322,5 +368,7 @@ static – scans are processed in the visitor's browser and never uploaded.
   `gdcmconv --raw in.dcm out.dcm`.
 - Very large volumes (> ~260 M voxels) are downsampled ×2 on load to fit in browser memory.
 - Segmentation labels use the same grid as the 3D texture (≤ 48 M voxels), so very large scans are segmented at reduced
-  resolution. Segments cannot be exported (e.g. as STL) yet.
+  resolution.
+- The automatic segmentation needs a desktop browser; without WebGPU it runs on the CPU and can take a long time for
+  a large field of view (use the crop box or *Fast*).
 - Not a medical device; for demonstration/educational use only.

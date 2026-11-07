@@ -49,6 +49,27 @@ export interface Segment {
   seeds: Seed[];
   /** voxel count (excluding the shell), updated after every rebuild */
   voxels: number;
+  /** automatic segment: class `cls` of the stored AI result (Segmentation.ai) instead of seeds */
+  ai?: { cls: number; model: string };
+}
+
+/**
+ * Result of an automatic segmentation, kept independent of the label grid so it survives
+ * re-gridding (crop / rotation, other devices): class and logit margin per voxel.
+ */
+export interface AiLayer {
+  model: string;
+  created: string;
+  /** voxel (i, j, k) of the layer sits at (i, j, k) × gs in the layer's world */
+  nx: number;
+  ny: number;
+  nz: number;
+  gs: Vec3;
+  cls: Uint8Array;
+  /** margin between the best and the second class (logits × 16, 1..255) */
+  margin: Uint8Array;
+  /** layer world -> current world (3×4 row-major); null = identical */
+  toWorld: number[] | null;
 }
 
 /** Cut drawn in a planar slice: the polyline extruded along the slice normal. */
@@ -123,6 +144,10 @@ export class Segmentation {
   /** grid spacing (mm) */
   gs: Vec3 = [1, 1, 1];
   labels: Uint8Array | null = null;
+  /** automatic segmentation result and its margins resampled to the label grid */
+  ai: AiLayer | null = null;
+  aiMargin: Uint8Array | null = null;
+  private aiCls: Uint8Array | null = null;
   segments: Segment[] = [];
   cuts: Cut[] = [];
   /** bumped whenever the labels change (GPU upload, overlays) */
@@ -136,6 +161,9 @@ export class Segmentation {
   reset(vol: Volume | null) {
     this.vol = vol;
     this.labels = null;
+    this.ai = null;
+    this.aiCls = null;
+    this.aiMargin = null;
     this.segments = [];
     this.cuts = [];
     this.evalCache.clear();
@@ -198,6 +226,127 @@ export class Segmentation {
 
   removeSegment(id: number) {
     this.segments = this.segments.filter((s) => s.id !== id);
+    if (this.ai && !this.segments.some((s) => s.ai)) this.setAi(null);
+  }
+
+  // ---- automatic segmentation ------------------------------------------------------
+
+  /** Replace the stored AI result (the caller adds / removes the AI segments and rebuilds). */
+  setAi(layer: AiLayer | null) {
+    this.ai = layer;
+    this.aiCls = null;
+    this.aiMargin = null;
+  }
+
+  /** AI classes and margins on the label grid (resampled when the grids differ). */
+  private aiOnGrid(): { cls: Uint8Array; margin: Uint8Array } | null {
+    const A = this.ai;
+    if (!A) return null;
+    if (this.aiCls && this.aiMargin) return { cls: this.aiCls, margin: this.aiMargin };
+    const { nx, ny, nz, gs } = this;
+    const same = !A.toWorld && A.nx === nx && A.ny === ny && A.nz === nz && [0, 1, 2].every((a) => Math.abs(A.gs[a] - gs[a]) < 1e-6);
+    if (same) {
+      this.aiCls = A.cls;
+      this.aiMargin = A.margin;
+    } else {
+      // nearest neighbour: current world -> layer world -> layer voxel
+      const inv = A.toWorld ? invertAffine(A.toWorld) : [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0];
+      const cls = new Uint8Array(nx * ny * nz);
+      const margin = new Uint8Array(nx * ny * nz).fill(255);
+      let idx = 0;
+      for (let k = 0; k < nz; k++) {
+        for (let j = 0; j < ny; j++) {
+          const y = j * gs[1], z = k * gs[2];
+          for (let i = 0; i < nx; i++, idx++) {
+            const x = i * gs[0];
+            const li = Math.round((inv[0] * x + inv[1] * y + inv[2] * z + inv[3]) / A.gs[0]);
+            const lj = Math.round((inv[4] * x + inv[5] * y + inv[6] * z + inv[7]) / A.gs[1]);
+            const lk = Math.round((inv[8] * x + inv[9] * y + inv[10] * z + inv[11]) / A.gs[2]);
+            if (li < 0 || lj < 0 || lk < 0 || li >= A.nx || lj >= A.ny || lk >= A.nz) continue;
+            const s = li + lj * A.nx + lk * A.nx * A.ny;
+            cls[idx] = A.cls[s];
+            margin[idx] = A.margin[s];
+          }
+        }
+      }
+      this.aiCls = cls;
+      this.aiMargin = margin;
+    }
+    return { cls: this.aiCls!, margin: this.aiMargin! };
+  }
+
+  /** Paint the AI segments into the labels (plus a one-voxel shell for the smooth surface). */
+  private paintAi(labels: Uint8Array) {
+    const g = this.aiOnGrid();
+    if (!g) return;
+    const map = new Uint8Array(256);
+    const isAi = new Uint8Array(256);
+    for (const s of this.segments) if (s.ai) {
+      map[s.ai.cls] = s.id;
+      isAi[s.id] = 1;
+    }
+    const cls = g.cls;
+    for (let i = 0; i < labels.length; i++) {
+      const id = map[cls[i]];
+      if (id) labels[i] = id;
+    }
+    // shell: background voxels touching an AI segment take its id (with the SHELL bit), so a
+    // sample whose nearest voxel is just outside still tests the segment's smooth field
+    const { nx, ny, nz } = this;
+    const nxy = nx * ny;
+    for (let k = 0, idx = 0; k < nz; k++) {
+      for (let j = 0; j < ny; j++) {
+        for (let i = 0; i < nx; i++, idx++) {
+          const l = labels[idx];
+          if (!isAi[l]) continue;
+          // interior voxels (all 6 neighbours the same) need no work
+          if (i > 0 && i < nx - 1 && j > 0 && j < ny - 1 && k > 0 && k < nz - 1 &&
+            labels[idx - 1] === l && labels[idx + 1] === l && labels[idx - nx] === l && labels[idx + nx] === l && labels[idx - nxy] === l && labels[idx + nxy] === l) continue;
+          for (let dk = -1; dk <= 1; dk++) {
+            const kk = k + dk;
+            if (kk < 0 || kk >= nz) continue;
+            for (let dj = -1; dj <= 1; dj++) {
+              const jj = j + dj;
+              if (jj < 0 || jj >= ny) continue;
+              for (let di = -1; di <= 1; di++) {
+                const ii = i + di;
+                if (ii < 0 || ii >= nx) continue;
+                const n = ii + jj * nx + kk * nxy;
+                if (labels[n] === 0) labels[n] = l | SHELL;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Smooth signed field of AI segment `id` at a world point (logit units, > 0 inside): the
+   * trilinear blend of the eight surrounding voxels' margins, positive where the voxel belongs
+   * to the segment and negative elsewhere.
+   */
+  aiFieldAt(id: number, x: number, y: number, z: number): number {
+    const L = this.labels;
+    const M = this.aiMargin;
+    if (!L || !M) return -1;
+    const { nx, ny, nz, gs } = this;
+    let gx = x / gs[0], gy = y / gs[1], gz = z / gs[2];
+    gx = gx < 0 ? 0 : gx > nx - 1 ? nx - 1 : gx;
+    gy = gy < 0 ? 0 : gy > ny - 1 ? ny - 1 : gy;
+    gz = gz < 0 ? 0 : gz > nz - 1 ? nz - 1 : gz;
+    const i0 = Math.floor(gx), j0 = Math.floor(gy), k0 = Math.floor(gz);
+    const fx = gx - i0, fy = gy - j0, fz = gz - k0;
+    const di = i0 < nx - 1 ? 1 : 0, dj = j0 < ny - 1 ? nx : 0, dk = k0 < nz - 1 ? nx * ny : 0;
+    const b = i0 + j0 * nx + k0 * nx * ny;
+    const v = (o: number) => (L[o] === id ? M[o] : -M[o]);
+    const c00 = v(b) + (v(b + di) - v(b)) * fx;
+    const c10 = v(b + dj) + (v(b + dj + di) - v(b + dj)) * fx;
+    const c01 = v(b + dk) + (v(b + dk + di) - v(b + dk)) * fx;
+    const c11 = v(b + dk + dj) + (v(b + dk + dj + di) - v(b + dk + dj)) * fx;
+    const c0 = c00 + (c10 - c00) * fy;
+    const c1 = c01 + (c11 - c01) * fy;
+    return (c0 + (c1 - c0) * fz) / 16;
   }
 
   /**
@@ -225,12 +374,14 @@ export class Segmentation {
   rebuild() {
     if (!this.vol) return;
     const anySeeds = this.segments.some((s) => s.seeds.length);
-    if (!anySeeds && !this.labels) {
+    const anyAi = !!this.ai && this.segments.some((s) => s.ai);
+    if (!anySeeds && !anyAi && !this.labels) {
       this.version++;
       return;
     }
     const labels = this.ensureLabels();
     labels.fill(0);
+    if (anyAi) this.paintAi(labels);
     const seeds = this.segments
       .flatMap((s) => s.seeds.map((d) => ({ seg: s, d })))
       .sort((a, b) => a.d.order - b.d.order);
@@ -305,6 +456,32 @@ export class Segmentation {
     const [sx, sy, sz] = dims();
     const iso = this.segmentLo(seg) - 0.5;
     const out = new Float32Array(sx * sy * sz).fill(-Infinity);
+    const sp = vol.spacing;
+    if (seg.ai) {
+      // AI segment: its smooth field (no CT threshold)
+      for (let c = 1; c < sz - 1; c++) {
+        const vk = lo[2] + (c - 1) * st;
+        if (vk > hi[2]) continue;
+        for (let b = 1; b < sy - 1; b++) {
+          const vj = lo[1] + (b - 1) * st;
+          if (vj > hi[1]) continue;
+          const rowOut = b * sx + c * sx * sy;
+          for (let a = 1; a < sx - 1; a++) {
+            const vi = lo[0] + (a - 1) * st;
+            if (vi > hi[0]) continue;
+            out[a + rowOut] = this.aiFieldAt(seg.id, vi * sp[0], vj * sp[1], vk * sp[2]);
+          }
+        }
+      }
+      return {
+        nx: sx,
+        ny: sy,
+        nz: sz,
+        s: out,
+        origin: [(lo[0] - st) * sp[0], (lo[1] - st) * sp[1], (lo[2] - st) * sp[2]],
+        step: [st * sp[0], st * sp[1], st * sp[2]],
+      };
+    }
     const data = vol.data;
     const vnx = vol.nx;
     const vnxy = vol.nx * vol.ny;
@@ -328,7 +505,6 @@ export class Segmentation {
         }
       }
     }
-    const sp = vol.spacing;
     return {
       nx: sx,
       ny: sy,
@@ -342,6 +518,11 @@ export class Segmentation {
   /** Threshold of a segment (its first seed) for rendering its surface. */
   segmentLo(seg: Segment): number {
     return seg.seeds.length ? Math.min(...seg.seeds.map((s) => s.lo)) : 0;
+  }
+
+  /** Whether the segment is drawn at world point q (sample value v): CT threshold or AI field. */
+  segmentHit(seg: Segment, q: Vec3, v: number): boolean {
+    return seg.ai ? this.aiFieldAt(seg.id, q[0], q[1], q[2]) >= 0 : v >= this.segmentLo(seg);
   }
 
   // ---- cuts ------------------------------------------------------------------
@@ -706,4 +887,23 @@ function rasterizeSide(poly: Vec2[], a0: number, a1: number, b0: number, b1: num
       return grid[j * W + i];
     },
   };
+}
+
+/** Inverse of a rigid 3×4 row-major affine (rotation + translation). */
+function invertAffine(m: number[]): number[] {
+  // general 3×3 inverse (the rotation part may include a reflection)
+  const [a, b, c, , d, e, f, , g, h, i] = m;
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+  const det = a * A + b * B + c * C;
+  const r = [
+    A / det, -(b * i - c * h) / det, (b * f - c * e) / det,
+    B / det, (a * i - c * g) / det, -(a * f - c * d) / det,
+    C / det, -(a * h - b * g) / det, (a * e - b * d) / det,
+  ];
+  const t = [m[3], m[7], m[11]];
+  return [
+    r[0], r[1], r[2], -(r[0] * t[0] + r[1] * t[1] + r[2] * t[2]),
+    r[3], r[4], r[5], -(r[3] * t[0] + r[4] * t[1] + r[5] * t[2]),
+    r[6], r[7], r[8], -(r[6] * t[0] + r[7] * t[1] + r[8] * t[2]),
+  ];
 }
