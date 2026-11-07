@@ -67,7 +67,7 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - Adjust the 3D *lower/upper threshold* until the structures are separated, add a segment (*+ Maxilla*, *+ Mandible*,
   *+ Tooth*, *+ Implant*, *+ Other*) and click the structure in the 3D view or in any slice. The connected voxels within the
   threshold range are grown into a coloured 3D object (volume shown in cm³). Click more places to add disconnected parts;
-  *Undo click*, *Clear*, *Use current threshold* (re-grow with the current thresholds) and *Delete* are in the segment box.
+  Ctrl+Z takes back a click; *Clear*, *Use current threshold* (re-grow with the current thresholds) and *Delete* are in the segment box.
 - Add as many segments as needed. Clicking inside an existing segment carves the new one out of it – e.g. raise the
   threshold and click a tooth or an existing implant inside the jaw.
 - Each segment has a **3D opacity** slider (in its box): see-through segments show what lies inside or behind them –
@@ -87,8 +87,9 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   into a smooth tube (default Ø 2.5 mm, adjustable).
 - The nerve is shown in every view: its exact cross-section/outline in planar slices, a projected band in the
   panoramic, and a yellow tube in 3D that stays visible (as a ghost) through the bone.
-- While tracing, drag a point to move it, double-click a point to delete it, *Undo point* takes back the last one.
-- Implants report their surface-to-surface distance to each nerve; closer than 2 mm is flagged (⚠ in the list).
+- While tracing, drag a point to move it, double-click a point to delete it, Ctrl+Z takes back the last one.
+- Implants report their surface-to-surface distance to each nerve (the implant as it is: flat platform and apex, tapered
+  side; the canal as a tube of its diameter); closer than 2 mm is flagged (⚠ in the list).
 
 **3Dconnexion SpaceMouse** (⚙ Settings)
 - *Connect SpaceMouse* once (Chrome / Edge, via WebHID: wired, wireless and Universal Receiver models); afterwards it
@@ -360,10 +361,34 @@ npm run build      # static build in dist/ (relative paths, can be hosted anywhe
 `python3 scripts/make-compressed-dicom.py <dir>` (python-gdcm, pydicom) turns it into compressed variants of every
 supported transfer syntax; the lossless ones must load with identical voxels.
 
+### Tests
+
+```bash
+npm test           # unit tests (vitest, in node, about a second)
+npm run test:e2e   # browser tests of the built app (Playwright, Chromium; run npm run build first)
+npm run test:all   # type check, unit tests, build and browser tests – what CI runs
+```
+
+The first time, install the test browser: `npx playwright install chromium`.
+
+- **Unit tests** (`tests/unit/`): DICOM loading (with and without preamble / extensions) and the patient coordinates
+  of every voxel, coordinates kept through reorientation and crop, segment STL export (closed, outward-facing, right
+  volume, at the right place in DICOM patient coordinates), implant solids, scan alignment (point pairs, ICP) and
+  placement in original coordinates, implant / nerve distances, panoramic curves, STL / PLY / OBJ import, ZIP
+  (projects), the automatic segmentation engine (tiling, axes, blending – with a stand-in for the network whose answer
+  is known) and the undo history.
+- **Browser tests** (`tests/e2e/`): opening a DICOM series, planning, segmenting, importing a scan, the export dialog,
+  saving and reopening a project, undo / redo of every kind of change, Recent after drag & drop, keyboard, settings,
+  the mobile version. Every test fails on a script error in the page.
+
+The test files (a synthetic DICOM series with a made-up patient, an arch-shaped surface scan) are generated when the
+tests run. `.github/workflows/test.yml` runs all tests on every branch and pull request; the deployment below runs
+them too and publishes nothing when one fails (the Playwright report is kept as an artifact of the run).
+
 ### Public deployment (GitHub Pages)
 
-`.github/workflows/deploy-pages.yml` builds the app and publishes it to GitHub Pages on every push to `main`
-(or manually from the Actions tab). One-time setup: repository **Settings → Pages → Build and deployment → Source:
+`.github/workflows/deploy-pages.yml` checks (type check, unit and browser tests), builds the app and publishes it to
+GitHub Pages on every push to `main` (or manually from the Actions tab) – only when every check passes. One-time setup: repository **Settings → Pages → Build and deployment → Source:
 GitHub Actions**. The site is then served at `https://<owner>.github.io/Quick-DICOM-Planning/`. The app is fully
 static – scans are processed in the visitor's browser and never uploaded.
 
@@ -386,6 +411,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/ui/install.ts` | Install app and the Windows / Mac double-click helper |
 | `src/ui/reorientPanel.ts`, `curvePanel.ts`, `implantsPanel.ts`, `segmentsPanel.ts`, `nervesPanel.ts`, `scansPanel.ts` | One module per side panel: its controls and its refresh |
 | `src/ui/viewSettings.ts`, `settings.ts`, `patient.ts` | Settings inside the 3D / panoramic views, the ⚙ Settings popover (input, SpaceMouse), the patient chip |
+| `src/history.ts`, `src/planHistory.ts` | Undo / redo: one history of the plan, split into channels (implants, curves, segments, nerves, scans, rulers) |
 | `src/ui/undoUi.ts`, `keyboard.ts` | Undo / redo buttons and keyboard shortcuts |
 | `src/ui/rail.ts`, `src/ui/popover.ts`, `src/ui/help.ts`, `src/ui/viewTools.ts`, `src/ui/recent.ts` | Interface building blocks: panel rail, menus, shortcut sheet, view header tools, recent scans |
 | `src/views/View.ts` | Base view (canvas, zoom/pan/W-L), planar view, implant rasterisation & dragging |

@@ -10,8 +10,8 @@ import type { CropSpec } from './render';
 import { cropTester } from './segment';
 import { scanWorld } from './scans';
 import { invert } from './register';
-import { ScalarGrid, Tris, concatTris, coneMesh, fillCavities, isoSurface, meshToTris, smoothMesh, stlBytes, tubeMesh } from './stl';
-import { affineDet, type Volume } from './volume';
+import { ScalarGrid, Tris, concatTris, coneMesh, fillCavities, isoSurface, meshToTris, smoothMesh, stlBytes, transformTris, tubeMesh } from './stl';
+import type { Volume } from './volume';
 import { writeZip } from './zip';
 
 export interface ExportHooks {
@@ -117,24 +117,6 @@ function implantSolid(app: App, imp: Implant, kind: 'implant' | 'abutment'): Tri
   return concatTris(
     parts.map((p) => coneMesh(addScaled(p.center, p.axis, -p.half), addScaled(p.center, p.axis, p.half), p.r0, p.r1)),
   );
-}
-
-/** Move a mesh into DICOM patient coordinates (in place), keeping the triangles outward-facing. */
-function toPatient(tris: Tris, m: number[]) {
-  const flip = affineDet(m) < 0;
-  for (let i = 0; i < tris.length; i += 3) {
-    const x = tris[i], y = tris[i + 1], z = tris[i + 2];
-    tris[i] = m[0] * x + m[1] * y + m[2] * z + m[3];
-    tris[i + 1] = m[4] * x + m[5] * y + m[6] * z + m[7];
-    tris[i + 2] = m[8] * x + m[9] * y + m[10] * z + m[11];
-  }
-  if (flip)
-    for (let t = 0; t < tris.length; t += 9)
-      for (let k = 0; k < 3; k++) {
-        const a = tris[t + 3 + k];
-        tris[t + 3 + k] = tris[t + 6 + k];
-        tris[t + 6 + k] = a;
-      }
 }
 
 function collectItems(app: App): { groups: { title: string; items: Item[] }[]; base: string } {
@@ -348,7 +330,7 @@ export function showExportStl(app: App, hooks: ExportHooks, preset?: { scanId: n
         hooks.showLoading(label, i / items.length);
         await new Promise((r) => setTimeout(r, 0));
         const tris = await it.build(opts, (f) => hooks.showLoading(label, (i + f) / items.length));
-        if (affine) toPatient(tris, affine);
+        if (affine) transformTris(tris, affine);
         if (tris.length) meshes.push({ name: it.name, tris });
       }
       if (!meshes.length) {

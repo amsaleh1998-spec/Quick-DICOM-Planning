@@ -143,20 +143,42 @@ function closestSegSeg(p1: Vec3, q1: Vec3, p2: Vec3, q2: Vec3): [number, number]
   return [s, t];
 }
 
-/** Shortest distance (mm) between the implant body surface and the nerve canal surface. */
+/**
+ * Signed distance (mm) from point p to the implant body: a truncated cone with flat platform and
+ * apex faces (negative inside).
+ */
+function implantPointDistance(imp: Implant, p: Vec3): number {
+  const P = platformOf(imp);
+  const L = imp.length;
+  const v = sub(p, P);
+  const h = dot(v, imp.axis);
+  const rho = length(addScaled(v, imp.axis, -h));
+  const r0 = implantRadiusAt(imp, -L / 2);
+  const r1 = implantRadiusAt(imp, L / 2);
+  // profile in (h, rho): platform face (0,0)–(0,r0), side (0,r0)–(L,r1), apex face (L,r1)–(L,0)
+  const seg = (ax: number, ay: number, bx: number, by: number) => {
+    const dx = bx - ax, dy = by - ay;
+    const t = clamp(((h - ax) * dx + (rho - ay) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+    return Math.hypot(h - ax - t * dx, rho - ay - t * dy);
+  };
+  const d = Math.min(seg(0, 0, 0, r0), seg(0, r0, L, r1), seg(L, r1, L, 0));
+  const inside = h >= 0 && h <= L && rho <= r0 + ((r1 - r0) * h) / L;
+  return inside ? -d : d;
+}
+
+/** Shortest distance (mm) between the implant body surface and the nerve canal surface (negative: they overlap). */
 export function implantNerveDistance(imp: Implant, n: Nerve): number {
   const path = nervePath(n);
   if (path.length < 2) return Infinity;
   const P = platformOf(imp);
   const A = apexOf(imp);
-  const axis = sub(A, P);
   let best = Infinity;
   for (let i = 0; i + 1 < path.length; i++) {
-    const [s, t] = closestSegSeg(P, A, path[i], path[i + 1]);
-    const a = addScaled(P, axis, s);
-    const b = addScaled(path[i], sub(path[i + 1], path[i]), t);
-    const r = implantRadiusAt(imp, (s - 0.5) * imp.length);
-    best = Math.min(best, length(sub(a, b)) - r - n.diameter / 2);
+    const a = path[i], d = sub(path[i + 1], a);
+    // along the segment every 0.1 mm, and where it passes closest to the implant axis
+    const steps = Math.max(1, Math.ceil(length(d) / 0.1));
+    for (let k = 0; k <= steps; k++) best = Math.min(best, implantPointDistance(imp, addScaled(a, d, k / steps)));
+    best = Math.min(best, implantPointDistance(imp, addScaled(a, d, closestSegSeg(P, A, a, path[i + 1])[1])));
   }
-  return best;
+  return best - n.diameter / 2;
 }

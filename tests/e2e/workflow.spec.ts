@@ -1,0 +1,138 @@
+// The main path: open a CBCT, plan, segment, import a scan, export, save and reopen the project.
+import { readFileSync } from 'node:fs';
+import { archStl, clickView, dicomFiles, expect, openDemo, test } from './fixtures';
+
+test.beforeEach(async ({ page }) => {
+  // the native save dialog cannot be driven: projects are saved as downloads
+  await page.addInitScript(() => ((window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = undefined));
+});
+
+test('opens a DICOM series from the start screen, straight into Plan when set', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('#start-screen')).toBeVisible();
+  await page.click('#btn-settings');
+  await page.check('#set-open-plan');
+  await page.keyboard.press('Escape');
+  await page.setInputFiles('#file-input', dicomFiles());
+  await page.waitForFunction(() => !!window.app.vol);
+  await expect(page.locator('#start-screen')).toBeHidden();
+  expect(await page.evaluate(() => window.app.mode)).toBe('plan');
+  await expect(page.locator('#panel-plan')).toBeVisible();
+  await expect(page.locator('#patient-badge')).toHaveText('TEST, Loader');
+  await expect(page).toHaveTitle(/^TEST, Loader/);
+  // the patient popover shows the volume and the DICOM tags
+  await page.click('#patient-chip');
+  await expect(page.locator('#vol-info')).toContainText('80 × 70 × 50 voxels');
+  await page.click('#btn-tags');
+  await expect(page.locator('.modal-backdrop').last()).toContainText("Patient's NamePNTest^Loader");
+});
+
+test('plans implants, segments, imports a scan, exports, saves and reopens the project', async ({ page }) => {
+  await openDemo(page);
+  await page.click('[data-mode="plan"]');
+  // implant from the panel button
+  await page.click('#btn-add-lower');
+  await clickView(page, 'planAxial', 0.3, 0.75);
+  await expect.poll(() => page.evaluate(() => window.app.implants.length)).toBe(1);
+  await expect(page.locator('[data-panel="implants"] .rail-badge')).toHaveText('1');
+  await page.fill('#imp-d', '4.5');
+  await page.dispatchEvent('#imp-d', 'input');
+  expect(await page.evaluate(() => window.app.implants[0].diameter)).toBe(4.5);
+  await expect(page.locator('#implant-list li')).toContainText('Ø4.5');
+
+  // view settings inside the views
+  await page.click('#btn-vr-menu');
+  await page.click('#vr-mode [data-vr="mip"]');
+  expect(await page.evaluate(() => window.app.vr.mode)).toBe('mip');
+  await page.click('#vr-mode [data-vr="surface"]');
+  await page.keyboard.press('Escape');
+  await page.click('#pano-mode [data-pm="slice"]');
+  expect(await page.evaluate(() => window.app.panoMode)).toBe('slice');
+  await page.click('#pano-mode [data-pm="slab"]');
+  await page.click('#btn-pano-menu');
+  await page.$eval('#spacing', (e: HTMLInputElement) => ((e.value = '3'), e.dispatchEvent(new Event('input'))));
+  expect(await page.evaluate(() => window.app.crossSpacing)).toBe(3);
+  await page.keyboard.press('Escape');
+
+  // segment from a preset + opacity
+  await page.click('[data-panel="segments"]');
+  await page.click('#seg-manual summary');
+  await page.click('[data-seg-preset="1"]');
+  expect(await page.evaluate(() => window.app.seg.segments.length)).toBe(1);
+  await page.$eval('#seg-opacity', (e: HTMLInputElement) => ((e.value = '0.5'), e.dispatchEvent(new Event('input'))));
+  expect(await page.evaluate(() => window.app.seg.segments[0].opacity)).toBe(0.5);
+  await page.keyboard.press('Escape');
+
+  // intraoral scan: import opens the placement dialog
+  await page.click('[data-panel="scans"]');
+  await page.setInputFiles('#scan-input', archStl());
+  await expect(page.locator('.scan-place')).toBeVisible({ timeout: 30_000 });
+  await page.click('.scan-place .modal-close');
+  await expect(page.locator('[data-panel="scans"] .rail-badge')).toHaveText('1');
+
+  // STL export dialog: one implant → a download
+  await page.click('#btn-export-menu');
+  await page.click('#btn-export-stl');
+  await expect(page.locator('.export-stl')).toBeVisible();
+  await page.click('.export-stl .modal-close');
+
+  // patient rename
+  await page.click('#patient-chip');
+  await page.fill('#pt-last', 'ROE');
+  await page.dispatchEvent('#pt-last', 'input');
+  await expect(page.locator('#patient-badge')).toContainText('ROE');
+  await page.keyboard.press('Escape');
+
+  // save → reopen: the plan comes back
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.click('#btn-save-project')]);
+  const file = test.info().outputPath('plan.qdp.zip');
+  await dl.saveAs(file);
+  expect(readFileSync(file).subarray(0, 2).toString()).toBe('PK');
+  await page.goto('./');
+  await page.setInputFiles('#project-input', file);
+  await page.waitForFunction(() => !!window.app.vol, null, { timeout: 60_000 });
+  await expect
+    .poll(() => page.evaluate(() => [window.app.implants.length, window.app.seg.segments.length, window.app.scans.length, window.app.implants[0]?.diameter]))
+    .toEqual([1, 1, 1, 4.5]);
+  await expect(page.locator('#patient-badge')).toContainText('ROE');
+});
+
+test('rail, help sheet and keyboard', async ({ page }) => {
+  await openDemo(page);
+  await page.click('#rail-collapse');
+  await expect(page.locator('#sidebar')).toBeHidden();
+  await page.click('#rail-collapse');
+  await expect(page.locator('#sidebar')).toBeVisible();
+  await page.keyboard.press('?');
+  await expect(page.locator('.help-sheet')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.help-sheet')).toBeHidden();
+  await page.keyboard.press('2');
+  expect(await page.evaluate(() => window.app.mode)).toBe('plan');
+  await page.keyboard.press('1');
+  expect(await page.evaluate(() => window.app.mode)).toBe('mpr');
+  // reorient tools
+  await page.click('#mpr-tools [data-tool="crop"]');
+  expect(await page.evaluate(() => window.app.mprTool)).toBe('crop');
+  await expect(page.locator('#mpr-status')).toContainText('Tilt');
+  // settings
+  await page.click('#btn-settings');
+  await page.click('#input-seg [data-input="trackpad"]');
+  expect(await page.evaluate(() => window.app.input)).toBe('trackpad');
+  await page.click('#input-seg [data-input="mouse"]');
+  await page.click('#rd-seg [data-rd="wl"]');
+  expect(await page.evaluate(() => window.app.rightDrag)).toBe('wl');
+});
+
+test('phones get the mobile version, which opens the demo', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await ctx.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('./');
+  await expect(page).toHaveURL(/mobile\.html/);
+  await page.click('#m-empty-demo');
+  await page.waitForFunction(() => !!window.app?.vol);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
