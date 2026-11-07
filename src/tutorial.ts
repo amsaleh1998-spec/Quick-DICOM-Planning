@@ -55,7 +55,7 @@ const GESTURES: Gesture[] = [
   {
     svg: pad(finger(52, 44) + finger(68, 44) + ring(52, 44) + ring(68, 44) + arrow(60, 58, 60, 76)),
     title: 'Two-finger click and drag',
-    text: 'Acts as right-drag: zoom (drag down = in, up = out) or brightness/contrast, depending on the “Right-drag” switch in the toolbar.',
+    text: 'Acts as right-drag: zoom (drag down = in, up = out) or brightness/contrast, depending on the “Right-drag” switch in ⚙ Settings.',
   },
   {
     svg: pad(
@@ -66,7 +66,7 @@ const GESTURES: Gesture[] = [
         arrow(79, 30, 76, 26),
     ),
     title: '⌥ Option + ⌘ Command + drag (MPR)',
-    text: 'Rotate the other two planes around this view, like Ctrl+Alt in 3D Slicer. The Rotate tool in the sidebar does the same without keys.',
+    text: 'Rotate the other two planes around this view, like Ctrl+Alt in 3D Slicer. The Rotate tool in the Reorient panel does the same without keys.',
   },
   {
     svg: pad(key('⇧') + finger(48, 50, true) + arrow(60, 50, 96, 50)),
@@ -87,7 +87,7 @@ function build(onInputChange: (v: 'mouse' | 'trackpad') => void, getInput: () =>
         <button class="modal-close" title="Close (Esc)">×</button>
       </header>
       <p class="intro">Everything in Quick DICOM Planning works without a mouse. In <b>Trackpad mode</b> the gestures below are active
-      (switch it in the toolbar: <b>Input → Trackpad</b>). Open this guide again any time with the <b>Trackpad guide</b> button.</p>
+      (switch it in <b>⚙ Settings → Input → Trackpad</b>). Open this guide again any time from ⚙ Settings or the <b>?</b> help sheet.</p>
       <div class="g-grid">
         ${GESTURES.map((g) => `<div class="g-card">${g.svg}<div><h4>${g.title}</h4><p>${g.text}</p></div></div>`).join('')}
       </div>
