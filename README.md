@@ -52,6 +52,8 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   *Undo click*, *Clear*, *Use current threshold* (re-grow with the current thresholds) and *Delete* are in the segment box.
 - Add as many segments as needed. Clicking inside an existing segment carves the new one out of it – e.g. raise the
   threshold and click a tooth or an existing implant inside the jaw.
+- Each segment has a **3D opacity** slider (in its box): see-through segments show what lies inside or behind them –
+  teeth roots, canals, nerves, implants, intraoral scans. Maxilla and mandible start at 70 %, everything else opaque.
 - Each segment can be shown/hidden and recoloured; *3D: show bone that is not segmented* switches off everything else, so
   e.g. only the maxilla remains. Segments are tinted (with outlines) in all slices, and the status bar names the segment
   under the cursor. Surface, translucent and MIP rendering all respect the visibility.
@@ -205,7 +207,9 @@ CPU); the scan is never uploaded. The model (62 MB) is downloaded on first use, 
 - The result appears as five ordinary segments (marked *AI*): show / hide, recolour, rename, delete, add parts by
   clicking, use them as the CBCT surface when aligning intraoral scans, and export them with *Export STL*. Their
   surfaces are smooth (the network's class margins are interpolated, not the voxel staircase). They are saved in
-  projects and follow *Apply rotate + crop*. Running it again replaces the previous automatic segments.
+  projects and follow *Apply rotate + crop*. Running it again replaces the previous automatic segments. Afterwards
+  *3D: show bone that is not segmented* is switched off, so only the segmented structures remain (the jaws slightly
+  see-through).
 
 Fidelity: the pre- and post-processing of nnU-Net is re-implemented (crop to the non-zero region, resampling to the
 model's 0.43 × 0.31 × 0.43 mm grid, CT normalisation, sliding window with Gaussian weighting, logits resampled back

@@ -31,14 +31,16 @@ export interface DsLabel {
   original: string;
   name: string;
   color: [number, number, number];
+  /** 3D opacity: the jaws slightly see-through so roots, canals and implants show */
+  opacity: number;
 }
 
 export const DS_LABELS: DsLabel[] = [
-  { cls: 1, original: 'Upper Skull', name: 'Maxilla & upper skull', color: [236, 178, 112] },
-  { cls: 2, original: 'Mandible', name: 'Mandible', color: [104, 178, 240] },
-  { cls: 3, original: 'Upper Teeth', name: 'Upper teeth', color: [250, 240, 206] },
-  { cls: 4, original: 'Lower Teeth', name: 'Lower teeth', color: [222, 238, 250] },
-  { cls: 5, original: 'Mandibular canal', name: 'Mandibular canal', color: [255, 196, 30] },
+  { cls: 1, original: 'Upper Skull', name: 'Maxilla & upper skull', color: [236, 178, 112], opacity: 0.7 },
+  { cls: 2, original: 'Mandible', name: 'Mandible', color: [104, 178, 240], opacity: 0.7 },
+  { cls: 3, original: 'Upper Teeth', name: 'Upper teeth', color: [250, 240, 206], opacity: 1 },
+  { cls: 4, original: 'Lower Teeth', name: 'Lower teeth', color: [222, 238, 250], opacity: 1 },
+  { cls: 5, original: 'Mandibular canal', name: 'Mandibular canal', color: [255, 196, 30], opacity: 1 },
 ];
 
 export const DS_CREDIT = {
