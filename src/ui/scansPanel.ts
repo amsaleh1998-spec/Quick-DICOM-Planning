@@ -105,7 +105,8 @@ $('btn-scan-export').onclick = () => {
 };
 $('btn-scan-delete').onclick = () => {
   const s = activeScan();
-  if (!s || !confirm(`Delete “${s.name}”?`)) return;
+  if (!s) return;
+  setStatus(`“${s.name}” deleted – Ctrl+Z brings it back.`);
   app.scans = app.scans.filter((x) => x !== s);
   app.activeScanId = null;
   app.changed();
