@@ -5,7 +5,7 @@ dental CAD: the upper teeth (18-28) and the lower teeth (48-38), one closed shel
 usual CAD orientation (+z superior / occlusal plane roughly horizontal, +y anterior, right-handed).
 
     pip install numpy pyfqmr
-    python3 scripts/make-tooth-library.py upper.stl lower.stl public/library/teeth-generic.bin
+    python3 scripts/make-tooth-library.py upper.stl lower.stl public/library/teeth-generic.json
 
 What it does
   - splits each file into its teeth (connected shells) and numbers them (FDI) along the arch;
@@ -14,9 +14,11 @@ What it does
     the arch at y = 0 (the two files need not be in occlusion: the app places each jaw on the arch);
   - decimates every tooth to about 0.35 mm edges (fine enough for freeform brushing);
   - finds the cusp tips / incisal edge of every tooth ("tooth parts" that can be moved);
-  - writes one deflate-compressed binary: header JSON + per tooth int16 positions (relative to the
-    tooth centroid, 1/2000 mm) and uint16 triangle indices.
+  - writes one binary (header JSON + per tooth int16 positions relative to the tooth centroid in
+    1/2000 mm, and uint16 triangle indices), deflate-compressed and wrapped base64 in a small JSON
+    file (served as data by any static host).
 """
+import base64
 import json
 import struct
 import sys
@@ -218,8 +220,10 @@ def main(upper_path, lower_path, out_path):
     hj = json.dumps(header, separators=(',', ':')).encode()
     hj += b' ' * ((-len(hj)) % 4)
     raw = b'QDPT' + struct.pack('<II', 1, len(hj)) + hj + b''.join(blobs)
-    open(out_path, 'wb').write(zlib.compress(raw, 9))
-    print(f'{out_path}: {len(raw) / 1e6:.2f} MB raw, {len(zlib.compress(raw, 9)) / 1e6:.2f} MB compressed')
+    packed = zlib.compress(raw, 9)
+    wrapper = {'format': 'qdp-tooth-library', 'encoding': 'deflate+base64', 'data': base64.b64encode(packed).decode()}
+    open(out_path, 'w').write(json.dumps(wrapper))
+    print(f'{out_path}: {len(raw) / 1e6:.2f} MB raw, {len(packed) / 1e6:.2f} MB compressed')
 
 
 if __name__ == '__main__':

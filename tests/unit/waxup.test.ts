@@ -1,15 +1,13 @@
 // Waxup: the tooth library, placement on the patient's arch, chain mode, mirroring, sculpting.
 import { readFileSync } from 'node:fs';
-import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { contralateral, jawOrder, parseLibrary } from '../../src/waxup/library';
+import { contralateral, jawOrder, parseLibrary, unpackLibrary } from '../../src/waxup/library';
 import { JawPlacement, Waxup, chainLinks, gapAlong, repackChain, rotateScaleAbout, toothWorld, translation } from '../../src/waxup/waxup';
 import { applyPart, brush, startPart } from '../../src/waxup/sculpt';
 import { IDENTITY, applyV } from '../../src/register';
 import type { Frame, Vec2, Vec3 } from '../../src/math';
 
-const raw = inflateSync(readFileSync('public/library/teeth-generic.bin'));
-const lib = parseLibrary(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer);
+const lib = parseLibrary(await unpackLibrary(JSON.parse(readFileSync('public/library/teeth-generic.json', 'utf8'))));
 
 /** a U-shaped patient curve (planning a = left, b = posterior): front at b = 0 */
 const curve: Vec2[] = [];
