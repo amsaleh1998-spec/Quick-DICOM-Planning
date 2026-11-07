@@ -1,6 +1,7 @@
-// The parts of the plan that undo / redo covers (see history.ts). Not covered: how the scan is
-// viewed – navigation, window / level, 3D thresholds, show / hide, selection – and the
-// orientation of the volume (applying a crop / rotation starts a new history).
+// The parts of the plan that undo / redo covers (see history.ts): implants, curves, rulers, nerves,
+// segments, scans and the waxup. Not covered: how the scan is viewed – navigation, window / level,
+// 3D thresholds, show / hide, selection – and the orientation of the volume (applying a crop /
+// rotation starts a new history).
 
 import type { App, Measurement } from './app';
 import { Channel, History } from './history';
@@ -10,6 +11,8 @@ import type { MeshData } from './meshio';
 import { Nerve, reserveNerveIds } from './nerve';
 import { Scan, reserveScanIds } from './scans';
 import type { AiLayer, Cut, Segment } from './segment';
+import type { Affine } from './register';
+import type { WaxTooth, Waxup } from './waxup/waxup';
 
 type SavedImplant = Omit<Implant, 'hidden' | 'abutmentHidden'>;
 type SavedNerve = Omit<Nerve, 'visible'>;
@@ -149,6 +152,40 @@ function scans(app: App): Channel {
   };
 }
 
+function waxup(app: App): Channel {
+  // sculpted shapes are kept by reference: every stroke works on a fresh copy (see beginGeometryEdit)
+  const shapes = new Map<number, Float32Array>();
+  type Saved = { teeth: [number, number, Affine][]; placement: Waxup['placement'] };
+  return {
+    label: 'waxup',
+    key() {
+      const m = app.wax.model;
+      for (const t of m.teeth) if (t.geo) shapes.set(t.geo, t.pos);
+      const st: Saved = { teeth: m.teeth.map((t) => [t.fdi, t.geo, t.T]), placement: m.placement };
+      return JSON.stringify(st);
+    },
+    restore(key) {
+      const m = app.wax.model;
+      const st = JSON.parse(key) as Saved;
+      const old = new Map(m.teeth.map((t) => [t.fdi, t]));
+      m.teeth = st.teeth
+        .filter(([fdi, geo]) => m.lib?.teeth.has(fdi) && (!geo || shapes.has(geo)))
+        .map(([fdi, geo, T]) => {
+          const tpl = m.template(fdi);
+          const t: WaxTooth = old.get(fdi) ?? { fdi, jaw: tpl.jaw, pos: tpl.pos, idx: tpl.idx, T, geo };
+          t.T = T;
+          t.geo = geo;
+          t.pos = geo ? shapes.get(geo)! : tpl.pos;
+          t.ver = (t.ver ?? 0) + 1;
+          return t;
+        });
+      m.placement = st.placement;
+      if (!m.tooth(app.wax.selected)) app.wax.selected = null;
+      app.changed();
+    },
+  };
+}
+
 export function planHistory(app: App): History {
   return new History({
     implants: implants(app),
@@ -157,5 +194,6 @@ export function planHistory(app: App): History {
     nerves: nerves(app),
     segments: segments(app),
     scans: scans(app),
+    waxup: waxup(app),
   });
 }

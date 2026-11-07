@@ -40,10 +40,23 @@ let distBuf = new Float32Array(0);
 export function planeSegments(s: Scan, center: Vec3, u: Vec3, v: Vec3, scale: number, w: number, h: number): Float32Array | null {
   const wd = scanWorld(s);
   if (!wd) return null;
-  const pos = wd.pos;
+  return meshPlaneSegments(wd.pos, s.mesh.idx, bounds(s, wd.pos), center, u, v, scale, w, h);
+}
+
+/** The same for any world-space mesh with its bounding box. */
+export function meshPlaneSegments(
+  pos: Float32Array,
+  idx: Uint32Array,
+  b: { min: Vec3; max: Vec3 },
+  center: Vec3,
+  u: Vec3,
+  v: Vec3,
+  scale: number,
+  w: number,
+  h: number,
+): Float32Array {
   const n: Vec3 = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
   // quick reject: plane misses the bounding box
-  const b = bounds(s, pos);
   let dmin = Infinity, dmax = -Infinity;
   for (let c = 0; c < 8; c++) {
     const p = [c & 1 ? b.max[0] : b.min[0], c & 2 ? b.max[1] : b.min[1], c & 4 ? b.max[2] : b.min[2]];
@@ -56,7 +69,6 @@ export function planeSegments(s: Scan, center: Vec3, u: Vec3, v: Vec3, scale: nu
   if (distBuf.length < nv) distBuf = new Float32Array(nv);
   const D = distBuf;
   for (let i = 0; i < nv; i++) D[i] = (pos[i * 3] - center[0]) * n[0] + (pos[i * 3 + 1] - center[1]) * n[1] + (pos[i * 3 + 2] - center[2]) * n[2];
-  const idx = s.mesh.idx;
   const out: number[] = [];
   const pt = (a: number, bb: number) => {
     const t = D[a] / (D[a] - D[bb]);
@@ -131,7 +143,7 @@ interface PanoCoords {
 const panoCache = new WeakMap<Scan, PanoCoords>();
 
 /** Nearest arc length on a 2D grid around the curve (brute force per cell, then per vertex lookup). */
-function nearestGrid(curve: ArchCurve, cell: number, margin: number) {
+export function nearestGrid(curve: ArchCurve, cell: number, margin: number) {
   const poly = curve.polyline();
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const p of poly) {

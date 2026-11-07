@@ -1,7 +1,8 @@
 // Opening scans and projects: Open menu and pickers, Recent, the start screen, drag & drop,
 // files double-clicked in Explorer / Finder (installed app), and saving projects.
 
-import { applyProjectState, buildProject, projectFileName, readProject } from '../project';
+import { applyProjectState, buildProject, projectFileName, projectHasWaxup, readProject } from '../project';
+import { ensureLibrary } from '../waxup/library';
 import { isZipFile, zipEntriesAsFiles } from '../zip';
 import { findScanFolder, parentOf, rememberScanFolder, type FolderHit, type ScanDir } from '../scanFolders';
 import { formatDicomDate, formatPatientName } from '../dicomMeta';
@@ -205,6 +206,10 @@ export async function openProject(file: File): Promise<string | null> {
     const buf = await file.arrayBuffer();
     showLoading('Unpacking project…', 0.5);
     const { volume, file: pf, entries } = await readProject(buf);
+    if (projectHasWaxup(pf)) {
+      showLoading('Loading the tooth library…', 0.8);
+      await ensureLibrary();
+    }
     showLoading('Restoring views…', 0.9);
     app.setVolume(volume);
     setMode(pf.state.mode);

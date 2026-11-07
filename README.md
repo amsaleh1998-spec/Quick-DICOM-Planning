@@ -262,6 +262,30 @@ Like any automatic method it can be wrong (metal artefacts, unusual anatomy, low
   doi:[10.1038/s41592-020-01008-z](https://doi.org/10.1038/s41592-020-01008-z)
 - The same model for 3D Slicer: [SlicerDentalSegmentator](https://github.com/gaudot/SlicerDentalSegmentator).
 
+## Waxup (② Plan → Waxup panel)
+
+A tooth library set up on the patient's arch, shaped the way a dental CAD does it, so implants can be planned under
+the future teeth.
+
+- **Teeth**: click positions in the tooth chart (FDI 18–28 / 48–38) – the teeth are set up along the panoramic curve
+  (each keeps its place along the library arch), at an occlusal plane found in the CBCT (between the ridges when the
+  jaws are edentulous, where the teeth meet when they are not). *Upper arch* / *Lower arch* add 17–27 / 47–37. A second
+  click selects a tooth, a third removes it (or Del). With one curve for both jaws the upper arch sits slightly outside
+  the lower one; with a curve per jaw each jaw follows its own.
+- **Position** (in the 3D view, the slices and the panoramic): drag = move in the view plane, **Shift**+drag = scale,
+  **Ctrl**+drag = rotate around the view axis. **Chain mode** (on by default): the neighbours slide along the arch so
+  every contact stays as it was. **Mirror**: the same change on the other side (13 ↔ 23). **Whole jaw**: move, scale
+  or rotate all teeth of the jaw together (teeth added later follow).
+- **Parts**: the cusps (molars four, premolars two, canines the tip) and incisal edges are blue dots – drag one to move
+  that part of the tooth, Shift+drag to scale it, Ctrl+drag to rotate it; the region it moves is shaded while hovered.
+- **Freeform** (3D view): drag over a tooth to add material, **Ctrl** to remove, **Shift** to smooth; brush radius and
+  strength in the panel.
+- Teeth react to the mouse only while the Waxup panel is open, so they never get in the way of implant planning;
+  their outlines stay in every slice. Undo / redo, projects and *Export ▾ → STL* (one file per jaw, DICOM patient
+  coordinates) include the waxup.
+- The library (`public/library/teeth-generic.bin`, 32 crowns) is built from a generic exocad tooth set by
+  `scripts/make-tooth-library.py` (split into teeth, FDI numbers, decimated to ~0.35 mm edges, cusp tips).
+
 ## Intraoral scans
 
 **Intraoral scans** (Scans panel → *Import…*, or drop the file on the viewer) imports upper/lower jaw scans,
@@ -418,6 +442,8 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/ui/install.ts` | Install app and the Windows / Mac double-click helper |
 | `src/ui/reorientPanel.ts`, `curvePanel.ts`, `implantsPanel.ts`, `segmentsPanel.ts`, `nervesPanel.ts`, `scansPanel.ts` | One module per side panel: its controls and its refresh |
 | `src/ui/viewSettings.ts`, `settings.ts`, `patient.ts` | Settings inside the 3D / panoramic views, the ⚙ Settings popover (input, SpaceMouse), the patient chip |
+| `src/waxup/` | Waxup: tooth library loader, model (arch placement, chain mode, mirror), sculpting, panel state and setup |
+| `src/views/waxupEdit.ts`, `src/views/waxContours.ts` | Waxup editing with the mouse in every view, tooth outlines in the slices |
 | `src/history.ts`, `src/planHistory.ts` | Undo / redo: one history of the plan, split into channels (implants, curves, segments, nerves, scans, rulers) |
 | `src/ui/undoUi.ts`, `keyboard.ts` | Undo / redo buttons and keyboard shortcuts |
 | `src/ui/rail.ts`, `src/ui/popover.ts`, `src/ui/help.ts`, `src/ui/viewTools.ts`, `src/ui/recent.ts` | Interface building blocks: panel rail, menus, shortcut sheet, view header tools, recent scans |

@@ -7,6 +7,8 @@ import { Plane, PlaneView, Pt, ScrollInfo, View, ViewState, drawLabel } from './
 import { ImplantEditor, projectedRadialAxial } from './implantEdit';
 import { composeSegmentation, drawNervesProjected } from './overlays';
 import { drawPanoScans } from './scanContours';
+import { drawPanoWax, waxAt } from './waxContours';
+import { WaxupEditor, intoScreen } from './waxupEdit';
 
 const CURVE_COLOR = '#4fb3ff';
 const CROSS_COLOR = '#c38cff';
@@ -723,6 +725,31 @@ export class PanoView extends View {
     container: this.el,
   });
 
+  protected override waxEditor: WaxupEditor | null = new WaxupEditor(this.app, {
+    pick: (p) => {
+      const fdi = waxAt(this, p);
+      const w = fdi !== null ? this.worldAt(p) : null;
+      return fdi !== null && w ? { fdi, w } : null;
+    },
+    // along the developed surface, keeping the buccal / lingual position
+    planePoint: (p, anchor) => this.nervePointAt(p, anchor),
+    project: (w) => {
+      if (!this.app.curve) return null;
+      const pr = this.project(w);
+      return [pr.x, pr.y];
+    },
+    viewAxis: (w) => {
+      const app = this.app;
+      const F = app.frame;
+      const t = app.curve ? app.curve.at(this.project(w).s).t : [1, 0];
+      const u = normalize([F[0][0] * t[0] + F[1][0] * t[1], F[0][1] * t[0] + F[1][1] * t[1], F[0][2] * t[0] + F[1][2] * t[1]]);
+      return intoScreen(u, neg(F[2]));
+    },
+    near: (w) => !!this.app.curve && Math.abs(this.project(w).off - this.app.panoOffset) < 3,
+    mmPerPx: () => this.vs.scale,
+    sculpt: false,
+  });
+
   private modeSeg: HTMLDivElement;
 
   constructor(app: App) {
@@ -1037,8 +1064,9 @@ export class PanoView extends View {
 
   protected override drawScanOverlay(o: CanvasRenderingContext2D) {
     const app = this.app;
-    if (!app.curve || !app.scans.length) return;
-    drawPanoScans(app, o, app.curve, app.panoOffset, (sv) => this.xOf(sv), (c) => this.yOf(c));
+    if (!app.curve) return;
+    if (app.scans.length) drawPanoScans(app, o, app.curve, app.panoOffset, (sv) => this.xOf(sv), (c) => this.yOf(c));
+    drawPanoWax(this, app, o, app.curve, app.panoOffset, (sv) => this.xOf(sv), (c) => this.yOf(c));
   }
 
   protected drawOverlay(o: CanvasRenderingContext2D) {

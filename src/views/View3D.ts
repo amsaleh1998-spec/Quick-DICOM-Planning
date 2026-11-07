@@ -1,5 +1,8 @@
-import { MeshGL, viewProjection } from '../meshgl';
-import { Scan, scanWorld } from '../scans';
+import { MeshGL, rayMesh, viewProjection } from '../meshgl';
+import { WaxupEditor } from './waxupEdit';
+import { scanWorld } from '../scans';
+import { WaxTooth, toothKey, toothWorld } from '../waxup/waxup';
+import { falloff } from '../waxup/sculpt';
 import type { App } from '../app';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, PROSTHETIC_COLOR } from '../implant';
 import { NERVE_COLOR, nervePath } from '../nerve';
@@ -450,7 +453,9 @@ export class View3D extends View {
   private scanColTex: WebGLTexture | null = null;
   private scanDepthTex: WebGLTexture | null = null;
   private scanFboSize = '';
-  private uploaded = new WeakMap<Scan, string>();
+  private uploaded = new WeakMap<object, string>();
+  /** tooth whose part highlight is in its vertex colours, and which part */
+  private partColored = new WeakMap<WaxTooth, string>();
   private segTabTex: WebGLTexture | null = null;
   private nerveTex: WebGLTexture | null = null;
   private labVersion = -1;
@@ -865,6 +870,40 @@ export class View3D extends View {
   });
   private editingImplant = false;
 
+  // ---- waxup teeth --------------------------------------------------------------------------
+  protected override waxEditor: WaxupEditor | null = new WaxupEditor(this.app, {
+    pick: (p) => this.toothAt(p),
+    // the plane through the anchor, parallel to the screen
+    planePoint: (p, anchor) => {
+      const { o, d } = this.rayAt(p);
+      const den = dot(d, this.fwd);
+      if (Math.abs(den) < 1e-9) return null;
+      return add(o, scale(d, dot(sub(anchor, o), this.fwd) / den));
+    },
+    project: (w) => this.projectPoint(w),
+    viewAxis: () => this.fwd,
+    near: () => true,
+    mmPerPx: (w) => {
+      const z = Math.max(1, dot(sub(w, this.camera().pos), this.fwd));
+      return (2 * z * Math.tan(FOV / 2)) / Math.max(1, this.h);
+    },
+    sculpt: true,
+  });
+
+  /** Nearest waxup tooth along the ray through a screen point. */
+  private toothAt(p: Pt): { fdi: number; w: Vec3 } | null {
+    const { o, d } = this.rayAt(p);
+    let best: { fdi: number; w: Vec3; t: number } | null = null;
+    for (const t of this.app.wax.shown()) {
+      const wm = toothWorld(t);
+      const [tn, tf] = boxHit(o, d, wm.min, wm.max);
+      if (tn > tf || tf < 0 || (best && tn > best.t)) continue;
+      const h = rayMesh(wm.pos, t.idx, o, d);
+      if (h && (!best || h.t < best.t)) best = { fdi: t.fdi, w: h.p, t: h.t };
+    }
+    return best;
+  }
+
   /** Nearest implant (body or abutment) under a screen point. */
   private implantAt(p: Pt): Implant | null {
     let best: Implant | null = null;
@@ -1063,7 +1102,7 @@ export class View3D extends View {
       const cam = this.camera();
       const base = JSON.stringify([
         vol.id, this.w, this.h, this.right, this.up, this.fwd, cam.pos, app.vr, app.crop, app.frame, app.O,
-        app.vr.mode === 'mip' ? app.wl : 0, app.implantsKey(), app.segKey(), app.scansKey(),
+        app.vr.mode === 'mip' ? app.wl : 0, app.implantsKey(), app.segKey(), app.scansKey(), app.wax.key(),
       ]);
       if (base !== this.lastKey) {
         const now = performance.now();
@@ -1168,15 +1207,17 @@ export class View3D extends View {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  /** Rasterise the visible, placed scans into the offscreen colour/depth target. */
+  /** Rasterise the visible, placed scans and the waxup teeth into the offscreen colour/depth target. */
   private drawScans(camPos: Vec3, W: number, H: number): boolean {
     const gl = this.gl!;
     const mg = this.meshGl;
     const app = this.app;
     const scans = app.scans.filter((s) => s.visible && s.transform);
+    const wax = app.wax;
+    const teeth = wax.shown();
     if (!mg || !this.scanFbo) return false;
-    mg.prune(new Set(app.scans));
-    if (!scans.length) return false;
+    mg.prune(new Set<unknown>([...app.scans, ...wax.model.teeth]));
+    if (!scans.length && !teeth.length) return false;
     const size = `${W}x${H}`;
     if (size !== this.scanFboSize) {
       gl.bindTexture(gl.TEXTURE_2D, this.scanColTex);
@@ -1196,19 +1237,71 @@ export class View3D extends View {
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     const mvp = viewProjection(camPos, this.right, this.up, this.fwd, FOV, W / Math.max(1, H), SCAN_NEAR, SCAN_FAR);
-    // opaque first, so translucent scans in front still win the depth test with their own colour
-    for (const s of [...scans].sort((a, b) => b.opacity - a.opacity)) {
-      const key = s.transform!.join(',');
-      if (this.uploaded.get(s) !== key || !mg.has(s)) {
-        const w = scanWorld(s)!;
-        mg.upload(s, w.pos, w.nrm, s.mesh.idx, s.mesh.col);
-        this.uploaded.set(s, key);
-      }
-      mg.draw(s, mvp, camPos, { color: s.color, opacity: s.opacity, vertexColors: s.vertexColors });
+    type Item = { opacity: number; draw: () => void };
+    const items: Item[] = scans.map((s) => ({
+      opacity: s.opacity,
+      draw: () => {
+        const key = s.transform!.join(',');
+        if (this.uploaded.get(s) !== key || !mg.has(s)) {
+          const w = scanWorld(s)!;
+          mg.upload(s, w.pos, w.nrm, s.mesh.idx, s.mesh.col);
+          this.uploaded.set(s, key);
+        }
+        mg.draw(s, mvp, camPos, { color: s.color, opacity: s.opacity, vertexColors: s.vertexColors });
+      },
+    }));
+    const jawSel = wax.scope === 'jaw' && wax.selected !== null ? wax.model.tooth(wax.selected)?.jaw : null;
+    for (const t of teeth) {
+      items.push({
+        opacity: wax.opacity,
+        draw: () => {
+          const key = toothKey(t);
+          if (this.uploaded.get(t) !== key || !mg.has(t)) {
+            const w = toothWorld(t);
+            mg.upload(t, w.pos, w.nrm, t.idx, null);
+            this.uploaded.set(t, key);
+            this.partColored.delete(t);
+          }
+          const sel = t.fdi === wax.selected || t.jaw === jawSel;
+          const hov = t.fdi === wax.hover;
+          const base = wax.color;
+          const color: [number, number, number] = sel ? [255, 214, 150] : hov ? [Math.min(255, base[0] + 12), Math.min(255, base[1] + 18), 255] : base;
+          // the region a part would move: shaded on the tooth while its handle is hovered
+          const hp = wax.editing && wax.tool === 'parts' && wax.hoverPart?.fdi === t.fdi ? wax.hoverPart : null;
+          let vc = false;
+          if (hp) {
+            const pk = `${key}|${hp.i}`;
+            if (this.partColored.get(t) !== pk) {
+              mg.updateColors(t, this.partColors(t, hp.i, color));
+              this.partColored.set(t, pk);
+            }
+            vc = true;
+          }
+          mg.draw(t, mvp, camPos, { color, opacity: wax.opacity, vertexColors: vc });
+        },
+      });
     }
+    // opaque first, so translucent objects in front still win the depth test with their own colour
+    for (const it of items.sort((a, b) => b.opacity - a.opacity)) it.draw();
     gl.disable(gl.DEPTH_TEST);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return true;
+  }
+
+  /** Vertex colours showing the region of a tooth part (blue, by weight). */
+  private partColors(t: WaxTooth, part: number, base: [number, number, number]): Uint8Array {
+    const tpl = this.app.wax.model.template(t.fdi);
+    const tip = tpl.parts[part];
+    const R = tpl.partRadius;
+    const p = t.pos;
+    const col = new Uint8Array(p.length);
+    for (let i = 0; i < p.length; i += 3) {
+      const f = falloff(Math.hypot(p[i] - tip[0], p[i + 1] - tip[1], p[i + 2] - tip[2]), R);
+      col[i] = base[0] + (90 - base[0]) * f;
+      col[i + 1] = base[1] + (170 - base[1]) * f;
+      col[i + 2] = base[2] + (255 - base[2]) * f;
+    }
+    return col;
   }
 
   private drawOverlay3d() {
@@ -1232,6 +1325,7 @@ export class View3D extends View {
     if (!this.el.querySelector('.view-tools.in-view')) drawLabel(o, `${modeName} · ${thr}`, this.w - 62, 16, '#9fb0c8', 'right');
     this.drawPivot(o);
     this.editor.draw(o);
+    this.waxEditor?.draw(o);
     if (this.texFactor > 1) drawLabel(o, `rendered at 1/${this.texFactor} resolution`, this.w - 8, this.h - 10, '#9fb0c8', 'right');
     if (this.segError) drawLabel(o, this.segError, this.w - 8, this.h - 28, '#ff8a8a', 'right');
     const tool = app.segTool;
