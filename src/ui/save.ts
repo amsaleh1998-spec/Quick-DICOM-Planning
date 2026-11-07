@@ -1,0 +1,59 @@
+// Handing files to the user (projects, STL exports).
+
+import { hideLoading, setStatus, showLoading } from './shell';
+
+type DownloadsNs = { save(r: { filename: string; data: Blob }): Promise<unknown> };
+type ClaudeHost = { use(name: string): Promise<unknown> };
+
+/** Hand the file to the user: hosted page capability, native save dialog, or a plain download. */
+export type FileTypeSpec = { description: string; accept: Record<string, string[]> };
+const PROJECT_FILE_TYPE: FileTypeSpec = { description: 'Quick DICOM Planning project', accept: { 'application/zip': ['.zip'] } };
+
+export async function deliverFile(blob: Blob, filename: string, fileType: FileTypeSpec = PROJECT_FILE_TYPE): Promise<boolean> {
+  const host = (window as unknown as { claude?: ClaudeHost }).claude;
+  if (host?.use) {
+    const dl = (await host.use('downloads').catch(() => null)) as DownloadsNs | null;
+    if (dl) {
+      try {
+        await dl.save({ filename, data: blob });
+        return true;
+      } catch (e) {
+        const code = (e as { code?: string }).code;
+        if (code === 'declined') return false;
+        throw new Error(`Saving failed (${code ?? (e as Error).message})`);
+      }
+    }
+  }
+  const picker = (window as unknown as { showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
+  if (picker) {
+    try {
+      const handle = await picker({
+        suggestedName: filename,
+        types: [fileType],
+      });
+      const w = await (handle as unknown as { createWritable(): Promise<WritableStream & { write(b: Blob): Promise<void>; close(): Promise<void> }> }).createWritable();
+      await w.write(blob);
+      await w.close();
+      return true;
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return false;
+      // e.g. not allowed in this frame – fall back to a normal download
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  return true;
+}
+
+export const exportHooks = {
+  showLoading,
+  hideLoading,
+  setStatus,
+  deliver: (blob: Blob, name: string, type: FileTypeSpec) => deliverFile(blob, name, type),
+};
