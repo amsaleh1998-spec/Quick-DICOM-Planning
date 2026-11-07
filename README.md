@@ -189,7 +189,9 @@ Enter = finish a cut · Del = delete selected implant.
 **upper teeth**, the **lower teeth** and the **mandibular canals** of a CBCT or CT with
 **[DentalSegmentator](https://doi.org/10.1016/j.jdent.2024.105130)**, the open deep-learning model by Gauthier Dot et al.
 It runs entirely in the browser (ONNX Runtime Web – on the graphics card with WebGPU in Chrome / Edge, otherwise on the
-CPU); the scan is never uploaded. The model (62 MB) is downloaded on first use, checked, and kept in the browser cache.
+CPU); the scan is never uploaded. The model (62 MB) and the runtime are served by this app's own site (no other
+server, CDN or Zenodo at run time), downloaded on first use, checked (SHA-256) and kept in the browser cache – later
+runs work offline.
 
 - **Region**: the whole scan or the crop box (faster; the network still sees 10 mm of context around the box and
   writes labels only inside it).
