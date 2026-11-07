@@ -12,6 +12,7 @@ import { scanWorld } from './scans';
 import { invert } from './register';
 import { ScalarGrid, Tris, concatTris, coneMesh, fillCavities, isoSurface, meshToTris, smoothMesh, stlBytes, transformTris, tubeMesh } from './stl';
 import type { Volume } from './volume';
+import { toothWorld } from './waxup/waxup';
 import { writeZip } from './zip';
 
 export interface ExportHooks {
@@ -195,6 +196,29 @@ function collectItems(app: App): { groups: { title: string; items: Item[] }[]; b
           return out;
         },
       })),
+    });
+  const wax = app.wax.model.teeth;
+  if (wax.length)
+    groups.push({
+      title: 'Waxup',
+      items: (['upper', 'lower'] as const)
+        .map((jaw) => ({ jaw, teeth: wax.filter((t) => t.jaw === jaw) }))
+        .filter((j) => j.teeth.length)
+        .map(({ jaw, teeth }) => ({
+          key: `wax-${jaw}`,
+          label: `${jaw === 'upper' ? 'Upper' : 'Lower'} teeth (${teeth.map((t) => t.fdi).sort((a, b) => a - b).join(', ')})`,
+          name: `Waxup_${jaw}`,
+          checked: app.wax.visible[jaw],
+          build: async () =>
+            concatTris(
+              teeth.map((t) => {
+                const w = toothWorld(t);
+                const out = new Float32Array(t.idx.length * 3);
+                for (let i = 0; i < t.idx.length; i++) out.set(w.pos.subarray(t.idx[i] * 3, t.idx[i] * 3 + 3), i * 3);
+                return out;
+              }),
+            ),
+        })),
     });
   const nerves = app.nerves.filter((n) => n.pts.length >= 2);
   if (nerves.length)

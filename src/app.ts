@@ -29,6 +29,8 @@ import { canalCentrelines } from './ai/canal';
 import { Volume, composeAffine, resampleVolume } from './volume';
 import type { History } from './history';
 import { planHistory } from './planHistory';
+import { WaxState } from './waxup/waxApp';
+import { invert as invertAffine } from './register';
 import { MprView } from './views/MprView';
 import { View3D } from './views/View3D';
 import { CrossView, PanoView, PlanAxialView, TangView } from './views/PlanViews';
@@ -146,6 +148,8 @@ export class App {
 
   /** intraoral scans / surface models placed in the CBCT */
   scans: Scan[] = [];
+  /** waxup: library teeth set up on the arch (the Waxup panel) */
+  readonly wax = new WaxState();
   /** draw scan outlines in the 2D views */
   showScanContours = true;
   /** scan selected in the side panel */
@@ -275,6 +279,7 @@ export class App {
     this.seg.reset(vol);
     this.nerves = [];
     this.scans = [];
+    this.wax.clear();
     this.activeSegId = null;
     this.activeNerveId = null;
     this.segTool = null;
@@ -435,6 +440,17 @@ export class App {
     ];
     const scans = this.scans;
     for (const sc of scans) if (sc.transform) sc.transform = composeAffine(oldToNew, sc.transform);
+    // waxup teeth and the arch new teeth are set up on
+    const wax = this.wax.model;
+    const teeth = wax.teeth;
+    const placement = wax.placement;
+    const newToOld = invertAffine(oldToNew);
+    for (const t of teeth) t.T = composeAffine(oldToNew, t.T);
+    for (const pl of Object.values(placement)) {
+      pl.O = toNew(pl.O);
+      pl.F = pl.F.map(dirToNew) as Frame;
+      pl.adjust = composeAffine(oldToNew, composeAffine(pl.adjust, newToOld));
+    }
     const oldAi = this.seg.ai;
     const ai: AiLayer | null = oldAi && { ...oldAi, toWorld: composeAffine(oldToNew, oldAi.toWorld ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]) };
     const { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth } = this;
@@ -454,6 +470,8 @@ export class App {
     Object.assign(this, { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth });
     this.restoreSegmentation(segments, cuts, nerves, ai);
     this.scans = scans;
+    wax.teeth = teeth;
+    wax.placement = placement;
     this.resetHistory(); // coordinates changed: earlier states no longer apply
     this.savedKey = null; // the resampled volume itself is a change worth saving
     this.onWindowChange();

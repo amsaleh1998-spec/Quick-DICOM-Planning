@@ -4,6 +4,8 @@ import type { Nerve } from '../nerve';
 import type { NewCut } from '../segment';
 import { CUT_CSS, composeNerveSection, composeSegmentation } from './overlays';
 import { drawPlaneScans } from './scanContours';
+import { drawPlaneWax, waxAt } from './waxContours';
+import { WaxupEditor, intoScreen } from './waxupEdit';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, radiusAt } from '../implant';
 import { ImplantEditor } from './implantEdit';
 import { Vec3, add, cross, distToSegment2, dot, length, scale, sub } from '../math';
@@ -37,7 +39,7 @@ export interface ScrollInfo {
 
 export const newViewState = (): ViewState => ({ scale: 0.3, panU: 0, panV: 0, fitted: false });
 
-type DragKind = 'none' | 'right' | 'pan' | 'left' | 'ruler' | 'nerve';
+type DragKind = 'none' | 'right' | 'pan' | 'left' | 'ruler' | 'nerve' | 'wax';
 
 /**
  * Base class: two stacked canvases (image at <= CSS resolution, overlay at
@@ -68,6 +70,8 @@ export abstract class View {
   private downPos: Pt = [0, 0];
   /** Shift+left drag pans (disabled where Shift has another meaning). */
   protected shiftPans = true;
+  /** waxup teeth editing in this view (views that show teeth set it) */
+  protected waxEditor: WaxupEditor | null = null;
   /** Which kind of measurements this view shows/creates (null = no ruler). */
   protected measureKind: 'plane' | 'pano' | null = null;
   private rulerDrag: { m: Measurement; end: 'a' | 'b'; created: boolean } | null = null;
@@ -586,6 +590,7 @@ export abstract class View {
     } else {
       this.drawScanOverlay(o);
       this.drawOverlay(o);
+      this.waxEditor?.draw(o);
       this.drawMeasurements(o);
       this.drawToolOverlay(o);
     }
@@ -628,7 +633,10 @@ export abstract class View {
       // macOS: Control+click arrives as a right click – treat it as a modified left click
       const button = IS_MAC && e.button === 2 && e.ctrlKey ? 0 : e.button;
       this.middleDown = button === 1;
+      const wax = this.app.wax;
       if (button === 2) this.drag = 'right';
+      // waxup panel open: a press on a tooth goes to the waxup first (Shift = scale, Ctrl = rotate)
+      else if (button === 0 && this.waxEditor && wax.editing && !this.app.segTool && !this.app.ruler && this.waxEditor.start(p, e)) this.drag = 'wax';
       else if (button === 1 || (button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey && !e.metaKey)))) this.drag = 'pan';
       else if (button === 0 && this.app.segTool && this.supportsTool(this.app.segTool)) this.drag = this.toolDown(p) ? 'nerve' : 'none';
       else if (button === 0 && this.app.ruler && this.measureKind) this.drag = this.rulerClick(p) ? 'ruler' : 'none';
@@ -685,6 +693,9 @@ export abstract class View {
         case 'left':
           this.onLeftDrag(p, this.last, e);
           break;
+        case 'wax':
+          this.waxEditor?.move(p);
+          break;
         default: {
           const app = this.app;
           const pend = app.pendingMeasurement;
@@ -711,7 +722,11 @@ export abstract class View {
           }
           if (app.ruler && this.measureKind) this.el.style.cursor = 'crosshair';
           else if (this.measureKind && this.hitMeasureEnd(p)) this.el.style.cursor = 'move';
-          else this.onHover(p, e);
+          else {
+            const wc = this.waxEditor && app.wax.editing ? this.waxEditor.hover(p) : null;
+            if (wc) this.el.style.cursor = wc;
+            else this.onHover(p, e);
+          }
         }
       }
       this.last = p;
@@ -736,6 +751,7 @@ export abstract class View {
         this.nerveDrag = null;
         this.app.changed();
       }
+      if (this.drag === 'wax') this.waxEditor?.end();
       if (this.drag === 'left') {
         const p = this.pos(e);
         const moved = Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 3;
@@ -753,6 +769,7 @@ export abstract class View {
     c.addEventListener('pointercancel', end);
     c.addEventListener('pointerleave', () => {
       this.app.reportCursor(this, null);
+      this.waxEditor?.leave();
       if (this.toolHover) {
         this.toolHover = null;
         this.app.requestRender();
@@ -1076,6 +1093,36 @@ export abstract class PlaneView extends View {
     container: this.el,
   });
 
+  protected override waxEditor: WaxupEditor | null = new WaxupEditor(this.app, {
+    pick: (p) => {
+      const fdi = waxAt(this, p);
+      const w = fdi !== null ? this.screenToWorld(p) : null;
+      return fdi !== null && w ? { fdi, w } : null;
+    },
+    // in the slice, at the anchor's distance from it
+    planePoint: (p, anchor) => {
+      const pl = this.currentPlane();
+      const w = this.screenToWorld(p, pl ?? undefined);
+      const s = this.worldToScreen(anchor, pl ?? undefined);
+      if (!pl || !w || !s) return null;
+      return add(w, scale(intoScreen(pl.u, pl.v), s[2]));
+    },
+    project: (w) => {
+      const s = this.worldToScreen(w);
+      return s ? [s[0], s[1]] : null;
+    },
+    viewAxis: () => {
+      const pl = this.currentPlane()!;
+      return intoScreen(pl.u, pl.v);
+    },
+    near: (w) => {
+      const s = this.worldToScreen(w);
+      return !!s && Math.abs(s[2]) < 3;
+    },
+    mmPerPx: () => this.vs.scale,
+    sculpt: false,
+  });
+
   protected measureScreen(w: Vec3): Pt | null {
     const s = this.worldToScreen(w);
     return s && Math.abs(s[2]) < 0.75 ? [s[0], s[1]] : null;
@@ -1127,8 +1174,9 @@ export abstract class PlaneView extends View {
 
   protected override drawScanOverlay(o: CanvasRenderingContext2D) {
     const pl = this.currentPlane();
-    if (!pl || !this.app.scans.length) return;
-    drawPlaneScans(this, this.app, o, pl.center, pl.u, pl.v, this.vs.scale, this.w, this.h);
+    if (!pl) return;
+    if (this.app.scans.length) drawPlaneScans(this, this.app, o, pl.center, pl.u, pl.v, this.vs.scale, this.w, this.h);
+    drawPlaneWax(this, this.app, o, pl.center, pl.u, pl.v, this.vs.scale, this.w, this.h);
   }
 
   protected geometryKey(): string | null {

@@ -40,6 +40,20 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
     ],
   },
   {
+    title: '② Plan · Waxup',
+    rows: [
+      ['Tooth chart', 'Click a position to add the tooth (set up along the curve) · click again to select · once more to remove'],
+      ['Drag a tooth', 'Move it in the view plane (3D view, slices or panoramic)'],
+      ['Shift + drag', 'Scale it · Ctrl + drag: rotate it around the view axis'],
+      ['Chain mode', 'Neighbours slide along the arch and keep their contacts'],
+      ['Mirror', 'The same change on the other side (13 → 23)'],
+      ['Whole jaw', 'Move / scale / rotate all teeth of the jaw together'],
+      ['Parts', 'Drag a blue dot: move a cusp or incisal edge (Shift scale, Ctrl rotate)'],
+      ['Freeform', '3D view: drag = add material · Ctrl = remove · Shift = smooth'],
+      ['Del / Esc', 'Remove / deselect the selected tooth'],
+    ],
+  },
+  {
     title: '3D view',
     rows: [
       ['Drag', 'Rotate'],

@@ -55,6 +55,7 @@ export function setMode(m: Mode) {
   moveView3d(m === 'mpr' ? mprLayout : planLayout);
   if (m !== 'plan' && app.drawing && !app.drawing.length) app.cancelDrawing(); // nothing drawn yet
   app.setMode(m);
+  rail.onChange();
   // … and it is already drawing: the first click in the axial view is the first point
   if (noCurve && !app.drawing && !app.placing) app.startDrawing();
 }
@@ -63,6 +64,16 @@ document.querySelectorAll<HTMLButtonElement>('[data-goto]').forEach((b) => (b.on
 
 // once the curve is drawn, the next step is placing implants
 app.onCurveDrawn = () => rail.select('implants');
+
+// teeth of the waxup react to the mouse only while its panel is open (so they never get in the
+// way of implant planning, where their outlines overlap the implant heads)
+rail.onChange = () => {
+  const on = app.mode === 'plan' && rail.current === 'waxup' && rail.open;
+  if (app.wax.editing === on) return;
+  app.wax.editing = on;
+  if (!on) app.wax.hover = null;
+  app.changed();
+};
 
 /** Start screen, rail badges, the unsaved dot on Save, and the one-time nudge towards ② Plan. */
 export function refreshLayout() {
@@ -81,6 +92,7 @@ export function refreshLayout() {
     segments: app.seg.segments.length,
     nerves: app.nerves.filter((n) => n.pts.length >= 2).length,
     scans: app.scans.length,
+    waxup: app.wax.model.teeth.length,
   });
   if (vol && !planOpened && !planNudged && app.mode === 'mpr') {
     planNudged = true;
