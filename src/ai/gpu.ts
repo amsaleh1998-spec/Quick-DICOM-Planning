@@ -43,16 +43,41 @@ export function gpuBuffersTooSmall(g: GpuInfo): boolean {
   return (l.maxStorageBufferBindingSize ?? 0) < 600e6 || (l.maxBufferSize ?? 0) < 600e6;
 }
 
-/** How to make Chrome / Edge use the dedicated graphics card on Windows (HTML). */
-export const DEDICATED_GPU_HELP = `
+/** Running in Microsoft Edge (rather than Chrome)? */
+export function inEdge(): boolean {
+  const brands = (navigator as unknown as { userAgentData?: { brands?: { brand: string }[] } }).userAgentData?.brands;
+  return brands ? brands.some((b) => /Edge/i.test(b.brand)) : /\bEdg\//.test(navigator.userAgent);
+}
+
+const EDGE_EXE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const WIN_GRAPHICS = '<b>Settings → System → Display → Graphics</b>';
+
+/**
+ * How to run only this app on the dedicated graphics card on Windows (HTML). Windows picks the
+ * GPU per program and the installed app runs inside its browser's program, so the app gets the
+ * NVIDIA card on its own by living in Microsoft Edge (a separate program) while Chrome stays as is.
+ */
+export function dedicatedGpuHelp(appUrl: string): string {
+  if (inEdge())
+    return `
   <ol>
-    <li>Windows <b>Settings → System → Display → Graphics</b>.</li>
-    <li>Find <b>Google Chrome</b> (or <b>Microsoft Edge</b>) in the list – if it is missing, add it with
-      <i>Browse</i>: <code>C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe</code>
-      (Edge: <code>C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe</code>).</li>
-    <li>Set its graphics preference to <b>High performance</b> (your NVIDIA card) and save.</li>
-    <li>Close <b>every</b> Chrome window, including the installed Quick DICOM Planning app, and open it again.</li>
+    <li>Windows ${WIN_GRAPHICS} → <b>Microsoft Edge</b> (missing? <i>Add desktop app → Browse</i>: <code>${EDGE_EXE}</code>)
+      → <b>High performance</b> (your NVIDIA card) → Save.</li>
+    <li>Close Edge completely (also its icon next to the clock, if any) and open Quick DICOM Planning again.</li>
   </ol>
-  <p>Alternatively: <b>NVIDIA Control Panel → Manage 3D settings → Program Settings</b> → Google Chrome →
-    <i>High-performance NVIDIA processor</i>. Keep the laptop plugged in – on battery the NVIDIA card is slowed down.
-    This dialog then shows the NVIDIA card.</p>`;
+  <p>Chrome is not affected. Keep the laptop plugged in – on battery the NVIDIA card is slowed down.</p>`;
+  return `
+  <p>Windows chooses the graphics card per program, and the installed app runs inside Chrome – so it cannot get the
+    NVIDIA card without Chrome getting it too. Run the app in <b>Microsoft Edge</b> instead (a separate program,
+    everything works the same) and give only Edge the NVIDIA card:</p>
+  <ol>
+    <li>Open <code>${appUrl}</code> in <b>Microsoft Edge</b> and click <b>Install app</b>.</li>
+    <li>Windows ${WIN_GRAPHICS} → <b>Microsoft Edge</b> (missing? <i>Add desktop app → Browse</i>: <code>${EDGE_EXE}</code>)
+      → <b>High performance</b> → Save.</li>
+    <li>Close Edge completely and start Quick DICOM Planning from the Start menu (the Edge copy).</li>
+    <li>Using the double-click helper? Run it again – it then opens scans in the Edge copy. The Chrome copy can be
+      removed (in Chrome: <code>chrome://apps</code> → right-click → Remove).</li>
+  </ol>
+  <p>Chrome keeps using the Intel graphics (pages you open in Edge itself would use the NVIDIA card too). Keep the
+    laptop plugged in – on battery the NVIDIA card is slowed down. This dialog then shows the NVIDIA card.</p>`;
+}

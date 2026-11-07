@@ -196,9 +196,12 @@ CPU); the scan is never uploaded. The model (62 MB) is downloaded on first use, 
 - The run happens in a background worker with progress, time estimate and *Cancel*; *Run in background* lets you keep
   working.
 - The dialog names the graphics card that will be used. **Laptops with two GPUs**: Chrome / Edge on Windows use the GPU
-  that Windows assigns to the browser, not the one a web page asks for, so they often run on the slow integrated Intel
-  graphics. Set the browser to *High performance* in Windows *Settings → System → Display → Graphics* (or in the NVIDIA
-  Control Panel) and restart it – the dialog shows these steps when it detects integrated Intel graphics.
+  that Windows assigns to the browser program, not the one a web page asks for, so they often run on the slow integrated
+  Intel graphics. Windows assigns GPUs per program and the installed app runs inside its browser, so to give **only
+  this app** the NVIDIA card, install it from **Microsoft Edge** and set just Edge to *High performance* in Windows
+  *Settings → System → Display → Graphics* (Chrome stays on the integrated graphics); run the double-click helper again
+  so it opens scans in the Edge copy (it prefers the Edge copy when the app is installed in both browsers). The dialog
+  shows these steps when it detects integrated Intel graphics.
 - The result appears as five ordinary segments (marked *AI*): show / hide, recolour, rename, delete, add parts by
   clicking, use them as the CBCT surface when aligning intraoral scans, and export them with *Export STL*. Their
   surfaces are smooth (the network's class margins are interpolated, not the voxel staircase). They are saved in

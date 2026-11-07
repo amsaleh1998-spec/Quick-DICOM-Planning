@@ -54,7 +54,11 @@ foreach ($p in ($progIds | Where-Object { $_ -and $_ -ne $ProgId } | Select-Obje
     $found += New-Object psobject -Property @{ ProgId = $p; Command = $cmd; Name = $name }
   }
 }
-$pick = $found | Where-Object { "$($_.Name) $($_.Command)" -like '*DICOM*' } | Select-Object -First 1
+$cands = @($found | Where-Object { "$($_.Name) $($_.Command)" -like '*DICOM*' })
+# installed in Chrome and Edge: use the Edge copy (Edge can be given the NVIDIA card on its own)
+$pick = $cands | Where-Object { $_.Command -match 'msedge' } | Select-Object -First 1
+if (-not $pick) { $pick = $cands | Select-Object -First 1 }
+if ($cands.Count -gt 1) { Write-Host '  The app is installed in more than one browser - using the Microsoft Edge copy.' }
 if (-not $pick -and $found.Count -eq 1) { $pick = $found[0] }
 if (-not $pick) {
   # slower fallback: look through all registered file types of this user

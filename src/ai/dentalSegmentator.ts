@@ -8,7 +8,7 @@ import type { App } from '../app';
 import { Vec3, fromFrame } from '../math';
 import { DS_CREDIT, DS_MODEL, contextBox, modelAxes, modelGrid, patchCount } from './dsPlan';
 import { nonzeroBox } from './dsEngine';
-import { DEDICATED_GPU_HELP, findGpu, gpuBuffersTooSmall } from './gpu';
+import { dedicatedGpuHelp, findGpu, gpuBuffersTooSmall, inEdge } from './gpu';
 import type { StartMsg, WorkerMsg } from './dsWorker';
 
 export interface AiHooks {
@@ -187,9 +187,8 @@ async function showGpu(el: HTMLDivElement) {
   } else if (g.integrated) {
     el.className = 'ai-gpu small warn';
     el.innerHTML = `Graphics card: <b>${g.label}</b> (integrated – slow). If this computer also has an <b>NVIDIA</b> or AMD
-      graphics card, the browser is not using it: Chrome on Windows ignores the page's request and uses the card set
-      for the browser in Windows.
-      <details><summary>Use the NVIDIA card (many times faster)</summary>${DEDICATED_GPU_HELP}</details>`;
+      graphics card, ${inEdge() ? 'Edge' : 'Chrome'} is not using it: on Windows the browser uses the card Windows assigns to it, whatever the page asks for.
+      <details><summary>Run only this app on the NVIDIA card (many times faster)</summary>${dedicatedGpuHelp(new URL('./', document.baseURI).href)}</details>`;
   } else {
     el.className = 'ai-gpu small ok';
     el.innerHTML = `Graphics card: <b>${g.label}</b>`;
