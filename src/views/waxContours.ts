@@ -3,7 +3,7 @@
 
 import type { App } from '../app';
 import type { ArchCurve } from '../curve';
-import type { Frame, Vec3 } from '../math';
+import { distToSegment2, type Frame, type Vec3 } from '../math';
 import { WaxTooth, toothKey, toothWorld } from '../waxup/waxup';
 import { meshPlaneSegments, nearestGrid, strokeSegments } from './scanContours';
 
@@ -119,10 +119,11 @@ export function drawPanoWax(owner: object, app: App, o: CanvasRenderingContext2D
   }
 }
 
-/** Tooth whose outline (as last drawn in this view) contains the screen point. */
-export function waxAt(owner: object, p: [number, number]): number | null {
+/** Tooth whose outline (as last drawn in this view) contains the screen point, or passes within `tol` px. */
+export function waxAt(owner: object, p: [number, number], tol = 6): number | null {
   const m = drawn.get(owner);
   if (!m) return null;
+  let near: { fdi: number; d: number } | null = null;
   for (const [fdi, seg] of m) {
     let inside = false;
     for (let i = 0; i < seg.length; i += 4) {
@@ -132,6 +133,10 @@ export function waxAt(owner: object, p: [number, number]): number | null {
       if (x > p[0]) inside = !inside;
     }
     if (inside) return fdi;
+    for (let i = 0; i < seg.length; i += 4) {
+      const d = Math.sqrt(distToSegment2(p[0], p[1], seg[i], seg[i + 1], seg[i + 2], seg[i + 3]));
+      if (d <= tol && (!near || d < near.d)) near = { fdi, d };
+    }
   }
-  return null;
+  return near?.fdi ?? null;
 }

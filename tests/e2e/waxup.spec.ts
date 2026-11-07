@@ -150,6 +150,44 @@ test('teeth are set up on the arch and edited like in a dental CAD', async ({ pa
   expect(await page.evaluate(() => window.app.wax.editing)).toBe(false);
 });
 
+test('a click on a tooth in 3D opens the waxup; parts mode still moves a tooth by its body', async ({ page }) => {
+  await curveAndLowerArch(page);
+  await page.click('[data-panel="implants"]');
+  expect(await page.evaluate(() => window.app.wax.editing)).toBe(false);
+  await page.evaluate(() => {
+    window.app.toggleMaximize(window.app.view3d);
+    window.app.view3d.setPreset('top');
+    window.app.changed();
+  });
+  await page.waitForTimeout(600);
+  // a drag across the teeth (another panel open) rotates the view, the tooth stays
+  let q = await in3d(page, 36);
+  const c0 = await center(page, 36);
+  await page.mouse.move(q[0], q[1]);
+  await page.mouse.down();
+  await page.mouse.move(q[0] + 40, q[1], { steps: 4 });
+  await page.mouse.up();
+  expect(dist(await center(page, 36), c0)).toBeLessThan(1e-6);
+  expect(await page.evaluate(() => window.app.wax.editing)).toBe(false);
+  // a click opens the waxup panel with the tooth selected
+  await page.evaluate(() => (window.app.view3d.setPreset('top'), window.app.changed()));
+  await page.waitForTimeout(400);
+  q = await in3d(page, 36);
+  await page.mouse.click(q[0], q[1]);
+  await expect(page.locator('#panel-waxup')).toBeVisible();
+  expect(await page.evaluate(() => [window.app.wax.editing, window.app.wax.selected])).toEqual([true, 36]);
+  await expect(page.locator('#status-msg')).toContainText('Tooth 36');
+  // parts tool: dragging the body (not a dot) moves the tooth
+  await page.click('[data-wt="parts"]');
+  q = await in3d(page, 46);
+  const m0 = await center(page, 46);
+  await page.mouse.move(q[0], q[1]);
+  await page.mouse.down();
+  await page.mouse.move(q[0] + 25, q[1], { steps: 4 });
+  await page.mouse.up();
+  expect(dist(await center(page, 46), m0)).toBeGreaterThan(1);
+});
+
 test('mirror mode changes the other side too', async ({ page }) => {
   await curveAndLowerArch(page);
   await page.check('#wax-mirror');
