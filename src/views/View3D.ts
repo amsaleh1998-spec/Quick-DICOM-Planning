@@ -890,18 +890,51 @@ export class View3D extends View {
     sculpt: true,
   });
 
-  /** Nearest waxup tooth along the ray through a screen point. */
+  /** Nearest waxup tooth along the ray through a screen point (or passing within a few pixels of it). */
   private toothAt(p: Pt): { fdi: number; w: Vec3 } | null {
     const { o, d } = this.rayAt(p);
     let best: { fdi: number; w: Vec3; t: number } | null = null;
-    for (const t of this.app.wax.shown()) {
+    const teeth = this.app.wax.shown();
+    for (const t of teeth) {
       const wm = toothWorld(t);
       const [tn, tf] = boxHit(o, d, wm.min, wm.max);
       if (tn > tf || tf < 0 || (best && tn > best.t)) continue;
       const h = rayMesh(wm.pos, t.idx, o, d);
       if (h && (!best || h.t < best.t)) best = { fdi: t.fdi, w: h.p, t: h.t };
     }
-    return best;
+    if (best || !teeth.length) return best;
+    // near miss: the vertex closest to the ray, within 6 px
+    let near: { fdi: number; w: Vec3; d: number } | null = null;
+    for (const t of teeth) {
+      const wm = toothWorld(t);
+      const tol = 6 * this.waxEditorScale(wm.min, wm.max);
+      const lo: Vec3 = [wm.min[0] - tol, wm.min[1] - tol, wm.min[2] - tol];
+      const hi: Vec3 = [wm.max[0] + tol, wm.max[1] + tol, wm.max[2] + tol];
+      const [tn, tf] = boxHit(o, d, lo, hi);
+      if (tn > tf || tf < 0) continue;
+      const P = wm.pos;
+      for (let i = 0; i < P.length; i += 3) {
+        const qx = P[i] - o[0], qy = P[i + 1] - o[1], qz = P[i + 2] - o[2];
+        const s = qx * d[0] + qy * d[1] + qz * d[2];
+        if (s <= 0) continue;
+        const dd = Math.sqrt(Math.max(0, qx * qx + qy * qy + qz * qz - s * s));
+        if (dd <= tol && (!near || dd < near.d)) near = { fdi: t.fdi, w: [P[i], P[i + 1], P[i + 2]], d: dd };
+      }
+    }
+    return near && { fdi: near.fdi, w: near.w };
+  }
+
+  /** mm per pixel at the middle of a box (for pick tolerances). */
+  private waxEditorScale(min: Vec3, max: Vec3): number {
+    const c: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+    const z = Math.max(1, dot(sub(c, this.camera().pos), this.fwd));
+    return (2 * z * Math.tan(FOV / 2)) / Math.max(1, this.h);
+  }
+
+  /** In ② Plan a tooth can be grabbed in 3D from any panel – unless an implant is under the cursor. */
+  protected override waxAnyPanel(p: Pt): boolean {
+    const app = this.app;
+    return app.mode === 'plan' && app.wax.model.teeth.length > 0 && !this.editor.hoverCursor(p);
   }
 
   /** Nearest implant (body or abutment) under a screen point. */
@@ -1020,6 +1053,8 @@ export class View3D extends View {
     }
     this.orbiting = false;
     this.app.requestRender();
+    // a click on a waxup tooth with another panel open: edit the waxup
+    if (!moved && !app.segTool && !app.ruler && this.waxAnyPanel(p) && this.waxEditor?.clickToEdit(p)) return;
     if (moved || app.segTool !== 'grow') return;
     const w = this.pickSurface(p);
     if (w) app.growAt(w);
