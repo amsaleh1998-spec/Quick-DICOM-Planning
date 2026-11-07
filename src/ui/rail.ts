@@ -28,7 +28,7 @@ function load(): Saved {
   } catch {
     /* defaults */
   }
-  return { mpr: 'reorient', plan: 'implants', collapsed: false };
+  return { mpr: 'reorient', plan: 'curve', collapsed: false };
 }
 
 export class Rail {
@@ -61,6 +61,14 @@ export class Rail {
 
   setMode(m: Mode) {
     this.mode = m;
+    this.render();
+  }
+
+  /** Make a panel the current one of this mode without opening a hidden side panel. */
+  prefer(id: PanelId) {
+    if (!PANELS[id].modes.includes(this.mode) || id === this.current) return;
+    this.state[this.mode] = id;
+    this.save();
     this.render();
   }
 
@@ -103,7 +111,7 @@ export class Rail {
   }
 
   private render() {
-    if (!PANELS[this.state[this.mode]].modes.includes(this.mode)) this.state[this.mode] = this.mode === 'mpr' ? 'reorient' : 'implants';
+    if (!PANELS[this.state[this.mode]].modes.includes(this.mode)) this.state[this.mode] = this.mode === 'mpr' ? 'reorient' : 'curve';
     const cur = this.current;
     const collapsed = this.state.collapsed;
     for (const [id, b] of this.buttons) {

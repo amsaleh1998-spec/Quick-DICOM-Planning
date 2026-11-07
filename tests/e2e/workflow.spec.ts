@@ -17,7 +17,10 @@ test('opens a DICOM series from the start screen, straight into Plan when set', 
   await page.waitForFunction(() => !!window.app.vol);
   await expect(page.locator('#start-screen')).toBeHidden();
   expect(await page.evaluate(() => window.app.mode)).toBe('plan');
-  await expect(page.locator('#panel-plan')).toBeVisible();
+  // planning starts with the panoramic curve
+  await expect(page.locator('#panel-curve')).toBeVisible();
+  await expect(page.locator('#btn-draw-curve')).toHaveText('Finish curve'); // already drawing
+  expect(await page.evaluate(() => window.app.drawing)).toEqual([]);
   await expect(page.locator('#patient-badge')).toHaveText('TEST, Loader');
   await expect(page).toHaveTitle(/^TEST, Loader/);
   // the patient popover shows the volume and the DICOM tags
@@ -30,7 +33,9 @@ test('opens a DICOM series from the start screen, straight into Plan when set', 
 test('plans implants, segments, imports a scan, exports, saves and reopens the project', async ({ page }) => {
   await openDemo(page);
   await page.click('[data-mode="plan"]');
+  await expect(page.locator('#panel-curve')).toBeVisible();
   // implant from the panel button
+  await page.click('[data-panel="implants"]');
   await page.click('#btn-add-lower');
   await clickView(page, 'planAxial', 0.3, 0.75);
   await expect.poll(() => page.evaluate(() => window.app.implants.length)).toBe(1);
@@ -95,6 +100,23 @@ test('plans implants, segments, imports a scan, exports, saves and reopens the p
     .poll(() => page.evaluate(() => [window.app.implants.length, window.app.seg.segments.length, window.app.scans.length, window.app.implants[0]?.diameter]))
     .toEqual([1, 1, 1, 4.5]);
   await expect(page.locator('#patient-badge')).toContainText('ROE');
+});
+
+test('Plan opens on the panoramic curve until there is one, then on the last panel used', async ({ page }) => {
+  await openDemo(page);
+  await page.click('[data-mode="plan"]');
+  await expect(page.locator('#panel-curve')).toBeVisible();
+  expect(await page.evaluate(() => !!window.app.drawing)).toBe(true);
+  await page.click('[data-panel="implants"]');
+  await page.click('[data-mode="mpr"]');
+  expect(await page.evaluate(() => window.app.drawing)).toBeNull(); // nothing drawn: dropped
+  await page.click('[data-mode="plan"]');
+  await expect(page.locator('#panel-curve')).toBeVisible(); // still no curve
+  await page.evaluate(() => window.app.addCurve([[-20, 0], [0, 15], [20, 0]]));
+  await page.click('[data-panel="implants"]');
+  await page.click('[data-mode="mpr"]');
+  await page.click('[data-mode="plan"]');
+  await expect(page.locator('#panel-plan')).toBeVisible();
 });
 
 test('rail, help sheet and keyboard', async ({ page }) => {
