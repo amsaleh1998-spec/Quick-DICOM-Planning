@@ -324,6 +324,7 @@ export function applyProjectState(app: App, file: ProjectFile, entries?: Map<str
   app.activeScanId = st.activeScanId ?? null;
   app.showScanContours = st.showScanContours ?? true;
   app.resetHistory();
+  app.markSaved();
   app.onWindowChange();
   app.changed();
 }

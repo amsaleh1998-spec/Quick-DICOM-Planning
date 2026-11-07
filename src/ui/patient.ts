@@ -29,6 +29,7 @@ const onNameInput = () => {
   if (!app.vol) return;
   // stored as a DICOM person name (Last^First) – saved with the project
   app.vol.info.patientName = joinPersonName(ptLast.value, ptFirst.value);
+  app.markUnsaved();
   updatePatientBadge();
 };
 ptLast.oninput = onNameInput;
