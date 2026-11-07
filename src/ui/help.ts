@@ -34,7 +34,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['Implant outline', 'Drag side = diameter · drag apical end = length (click the live value to type it)'],
       ['C / A handles', 'C rotates around the apex, A around the platform'],
       ['Del', 'Delete the selected implant'],
-      ['Ctrl+Z / Ctrl+Y', 'Undo / redo implant changes'],
+      ['Ctrl+Z / Ctrl+Y', 'Undo / redo any change of the plan: implants, curves, segments, nerves, scans, rulers'],
       ['Esc', 'Cancel / deselect'],
       ['Double-click', 'An implant in the list: rename it'],
     ],
