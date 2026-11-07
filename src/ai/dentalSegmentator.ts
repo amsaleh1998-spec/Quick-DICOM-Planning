@@ -6,15 +6,13 @@
 
 import type { App } from '../app';
 import { Vec3, fromFrame } from '../math';
-import { DS_CREDIT, DS_LABELS, DS_MODEL, contextBox, modelAxes, modelGrid, patchCount } from './dsPlan';
+import { DS_CREDIT, DS_MODEL, contextBox, modelAxes, modelGrid, patchCount } from './dsPlan';
 import { nonzeroBox } from './dsEngine';
 import type { StartMsg, WorkerMsg } from './dsWorker';
 
 export interface AiHooks {
   setStatus(text: string, error?: boolean): void;
 }
-
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /**
  * World boxes (CT voxel centres) for a run: `out` = where labels are written (whole scan or crop
@@ -93,8 +91,9 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
         <button class="modal-close" title="Close (Esc)">×</button>
       </header>
       <div class="ai-setup">
-        <p class="intro">Segments the <b>${DS_LABELS.map((l) => esc(l.name.toLowerCase())).join('</b>, <b>').replace(/, <b>([^<]*)<\/b>$/, ' and <b>$1</b>')}</b>
-          with <b>DentalSegmentator</b>, a deep-learning model for CBCT and CT. It runs entirely in this browser – the scan never leaves your computer.</p>
+        <p class="intro">Segments the <b>maxilla &amp; upper skull</b>, the <b>mandible</b>, the <b>upper</b> and <b>lower teeth</b> and the
+          <b>mandibular canals</b> with <b>DentalSegmentator</b>, a deep-learning model for CBCT and CT. It runs entirely in this browser – the
+          scan never leaves your computer.</p>
         <h4>Region</h4>
         <label class="check"><input type="radio" name="ai-region" value="all" ${cropped ? '' : 'checked'} /> Whole scan</label>
         <label class="check ${cropped ? '' : 'disabled'}"><input type="radio" name="ai-region" value="crop" ${cropped ? 'checked' : 'disabled'} /> Inside the crop box ${cropped ? '(faster)' : '(no crop box set)'}</label>
