@@ -16,6 +16,11 @@ import { isPhone } from './uiMode';
 import { filesFromDataTransfer, loadDicomFiles } from './dicom';
 import { createPhantom } from './volume';
 import { readMeshFile } from './meshio';
+import { Rail } from './ui/rail';
+import { bindPopover, closePopovers } from './ui/popover';
+import { showHelp } from './ui/help';
+import { mountViewTools } from './ui/viewTools';
+import { RecentEntry, RecentSource, addRecent, ago, listRecent, readRecent, removeRecent } from './ui/recent';
 import { SCAN_KINDS, Scan, ScanKind, createScan, placementLabel } from './scans';
 import { showAlignment, showPlacement } from './alignUi';
 
@@ -41,6 +46,9 @@ planLayout.append(app.planAxial.el, app.pano.el, ...app.crossViews.map((v) => v.
 app.view3d.el.style.gridArea = 'v3d';
 mprLayout.append(app.view3d.el);
 
+mountViewTools(app.view3d.el, app.pano.el);
+const rail = new Rail($('rail'), $('sidebar'), $('status-hint'));
+
 /** The 3D view lives in whichever layout is active. */
 function moveView3d(target: HTMLElement) {
   const el = app.view3d.el;
@@ -54,9 +62,14 @@ function moveView3d(target: HTMLElement) {
 
 // ---- status / loading ---------------------------------------------------------
 const statusMsg = $('status-msg');
+let statusTimer = 0;
+/** Status bar message; ordinary messages give way to the panel hint after a while, errors stay. */
 function setStatus(msg: string, error = false) {
   statusMsg.textContent = msg;
+  statusMsg.title = msg;
   statusMsg.classList.toggle('error', error);
+  clearTimeout(statusTimer);
+  if (msg && !error) statusTimer = window.setTimeout(() => statusMsg.textContent === msg && (statusMsg.textContent = ''), 12000);
 }
 app.onCursor = (t) => ($('status-cursor').textContent = t);
 
@@ -97,8 +110,9 @@ async function loadFiles(files: File[]): Promise<string | null> {
     showLoading('Reading files…', 0);
     const vol = await loadDicomFiles(files, (stage, f) => showLoading(`${stage}…`, f));
     app.setVolume(vol);
-    setMode('mpr');
+    setMode(openInPlan() ? 'plan' : 'mpr');
     setStatus(`Loaded ${vol.nx}×${vol.ny}×${vol.nz} voxels from ${vol.info.source}`);
+    noteRecent();
     return null;
   } catch (e) {
     console.error(e);
@@ -139,6 +153,7 @@ async function loadFolderOf(hit: { root: ScanDir; path: string[] }) {
   try {
     showLoading('Reading folder…', 0);
     const dir = await parentOf(hit);
+    pendingRecent = { kind: 'folder', handles: [dir as unknown as FileSystemHandle], depth: 0 };
     const files = await filesFromDirectory(dir as unknown as DirHandle, 0);
     const err = await loadFiles(files.length ? files : launchFile ? [launchFile] : []);
     if (err) showLaunchBanner('error', err);
@@ -218,6 +233,7 @@ launchQueue?.setConsumer(async (params) => {
   hideLaunchBanner();
   launchHandle = handles[0];
   launchFile = null;
+  pendingRecent = handles.length <= 2 ? { kind: /\.(zip|qdp)$/i.test(handles[0].name) ? 'project' : 'files', handles, depth: 0 } : null;
   const what = handles.length > 1 ? `${handles.length} files` : `“${handles[0].name}”`;
   console.info('[launch] received', handles.map((h) => h.name));
   setStatus(`Opening ${what}…`);
@@ -459,6 +475,7 @@ async function openProject(file: File): Promise<string | null> {
     setMode(pf.state.mode);
     applyProjectState(app, pf, entries);
     setStatus(`Project "${file.name}" restored (saved ${new Date(pf.savedAt).toLocaleString()})`);
+    noteRecent();
     return null;
   } catch (e) {
     console.error(e);
@@ -547,7 +564,7 @@ const exportHooks = {
   deliver: (blob: Blob, name: string, type: FileTypeSpec) => deliverFile(blob, name, type),
 };
 $('btn-export-stl').onclick = () => showExportStl(app, exportHooks);
-$('btn-open-project').onclick = () => projectInput.click();
+$('btn-open-project').onclick = () => void pickAndOpen('project');
 projectInput.onchange = () => {
   const f = projectInput.files?.[0];
   if (f) openProject(f);
@@ -557,8 +574,141 @@ projectInput.onchange = () => {
 // ---- toolbar -------------------------------------------------------------------
 const fileInput = $<HTMLInputElement>('file-input');
 const folderInput = $<HTMLInputElement>('folder-input');
-$('btn-open').onclick = () => fileInput.click();
-$('btn-open-folder').onclick = () => folderInput.click();
+bindPopover($('btn-open-menu'), $('pop-open'), { onOpen: () => void renderRecent() });
+bindPopover($('btn-export-menu'), $('pop-export'));
+bindPopover($('patient-chip'), $('pop-patient'));
+bindPopover($('btn-settings'), $('pop-settings'), { align: 'right' });
+$('btn-export-save').onclick = () => saveProject();
+$('btn-help').onclick = () => showHelp({ trackpadGuide: () => showTrackpadGuide() });
+
+// "Open scans directly in ② Plan"
+const OPEN_PLAN_KEY = 'qdp.openPlan';
+function openInPlan(): boolean {
+  try {
+    return localStorage.getItem(OPEN_PLAN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+const setOpenPlan = $<HTMLInputElement>('set-open-plan');
+setOpenPlan.checked = openInPlan();
+setOpenPlan.onchange = () => {
+  try {
+    localStorage.setItem(OPEN_PLAN_KEY, setOpenPlan.checked ? '1' : '0');
+  } catch {
+    /* not remembered */
+  }
+};
+
+// File pickers give handles (Chrome / Edge), so the scan can be listed under Recent; elsewhere
+// (or when a picker is not allowed) the ordinary file dialogs are used.
+type OpenPicker = (o: unknown) => Promise<FileSystemFileHandle[]>;
+type DirPicker = (o: unknown) => Promise<FileSystemDirectoryHandle>;
+const pickers = window as unknown as { showOpenFilePicker?: OpenPicker; showDirectoryPicker?: DirPicker };
+let pendingRecent: RecentSource | null = null;
+
+/** The load that just succeeded becomes the first Recent entry. */
+function noteRecent() {
+  const src = pendingRecent;
+  pendingRecent = null;
+  const info = app.vol?.info;
+  if (!src || !info) return;
+  const name = formatPatientName(info.patientName) || info.seriesDescription?.trim() || src.handles[0]?.name || 'Scan';
+  const sub = [info.studyDate ? formatDicomDate(info.studyDate) : '', src.kind === 'project' ? 'project' : src.kind === 'folder' ? 'folder' : 'file'].filter(Boolean).join(' · ');
+  void addRecent(src, name, sub).then(() => renderRecent());
+}
+
+async function pickAndOpen(kind: 'files' | 'folder' | 'project') {
+  try {
+    if (kind === 'folder') {
+      if (!pickers.showDirectoryPicker) return folderInput.click();
+      const dir = await pickers.showDirectoryPicker({ id: 'qdp-open', mode: 'read' });
+      showLoading('Reading folder…', 0);
+      const files = await filesFromDirectory(dir as unknown as DirHandle, 4);
+      pendingRecent = { kind: 'folder', handles: [dir], depth: 4 };
+      await loadFiles(files);
+      return;
+    }
+    if (!pickers.showOpenFilePicker) return kind === 'project' ? projectInput.click() : fileInput.click();
+    const handles = await pickers.showOpenFilePicker(
+      kind === 'project'
+        ? { id: 'qdp-open', types: [{ description: 'Quick DICOM Planning project', accept: { 'application/zip': ['.zip', '.qdp'] } }] }
+        : { id: 'qdp-open', multiple: true },
+    );
+    const files = await Promise.all(handles.map((h) => h.getFile()));
+    pendingRecent = handles.length <= 2 ? { kind: kind === 'project' || /\.(zip|qdp)$/i.test(files[0].name) ? 'project' : 'files', handles, depth: 0 } : null;
+    if (kind === 'project') await openProject(files[0]);
+    else await loadFiles(files);
+  } catch (e) {
+    const name = (e as Error).name;
+    if (name === 'AbortError') return;
+    if (name === 'SecurityError' || name === 'TypeError') {
+      // pickers not allowed here (e.g. inside a frame): ordinary dialogs
+      (kind === 'folder' ? folderInput : kind === 'project' ? projectInput : fileInput).click();
+      return;
+    }
+    setStatus((e as Error).message, true);
+  } finally {
+    hideLoading();
+  }
+}
+
+async function openRecentEntry(e: RecentEntry) {
+  closePopovers();
+  try {
+    const files = await readRecent(e);
+    pendingRecent = { kind: e.kind, handles: e.handles, depth: e.depth };
+    if (e.kind === 'project') await openProject(files[0]);
+    else await loadFiles(files);
+  } catch (err) {
+    const gone = (err as Error).name === 'NotFoundError';
+    if (gone) await removeRecent(e.id);
+    setStatus(gone ? `“${e.label}” is no longer there (moved or deleted) – removed from the recent list.` : (err as Error).message, true);
+    void renderRecent();
+  }
+}
+
+/** Recent list in the Open menu and on the start screen. */
+async function renderRecent() {
+  const list = await listRecent();
+  const html = (e: RecentEntry) =>
+    `<span class="name">${escapeHtml(e.label)}</span><span class="dim">${escapeHtml(e.sub)} · ${escapeHtml(ago(e.when))}</span>`;
+  const menu = $('open-recent');
+  menu.classList.toggle('hidden', !list.length);
+  const items = menu.querySelector<HTMLElement>('.recent-items')!;
+  items.innerHTML = '';
+  for (const e of list) {
+    const b = document.createElement('button');
+    b.setAttribute('role', 'menuitem');
+    b.className = 'recent-item';
+    b.innerHTML = html(e);
+    b.onclick = () => void openRecentEntry(e);
+    items.append(b);
+  }
+  const start = $('start-recent');
+  start.classList.toggle('hidden', !list.length);
+  const ul = start.querySelector<HTMLElement>('ul')!;
+  ul.innerHTML = '';
+  for (const e of list) {
+    const li = document.createElement('li');
+    li.innerHTML = html(e);
+    li.title = 'Open again';
+    li.onclick = () => void openRecentEntry(e);
+    ul.append(li);
+  }
+}
+void renderRecent();
+
+// start screen (no scan open)
+$('start-screen').addEventListener('click', (e) => {
+  const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+  if (act === 'open-files') void pickAndOpen('files');
+  else if (act === 'open-folder') void pickAndOpen('folder');
+  else if (act === 'open-project') void pickAndOpen('project');
+  else if (act === 'demo') $('btn-demo').click();
+});
+$('btn-open').onclick = () => void pickAndOpen('files');
+$('btn-open-folder').onclick = () => void pickAndOpen('folder');
 fileInput.onchange = () => {
   loadFiles(Array.from(fileInput.files ?? []));
   fileInput.value = '';
@@ -624,8 +774,7 @@ function setMode(m: Mode) {
   tabButtons.forEach((b) => b.classList.toggle('active', b.dataset.mode === m));
   mprLayout.classList.toggle('hidden', m !== 'mpr');
   planLayout.classList.toggle('hidden', m !== 'plan');
-  $('panel-mpr').classList.toggle('hidden', m !== 'mpr');
-  $('panel-plan').classList.toggle('hidden', m !== 'plan');
+  rail.setMode(m);
   moveView3d(m === 'mpr' ? mprLayout : planLayout);
   app.setMode(m);
 }
@@ -1058,7 +1207,12 @@ window.addEventListener('keydown', (e) => {
     saveProject();
     return;
   }
-  if ((e.target as HTMLElement).tagName === 'INPUT') return;
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'o' || e.key === 'O')) {
+    e.preventDefault();
+    void pickAndOpen('files');
+    return;
+  }
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target as HTMLElement).tagName)) return;
   // Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z or Ctrl+Y redo (implant changes; unlimited)
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y')) {
     e.preventDefault();
@@ -1098,6 +1252,8 @@ window.addEventListener('keydown', (e) => {
     app.toggleMaximize(app.activeView);
   } else if ((e.key === '1' || e.key === '2') && !e.ctrlKey && !e.metaKey && !e.altKey) {
     setMode(e.key === '1' ? 'mpr' : 'plan');
+  } else if (e.key === '?') {
+    showHelp({ trackpadGuide: () => showTrackpadGuide() });
   }
 });
 
@@ -1107,9 +1263,12 @@ const ptLast = $<HTMLInputElement>('pt-last');
 const ptFirst = $<HTMLInputElement>('pt-first');
 function updatePatientBadge() {
   const badge = $('patient-badge');
-  const label = app.vol ? formatPatientName(app.vol.info.patientName) : '';
-  badge.textContent = label;
-  badge.classList.toggle('hidden', !label);
+  const info = app.vol?.info;
+  const label = info ? formatPatientName(info.patientName) || info.seriesDescription?.trim() || 'Unnamed scan' : 'No scan open';
+  if (badge.textContent !== label) badge.textContent = label;
+  const date = info?.studyDate ? `${info.modality === 'CT' ? 'CT' : 'CBCT'} ${formatDicomDate(info.studyDate)}` : '';
+  if ($('patient-date').textContent !== date) $('patient-date').textContent = date;
+  $('patient-chip').classList.toggle('empty', !info);
   updateWindowTitle();
 }
 /** Window / tab title starts with the patient (and scan date), so several open scans are easy to tell apart. */
@@ -1174,6 +1333,20 @@ $('btn-show-all-implants').onclick = () => app.showAllImplants();
 const listItems = new Map<number, HTMLLIElement>();
 function refreshUi() {
   const vol = app.vol;
+  $('start-screen').classList.toggle('hidden', !!vol);
+  rail.setBadges({
+    implants: app.implants.length,
+    segments: app.seg.segments.length,
+    nerves: app.nerves.filter((n) => n.pts.length >= 2).length,
+    scans: app.scans.length,
+  });
+  const vrName = { surface: 'Surface', translucent: 'Translucent', mip: 'MIP' }[app.vr.mode];
+  const vrLabel = app.vr.mode === 'mip' ? `${vrName} ▾` : `${vrName} ${Math.round(app.vr.lo)}+ ▾`;
+  if ($('btn-vr-menu').textContent !== vrLabel) $('btn-vr-menu').textContent = vrLabel;
+  const panoLabel = `${app.panoThickness()} mm · sections ${app.crossSpacing} mm ▾`;
+  if ($('btn-pano-menu').textContent !== panoLabel) $('btn-pano-menu').textContent = panoLabel;
+  const desktopVisible = ['btn-install', 'btn-helper', 'btn-mobile'].some((id) => !$(id).classList.contains('hidden'));
+  $('settings-desktop').classList.toggle('hidden', !desktopVisible);
   // patient
   const info = vol?.info;
   $('patient-fields').classList.toggle('hidden', !vol);
@@ -1240,7 +1413,7 @@ function refreshUi() {
   if (curveList.innerHTML !== listHtml) curveList.innerHTML = listHtml;
   for (const jaw of ['upper', 'lower'] as Jaw[]) {
     const b = $(`btn-add-${jaw}`);
-    b.textContent = app.placing === jaw ? 'Click in a view… (Esc)' : `Add ${jaw} implant`;
+    b.textContent = app.placing === jaw ? 'Click in a view… (Esc)' : `+ ${jaw === 'upper' ? 'Upper' : 'Lower'} implant`;
     b.classList.toggle('active', app.placing === jaw);
   }
   $('btn-ruler').classList.toggle('active', app.ruler);

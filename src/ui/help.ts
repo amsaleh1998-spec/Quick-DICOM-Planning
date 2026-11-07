@@ -1,0 +1,105 @@
+// "?" – every mouse and keyboard shortcut in one place (they used to fill the side panel).
+
+const SECTIONS: { title: string; rows: [string, string][] }[] = [
+  {
+    title: 'Navigate (all slices)',
+    rows: [
+      ['Click / drag', 'Move the crosshair'],
+      ['Hold Shift', 'Crosshair follows the mouse'],
+      ['Wheel', 'Scroll slices'],
+      ['Ctrl+wheel', 'Zoom (or right drag, see ⚙)'],
+      ['Alt / middle drag', 'Pan'],
+      ['F', 'Fit all views'],
+      ['M or ⤢', 'Maximize / restore the view'],
+      ['R', 'Ruler: click start, click end · drag an end to adjust · Del removes the hovered one'],
+      ['1 / 2', '① Reorient / ② Plan'],
+    ],
+  },
+  {
+    title: '① Reorient',
+    rows: [
+      ['Ctrl+Alt+drag', 'Rotate the other planes around this view (or the Rotate tool)'],
+      ['Crop tool', 'Drag the blue box edges'],
+    ],
+  },
+  {
+    title: '② Plan',
+    rows: [
+      ['Draw curve', 'Hold the left button and drag along the arch, or click point by point'],
+      ['Axial', 'Wheel = level · drag curve points · double-click curve = add / point = remove'],
+      ['Panoramic', 'Wheel = buccal / lingual · Alt+wheel = along the curve · click = jump'],
+      ['Cross-sections', 'Wheel = 1 mm along the curve'],
+      ['Tangential', 'Wheel = rotate 360° around the selected implant'],
+      ['Implant body', 'Drag = move'],
+      ['Implant outline', 'Drag side = diameter · drag apical end = length (click the live value to type it)'],
+      ['C / A handles', 'C rotates around the apex, A around the platform'],
+      ['Del', 'Delete the selected implant'],
+      ['Ctrl+Z / Ctrl+Y', 'Undo / redo implant changes'],
+      ['Esc', 'Cancel / deselect'],
+      ['Double-click', 'An implant in the list: rename it'],
+    ],
+  },
+  {
+    title: '3D view',
+    rows: [
+      ['Drag', 'Rotate'],
+      ['Wheel', 'Zoom'],
+      ['Alt / Shift / middle drag', 'Pan'],
+      ['Middle-click', 'Rotation centre at that surface point'],
+      ['Double-click or ⟲', 'Reset the view'],
+      ['Drag an implant', 'Move it (C / A handles rotate)'],
+    ],
+  },
+  {
+    title: 'Files',
+    rows: [
+      ['Ctrl+O', 'Open a CBCT'],
+      ['Ctrl+S', 'Save the project'],
+      ['Drop', 'DICOM files / folder / ZIP / project, or STL / PLY / OBJ scans'],
+    ],
+  },
+];
+
+let el: HTMLDivElement | null = null;
+
+export function showHelp(extra: { trackpadGuide: () => void }) {
+  if (el) {
+    el.remove();
+    el = null;
+    return;
+  }
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+  el = document.createElement('div');
+  el.className = 'modal-backdrop';
+  el.innerHTML = `
+    <div class="modal help-sheet" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <header><h2 id="help-title">Shortcuts and help</h2><button class="modal-close" title="Close (Esc)">×</button></header>
+      <div class="help-cols">
+        ${SECTIONS.map(
+          (s) => `<section><h4>${esc(s.title)}</h4><dl>${s.rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></section>`,
+        ).join('')}
+      </div>
+      <footer><span class="muted small">Using a Mac trackpad? Switch the input in ⚙ Settings.</span><button class="help-tp">Trackpad guide</button></footer>
+    </div>`;
+  const close = () => {
+    el?.remove();
+    el = null;
+    window.removeEventListener('keydown', onKey, true);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' || e.key === '?') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      close();
+    }
+  };
+  window.addEventListener('keydown', onKey, true);
+  el.addEventListener('pointerdown', (e) => e.target === el && close());
+  el.querySelector<HTMLButtonElement>('.modal-close')!.onclick = close;
+  el.querySelector<HTMLButtonElement>('.help-tp')!.onclick = () => {
+    close();
+    extra.trackpadGuide();
+  };
+  document.body.append(el);
+  el.querySelector<HTMLButtonElement>('.modal-close')!.focus();
+}

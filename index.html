@@ -35,82 +35,67 @@
   <body>
     <div id="app">
       <header id="toolbar">
-        <div class="brand">Quick&nbsp;DICOM&nbsp;Planning</div>
-        <div id="patient-badge" class="patient-badge hidden" title="Patient of the open scan"></div>
-        <div class="group">
-          <button id="btn-open" title="Select one or more DICOM files">Open files</button>
-          <button id="btn-open-folder" title="Select a folder containing a DICOM series">Open folder</button>
-          <button id="btn-demo" title="Load a synthetic mandible phantom">Demo volume</button>
-        </div>
-        <div class="group">
-          <button id="btn-save-project" title="Save the CBCT, implants and the current views to a project file (Ctrl+S)">Save project</button>
-          <button id="btn-open-project" title="Continue a saved project (.qdp.zip)">Open project</button>
-          <button id="btn-export-stl" title="Export the 3D render surface, segments, implants, abutments and nerve canals as STL files">Export STL</button>
-        </div>
+        <div class="brand" title="Quick DICOM Planning">QDP</div>
+        <button id="patient-chip" class="patient-chip" title="Patient and scan details, DICOM tags">
+          <span id="patient-badge" class="pc-name">No scan open</span><span id="patient-date" class="pc-date"></span>
+          <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+        <span class="tb-sep"></span>
+        <button id="btn-open-menu" title="Open a CBCT, a folder, a project or a recent scan (Ctrl+O)">Open ▾</button>
+        <button id="btn-save-project" title="Save the CBCT, plan and views to a project file (Ctrl+S)">Save</button>
+        <button id="btn-export-menu" title="Export STL files">Export ▾</button>
+        <span class="tb-sep"></span>
         <div class="mode-switch">
-          <span class="mode-label">Mode</span>
           <div class="tabs" role="tablist">
-            <button data-mode="mpr" class="active" role="tab" title="Step 1 – reorient and crop the scan (key 1)"><span class="step">1</span>MPR / Reorient</button>
-            <button data-mode="plan" role="tab" title="Step 2 – panoramic curve, cross-sections and implants (key 2)"><span class="step">2</span>Implant planning</button>
+            <button data-mode="mpr" class="active" role="tab" title="Step 1 – straighten and crop the scan (key 1)"><span class="step">1</span>Reorient</button>
+            <button data-mode="plan" role="tab" title="Step 2 – panoramic curve, cross-sections and implants (key 2)"><span class="step">2</span>Plan</button>
           </div>
         </div>
-        <div class="group">
-          <button id="btn-ruler" title="Measure on any slice (R): click the first point, then the second. Drag a ruler end to adjust it; hover a ruler and press Delete (or double-click it) to remove it.">
-            <svg viewBox="0 0 16 16" width="13" height="13" style="vertical-align:-2px"><path d="M1.5 11.5l10-10 3 3-10 10z M4 9l1.5 1.5 M6 7l1 1 M8 5l1.5 1.5 M10 3l1 1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
-            Ruler</button>
-          <button id="btn-clear-measure" title="Delete all measurements">Clear</button>
-        </div>
-        <div class="group">
-          <span class="muted small">Input</span>
-          <div class="seg small" id="input-seg">
-            <button data-input="mouse" title="Mouse: wheel scrolls slices, Ctrl/⌘+wheel zooms">Mouse</button>
-            <button data-input="trackpad" title="Trackpad: two-finger swipe scrolls, pinch zooms, ⌘+swipe pans, ⇧+swipe brightness/contrast">Trackpad</button>
-          </div>
-          <button id="btn-trackpad-guide" title="How to use the app with a Mac trackpad">Trackpad guide</button>
-          <button id="btn-install" class="hidden" title="Install as a desktop app – then double-clicking a .dcm file in Windows Explorer opens it here">Install app</button>
-          <button id="btn-helper" class="hidden" title="Helper: double-click a DICOM file to open the whole series with no questions">Windows helper</button>
-          <a id="btn-mobile" class="btn-link hidden" href="mobile.html?ui=mobile" title="Simplified version for phones">Mobile version</a>
-        </div>
-        <div class="group">
-          <span class="muted small">Right-drag</span>
-          <div class="seg small" id="rd-seg">
-            <button data-rd="zoom" title="Right-drag down/up zooms in/out">Zoom</button>
-            <button data-rd="wl" title="Right-drag adjusts brightness / contrast">Brightness/contrast</button>
-          </div>
-        </div>
+        <span class="tb-sep"></span>
+        <button id="btn-undo" class="icon-btn" title="Undo the last implant change (Ctrl+Z / ⌘Z)" disabled>
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M5 4L2 7l3 3M2.5 7H10a4 4 0 010 8H7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button id="btn-redo" class="icon-btn" title="Redo (Ctrl+Shift+Z or Ctrl+Y / ⇧⌘Z)" disabled>
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M11 4l3 3-3 3M13.5 7H6a4 4 0 000 8h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button id="btn-ruler" title="Measure on any slice (R): click the first point, then the second. Drag a ruler end to adjust it; hover a ruler and press Delete (or double-click it) to remove it.">
+          <svg viewBox="0 0 16 16" width="13" height="13" style="vertical-align:-2px" aria-hidden="true"><path d="M1.5 11.5l10-10 3 3-10 10z M4 9l1.5 1.5 M6 7l1 1 M8 5l1.5 1.5 M10 3l1 1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          Ruler</button>
+        <button id="btn-clear-measure" title="Delete all measurements">Clear</button>
         <div class="group wl">
           <label>W <input id="ww" type="number" step="10" /></label>
           <label>L <input id="wc" type="number" step="10" /></label>
           <button id="btn-auto-wl" title="Automatic window from histogram">Auto</button>
         </div>
+        <span class="tb-sep"></span>
+        <button id="btn-settings" class="icon-btn" title="Settings: input device, right-drag, SpaceMouse, install, double-click helper">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <button id="btn-help" class="icon-btn" title="Shortcuts and help (?)">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.2 6.2a1.9 1.9 0 113 1.6c-.7.4-1.2.8-1.2 1.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.5" r=".9" fill="currentColor"/></svg></button>
         <input id="file-input" type="file" multiple hidden />
         <input id="folder-input" type="file" webkitdirectory multiple hidden />
         <input id="project-input" type="file" accept=".zip,.qdp" hidden />
       </header>
 
       <div id="main">
+        <nav id="rail" aria-label="Panels">
+          <button data-panel="reorient" title="Reorient: straighten and crop">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="4" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"/><path d="M14.5 2.5a8 8 0 013 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M17.5 5.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button data-panel="curve" title="Panoramic curves">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15C3 7 6 4 10 4s7 3 7 11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="3" cy="15" r="1.6" fill="currentColor"/><circle cx="10" cy="4" r="1.6" fill="currentColor"/><circle cx="17" cy="15" r="1.6" fill="currentColor"/></svg></button>
+          <button data-panel="implants" title="Implants">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3h6l-.6 12.5L10 18l-2.4-2.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M7.2 6.5h5.6M7.4 9.5h5.2M7.6 12.5h4.8" stroke="currentColor" stroke-width="1.2"/></svg><span class="rail-badge"></span></button>
+          <button data-panel="segments" title="Segments (automatic and by threshold)">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 12c0-4 2.5-7 7-7s7 3 7 7c-2 2-4.5 3-7 3s-5-1-7-3z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 11.5l1-3M10 12V8.5M14 11.5l-1-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg><span class="rail-badge"></span></button>
+          <button data-panel="nerves" title="Nerve canals">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 6c3 0 3.5 8 7.5 8s4.5-8 7.5-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span class="rail-badge"></span></button>
+          <button data-panel="scans" title="Intraoral scans">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 13c1-5 3-8 7-8s6 3 7 8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 13.5v2M8 13.8v2M12 13.8v2M15 13.5v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="rail-badge"></span></button>
+          <button id="rail-collapse" class="rail-bottom" title="Hide the panel (more room for the views)">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 5l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </nav>
         <aside id="sidebar">
-          <section id="panel-info" class="panel">
-            <h3>Patient</h3>
-            <div id="patient-fields" class="hidden">
-              <label class="field">Last name <input id="pt-last" type="text" maxlength="64" autocomplete="off" /></label>
-              <label class="field">First name <input id="pt-first" type="text" maxlength="64" autocomplete="off" /></label>
-              <div id="pt-details" class="small muted"></div>
-            </div>
-            <h3>Volume</h3>
-            <div id="vol-info" class="muted">Open a DICOM series (files or folder, or drag &amp; drop) or load the demo volume.</div>
-            <div class="row">
-              <button id="btn-tags" class="hidden" title="Show every DICOM attribute of the series">DICOM tags</button>
-            </div>
-          </section>
-
-          <section id="panel-mpr" class="panel">
-            <div class="mode-banner">
-              <div class="mode-banner-title"><span class="step">1</span>MPR / Reorient</div>
-              <div class="muted small">Straighten and crop the scan here, then switch to implant planning.</div>
-              <button class="primary mode-go" data-goto="plan" title="Switch to implant planning (key 2)">Next: Implant planning →</button>
-            </div>
-            <h3>MPR tools</h3>
+          <section id="panel-mpr" class="panel" data-panel="reorient">
+            <div class="ph"><h2>Reorient</h2></div>
+            <div class="muted small">Straighten and crop the scan, then continue with ② Plan. Skip this step when the scan is already straight.</div>
             <div class="seg" id="mpr-tools">
               <button data-tool="navigate" class="active">Navigate</button>
               <button data-tool="rotate">Rotate</button>
@@ -125,30 +110,19 @@
               <button id="btn-apply" class="primary" title="Resample the volume into the rotated, cropped frame">Apply rotate + crop</button>
             </div>
             <div id="mpr-status" class="muted small"></div>
-            <details open>
-              <summary>Mouse</summary>
-              <ul class="help">
-                <li><b>Left click/drag</b> – move crosshair</li>
-                <li><b>Trackpad?</b> Switch Input → Trackpad and see the <b>Trackpad guide</b></li>
-                <li><b>Hold Shift</b> – crosshair follows the mouse</li>
-                <li><b>Ctrl+Alt+drag</b> (or Rotate tool) – rotate the other planes around this view</li>
-                <li><b>Crop tool</b> – drag the blue box edges</li>
-                <li><b>Wheel</b> – scroll slices</li>
-                <li><b>Ctrl+wheel</b> or <b>right drag</b> – zoom · <b>Alt/middle drag</b> – pan</li>
-                <li><b>R</b> – ruler: click start, click end; drag ends to edit, Del removes the hovered ruler</li>
-                <li><b>M</b> or <b>⤢</b> – maximize / restore view</li>
-                <li><b>1</b> / <b>2</b> – switch between MPR / Reorient and Implant planning</li>
-                <li>Right drag can be switched to brightness/contrast in the toolbar</li>
-              </ul>
-            </details>
+            <div class="next-box">
+              <span>Next step</span>
+              <button class="primary" data-goto="plan" title="Switch to implant planning (key 2)">② Plan →</button>
+            </div>
           </section>
 
-          <section id="panel-plan" class="panel hidden">
-            <div class="mode-banner">
-              <div class="mode-banner-title"><span class="step">2</span>Implant planning</div>
-              <button class="mode-go" data-goto="mpr" title="Back to reorienting / cropping the scan (key 1)">← Back to MPR / Reorient</button>
+          <section id="panel-curve" class="panel" data-panel="curve">
+            <div class="ph"><h2>Panoramic curves</h2></div>
+            <div class="row">
+              <button id="btn-draw-curve" class="primary">Draw panoramic curve</button>
+              <button id="btn-add-curve" class="hidden" title="Draw another curve, e.g. one for the maxilla and one for the mandible">+ New curve</button>
+              <button id="btn-clear-curve" title="Delete the active curve">Delete</button>
             </div>
-            <h3>Panoramic curves</h3>
             <ul id="curve-list" class="curve-list"></ul>
             <div class="row" id="curve-name-row">
               <label class="grow small muted">Name
@@ -156,178 +130,84 @@
               </label>
               <datalist id="curve-name-options"><option value="Maxilla"></option><option value="Mandible"></option></datalist>
             </div>
-            <div class="row">
-              <button id="btn-draw-curve" class="primary">Draw panoramic curve</button>
-              <button id="btn-add-curve" class="hidden" title="Draw another curve, e.g. one for the maxilla and one for the mandible">+ New curve</button>
-              <button id="btn-clear-curve" title="Delete the active curve">Delete</button>
-            </div>
-            <div class="row">
-              <span class="muted small">Panoramic view</span>
-              <div class="seg small" id="pano-mode">
-                <button data-pm="slab" title="Thick averaged panoramic">Slab</button>
-                <button data-pm="slice" title="Thin panoramic slice (mouse wheel in the panoramic moves it buccal/lingual)">Slice</button>
-              </div>
-            </div>
-            <label class="slider"><span class="lbl" id="slab-label">Slab thickness</span> <span id="slab-val"></span>
-              <input id="slab" type="range" min="2" max="30" step="1" />
-            </label>
-            <div class="row small">
-              <span class="muted">Slice position</span>
-              <span id="pano-off">0.0 mm</span>
-              <button id="btn-pano-center" title="Back onto the drawn curve">Center</button>
-            </div>
-            <label class="slider">Cross-section spacing <span id="spacing-val"></span>
-              <input id="spacing" type="range" min="0.5" max="10" step="0.5" />
-            </label>
+            <div class="muted small">Draw in the axial view: hold the left button and drag along the arch, or click point by point. Slab and cross-section spacing are in the panoramic view’s header.</div>
+          </section>
 
-            <h3>Implants</h3>
+          <section id="panel-plan" class="panel" data-panel="implants">
+            <div class="ph"><h2>Implants</h2></div>
             <div class="row">
-              <button id="btn-add-upper" class="primary" title="Maxillary implant: apex points up, platform down">Add upper implant</button>
-              <button id="btn-add-lower" class="primary" title="Mandibular implant: apex points down, platform up">Add lower implant</button>
-            </div>
-            <label class="check small"><input id="place-parallel" type="checkbox" checked /> New implant parallel to the selected one</label>
-            <div class="row small">
-              <label>Default Ø <input id="def-d" type="number" step="0.1" min="2" max="8" /> mm</label>
-              <label>L <input id="def-l" type="number" step="0.5" min="4" max="60" /> mm</label>
-            </div>
-            <label class="check small" title="New implants get an apex 1 mm narrower than the platform (can be changed per implant)"><input id="def-tapered" type="checkbox" checked /> New implants tapered (apex 1 mm narrower)</label>
-            <div class="row undo-row">
-              <button id="btn-undo" title="Undo the last implant change (Ctrl+Z / ⌘Z)" disabled>↶ Undo</button>
-              <button id="btn-redo" title="Redo (Ctrl+Shift+Z or Ctrl+Y / ⇧⌘Z)" disabled>↷ Redo</button>
-              <button id="btn-show-all-implants" class="hidden" title="Show every hidden implant and abutment">Show all</button>
+              <button id="btn-add-upper" class="primary grow-btn" title="Maxillary implant: apex points up, platform down">+ Upper implant</button>
+              <button id="btn-add-lower" class="primary grow-btn" title="Mandibular implant: apex points down, platform up">+ Lower implant</button>
             </div>
             <ul id="implant-list"></ul>
-            <div id="implant-edit" class="hidden">
+            <div class="row"><button id="btn-show-all-implants" class="hidden" title="Show every hidden implant and abutment">Show all</button></div>
+            <div id="implant-edit" class="hidden edit-box">
               <div class="row">
                 <label class="grow">Name <input id="imp-name" type="text" maxlength="40" placeholder="e.g. 36 or Molar left" /></label>
               </div>
               <div class="row">
                 <label>Diameter <input id="imp-d" type="number" step="0.1" min="2" max="8" /> mm</label>
+                <label>Length <input id="imp-l" type="number" step="0.5" min="4" max="60" /> mm</label>
               </div>
               <div class="row">
                 <label class="check small" title="Give the implant a narrower apex"><input id="imp-tapered" type="checkbox" /> Tapered</label>
                 <label id="imp-ad-label">Apex Ø <input id="imp-ad" type="number" step="0.1" min="1.5" max="8" /> mm</label>
               </div>
-              <div class="row">
-                <label>Length <input id="imp-l" type="number" step="0.5" min="4" max="60" /> mm</label>
-                <span class="muted small">(apical side)</span>
-              </div>
               <div id="imp-info" class="muted small"></div>
-              <div class="row" id="parallel-row">
-                <label class="small">Parallel to <select id="parallel-to"></select></label>
-                <button id="btn-parallel">Apply</button>
-              </div>
               <div class="row">
                 <button id="btn-upright">Make vertical</button>
                 <button id="btn-flip" title="Swap platform and apex">Flip</button>
               </div>
-              <label class="check small" title="Ø3 × 15 mm guide for the screw channel / path of insertion – from the MUA top, or from the implant platform without an MUA">
-                <input id="imp-axis" type="checkbox" /> Show prosthetic axis
-              </label>
-              <h4>Abutment (MUA Ø4.8)</h4>
-              <div class="row">
-                <select id="ab-type">
-                  <option value="none">None</option>
-                  <option value="0">Straight MUA 0°</option>
-                  <option value="17">Angled MUA 17°</option>
-                  <option value="30">Angled MUA 30°</option>
-                </select>
-                <label class="small">GH <select id="ab-height"></select> mm</label>
+              <div class="row" id="parallel-row">
+                <label class="small">Parallel to <select id="parallel-to"></select></label>
+                <button id="btn-parallel">Apply</button>
               </div>
-              <div id="ab-rot-row">
-                <label class="slider">Rotation (0° = buccal) <span id="ab-rot-val"></span>
-                  <input id="ab-rot" type="range" min="0" max="355" step="5" />
+              <details class="sub">
+                <summary>Abutment (MUA Ø4.8) and prosthetic axis</summary>
+                <div class="row">
+                  <select id="ab-type">
+                    <option value="none">None</option>
+                    <option value="0">Straight MUA 0°</option>
+                    <option value="17">Angled MUA 17°</option>
+                    <option value="30">Angled MUA 30°</option>
+                  </select>
+                  <label class="small">GH <select id="ab-height"></select> mm</label>
+                </div>
+                <div id="ab-rot-row">
+                  <label class="slider">Rotation (0° = buccal) <span id="ab-rot-val"></span>
+                    <input id="ab-rot" type="range" min="0" max="355" step="5" />
+                  </label>
+                  <div class="row"><button id="btn-ab-auto" title="Choose angulation and rotation that bring the abutment closest to vertical">Auto-align to vertical</button></div>
+                </div>
+                <label class="check small" title="Ø3 × 15 mm guide for the screw channel / path of insertion – from the MUA top, or from the implant platform without an MUA">
+                  <input id="imp-axis" type="checkbox" /> Show prosthetic axis
                 </label>
-                <div class="row"><button id="btn-ab-auto" title="Choose angulation and rotation that bring the abutment closest to vertical">Auto-align to vertical</button></div>
-              </div>
+              </details>
               <div class="row">
                 <button id="btn-deselect">Deselect</button>
                 <button id="btn-delete" class="danger">Delete</button>
               </div>
             </div>
-            <div id="angles-box" class="hidden">
-              <h3>Angulation</h3>
+            <details id="angles-box" class="sub hidden">
+              <summary>Angles between implants</summary>
               <table id="angle-table"></table>
-            </div>
-            <details open>
-              <summary>Mouse</summary>
-              <ul class="help">
-                <li><b>Trackpad?</b> Switch Input → Trackpad and see the <b>Trackpad guide</b></li>
-                <li><b>Draw curve</b>: hold the left button and drag along the arch (points are placed automatically, release to finish), or click point by point</li>
-                <li><b>Axial</b>: wheel = level, drag curve points, dbl-click curve = add / point = remove</li>
-                <li><b>Panoramic</b>: wheel = slice position buccal/lingual, Alt+wheel = move along the curve, click = jump</li>
-                <li><b>Cross-sections</b>: wheel = move 1 mm along the curve</li>
-                <li><b>Tangential</b>: wheel = rotate 360° (around the selected implant)</li>
-                <li><b>Implant</b>: drag body = move · drag side outline = diameter (tapered: apical half = apex Ø) · drag apical end = length (click the live value to type it)</li>
-                <li><b>C / A handles</b> (selected implant): C rotates around the apex, A rotates around the platform</li>
-                <li><b>Ctrl+Z</b> / <b>⌘Z</b> undo implant changes (unlimited) · <b>Ctrl+Shift+Z</b> / <b>Ctrl+Y</b> redo</li>
-                <li>Eye / <b>MUA</b> buttons in the implant list show or hide an implant or its abutment</li>
-                <li><b>Esc</b> deselect / cancel · <b>Del</b> delete implant · double-click a name in the list to rename</li>
-                <li>Cross-sections follow the selected implant when it moves</li>
-                <li><b>Ctrl+wheel</b> or <b>right drag</b> zoom · <b>Shift/Alt/middle drag</b> pan · <b>M</b> maximize · <b>R</b> ruler</li>
-              </ul>
+            </details>
+            <details class="sub">
+              <summary>Defaults for new implants</summary>
+              <div class="row small">
+                <label>Ø <input id="def-d" type="number" step="0.1" min="2" max="8" /> mm</label>
+                <label>Length <input id="def-l" type="number" step="0.5" min="4" max="60" /> mm</label>
+              </div>
+              <label class="check small" title="New implants get an apex 1 mm narrower than the platform (can be changed per implant)"><input id="def-tapered" type="checkbox" checked /> Tapered (apex 1 mm narrower)</label>
+              <label class="check small"><input id="place-parallel" type="checkbox" checked /> Parallel to the selected implant</label>
             </details>
           </section>
 
-          <section id="panel-3d" class="panel">
-            <h3>3D render</h3>
-            <div class="seg" id="vr-mode">
-              <button data-vr="surface">Surface</button>
-              <button data-vr="translucent">Translucent</button>
-              <button data-vr="mip">MIP</button>
-            </div>
-            <label class="slider">Lower threshold <span><input id="vr-lo-num" type="number" step="10" /></span>
-              <input id="vr-lo" type="range" />
-            </label>
-            <label class="slider">Upper threshold <span><input id="vr-hi-num" type="number" step="10" /></span>
-              <input id="vr-hi" type="range" />
-            </label>
-            <div class="row">
-              <button id="btn-vr-auto" title="Bone threshold from the histogram">Auto threshold</button>
-            </div>
-            <div class="row presets">
-              <button data-preset="front">Front</button>
-              <button data-preset="left">Left</button>
-              <button data-preset="right">Right</button>
-              <button data-preset="back">Back</button>
-              <button data-preset="top">Top</button>
-              <button data-preset="bottom">Bottom</button>
-              <button id="btn-3d-reset" title="Initial position and rotation centre (also: ⟲ in the 3D view, or double-click it)">Reset view</button>
-            </div>
-            <div class="muted small">Drag = rotate · wheel = zoom · Alt/Shift/middle drag = pan · <b>middle-click</b> a surface = rotation centre there · double-click or ⟲ = reset view. The crop box also clips the 3D view.</div>
-            <h4>3Dconnexion SpaceMouse</h4>
-            <div class="row">
-              <button id="btn-spacemouse" title="Connect a 3Dconnexion SpaceMouse (Chrome or Edge). Afterwards it reconnects automatically.">Connect SpaceMouse</button>
-              <span id="sm-status" class="muted small"></span>
-            </div>
-            <div id="sm-settings" class="hidden">
-              <label class="slider">Speed <span id="sm-speed-val"></span>
-                <input id="sm-speed" type="range" min="0.2" max="3" step="0.1" />
-              </label>
-              <label class="check small"><input id="sm-inv-rot" type="checkbox" /> Invert rotation</label>
-              <label class="check small"><input id="sm-inv-tr" type="checkbox" /> Invert pan / zoom</label>
-              <div class="muted small">The model follows the cap: tilt/twist = rotate, push sideways = pan, pull up / push down = zoom. Left button = fit, right button = next view.</div>
-            </div>
-          </section>
-
-          <section id="panel-seg" class="panel">
-            <h3>Segmentation</h3>
+          <section id="panel-seg" class="panel" data-panel="segments">
+            <div class="ph"><h2>Segments</h2></div>
             <div class="ai-box">
-              <button id="btn-ai-seg" class="primary" title="Segment the maxilla, mandible, upper and lower teeth and the mandibular canals automatically (DentalSegmentator deep-learning model, runs in this browser)">Automatic segmentation (AI)</button>
+              <div class="ai-head"><b>Automatic (AI)</b><button id="btn-ai-seg" class="primary" title="Segment the maxilla, mandible, upper and lower teeth and the mandibular canals automatically (DentalSegmentator deep-learning model, runs in this browser)">Run…</button></div>
               <div class="muted small">Jaws, teeth and mandibular canals with <a href="https://doi.org/10.1016/j.jdent.2024.105130" target="_blank" rel="noopener" title="Dot G, et al. DentalSegmentator: robust open source deep learning-based CT and CBCT image segmentation. Journal of Dentistry (2024)">DentalSegmentator</a> (Dot et al. 2024, CC BY 4.0) · nnU-Net</div>
-            </div>
-            <div class="muted small">Or segment by threshold:</div>
-            <ol class="help steps">
-              <li>Set the 3D thresholds so the structures are separated.</li>
-              <li>Add a segment, then click the structure in the 3D view (or in any slice).</li>
-              <li>Still touching? Draw a <b>cut</b> through the contact.</li>
-            </ol>
-            <div class="row seg-presets">
-              <button data-seg-preset="0" class="primary" title="New segment: click the maxilla in the 3D view or a slice">+ Maxilla</button>
-              <button data-seg-preset="1" class="primary" title="New segment: click the mandible in the 3D view or a slice">+ Mandible</button>
-              <button data-seg-preset="2" title="New segment for a tooth (usually with a higher threshold)">+ Tooth</button>
-              <button data-seg-preset="3" title="New segment for an existing implant (very high threshold)">+ Implant</button>
-              <button data-seg-preset="4" title="New segment with any name">+ Other</button>
             </div>
             <ul id="seg-list" class="obj-list"></ul>
             <div id="seg-edit" class="hidden edit-box">
@@ -339,12 +219,12 @@
                 <label class="grow">3D opacity <input id="seg-opacity" type="range" min="0.1" max="1" step="0.05" title="See-through in the 3D view (1 = opaque)" /></label>
                 <span id="seg-opacity-val" class="muted small"></span>
               </div>
+              <div id="seg-info" class="muted small"></div>
+              <button id="btn-seg-nerves" class="hidden" title="Create the right and left nerve paths along this canal, so implants too close to the nerve are flagged">Make nerve paths from this canal</button>
               <div class="row">
                 <button id="btn-seg-grow" title="Click the structure in the 3D view or in any slice to add it to this segment">Click to add</button>
                 <button id="btn-seg-regrow" title="Grow this segment again with the current 3D thresholds">Use current threshold</button>
               </div>
-              <div id="seg-info" class="muted small"></div>
-              <button id="btn-seg-nerves" class="hidden" title="Create the right and left nerve paths along this canal, so implants too close to the nerve are flagged">Make nerve paths from this canal</button>
               <div class="row">
                 <button id="btn-seg-undo" title="Take back the last click (e.g. when it leaked into a neighbour)">Undo click</button>
                 <button id="btn-seg-clear" title="Remove everything from this segment (keeps it in the list)">Clear</button>
@@ -353,25 +233,41 @@
             </div>
             <label class="check small"><input id="seg-show-unseg" type="checkbox" checked /> 3D: show bone that is not segmented</label>
             <label class="check small"><input id="seg-show-2d" type="checkbox" checked /> Show segments in the slices</label>
-            <h4>Separation cuts</h4>
-            <div class="row">
-              <button id="btn-cut" title="Draw a separating line in the panoramic (a curved sheet following the arch) or in any slice (extruded through the volume)">Draw cut</button>
-              <label class="small">Reach
-                <select id="cut-depth" title="How far the cut reaches from the slice it was drawn on">
-                  <option value="">whole volume</option>
-                  <option value="2">± 2 mm</option>
-                  <option value="5">± 5 mm</option>
-                  <option value="10">± 10 mm</option>
-                  <option value="20">± 20 mm</option>
-                </select>
-              </label>
-            </div>
-            <ul id="cut-list" class="obj-list"></ul>
+            <details class="sub" id="seg-manual">
+              <summary>Segment by threshold, separation cuts</summary>
+              <ol class="help steps">
+                <li>Set the 3D thresholds (3D view header) so the structures are separated.</li>
+                <li>Add a segment, then click the structure in the 3D view or in any slice.</li>
+                <li>Still touching? Draw a <b>cut</b> through the contact.</li>
+              </ol>
+              <div class="row seg-presets">
+                <button data-seg-preset="0" title="New segment: click the maxilla in the 3D view or a slice">+ Maxilla</button>
+                <button data-seg-preset="1" title="New segment: click the mandible in the 3D view or a slice">+ Mandible</button>
+                <button data-seg-preset="2" title="New segment for a tooth (usually with a higher threshold)">+ Tooth</button>
+                <button data-seg-preset="3" title="New segment for an existing implant (very high threshold)">+ Implant</button>
+                <button data-seg-preset="4" title="New segment with any name">+ Other</button>
+              </div>
+              <div class="row">
+                <button id="btn-cut" title="Draw a separating line in the panoramic (a curved sheet following the arch) or in any slice (extruded through the volume)">Draw cut</button>
+                <label class="small">Reach
+                  <select id="cut-depth" title="How far the cut reaches from the slice it was drawn on">
+                    <option value="">whole volume</option>
+                    <option value="2">± 2 mm</option>
+                    <option value="5">± 5 mm</option>
+                    <option value="10">± 10 mm</option>
+                    <option value="20">± 20 mm</option>
+                  </select>
+                </label>
+              </div>
+              <ul id="cut-list" class="obj-list"></ul>
+            </details>
+          </section>
 
-            <h3>Nerve canal</h3>
+          <section id="panel-nerves" class="panel" data-panel="nerves">
+            <div class="ph"><h2>Nerve canals</h2></div>
             <div class="row">
-              <button id="btn-nerve-right" title="Trace the right inferior alveolar nerve">Trace right nerve</button>
-              <button id="btn-nerve-left" title="Trace the left inferior alveolar nerve">Trace left nerve</button>
+              <button id="btn-nerve-right" class="grow-btn" title="Trace the right inferior alveolar nerve">Trace right</button>
+              <button id="btn-nerve-left" class="grow-btn" title="Trace the left inferior alveolar nerve">Trace left</button>
             </div>
             <ul id="nerve-list" class="obj-list"></ul>
             <div id="nerve-edit" class="hidden edit-box">
@@ -385,15 +281,12 @@
                 <button id="btn-nerve-delete" class="danger">Delete</button>
               </div>
             </div>
-            <div class="muted small">Click the centre of the canal on the cross-sections (scroll along the curve) and/or in the panoramic, in any order – the points are joined into a smooth tube shown in every view and in 3D. Implants report their distance to it.</div>
+            <div class="muted small">Click the centre of the canal on the cross-sections or in the panoramic, in any order. Implants closer than 2 mm are flagged. An automatic canal segment can also be turned into nerve paths (Segments).</div>
           </section>
 
-          <section id="panel-scans" class="panel">
-            <h3>Intraoral scans</h3>
-            <div class="row">
-              <button id="btn-scan-import" class="primary" title="Import an intraoral scan, antagonist or wax-up (STL, PLY, OBJ)">Import scan…</button>
-              <input id="scan-input" type="file" accept=".stl,.ply,.obj" multiple hidden />
-            </div>
+          <section id="panel-scans" class="panel" data-panel="scans">
+            <div class="ph"><h2>Intraoral scans</h2><button id="btn-scan-import" class="primary" title="Import an intraoral scan, antagonist or wax-up (STL, PLY, OBJ) – or drop the file on the viewer">Import…</button></div>
+            <input id="scan-input" type="file" accept=".stl,.ply,.obj" multiple hidden />
             <ul id="scan-list" class="obj-list"></ul>
             <div id="scan-edit" class="hidden edit-box">
               <div class="row">
@@ -402,6 +295,8 @@
               </div>
               <div class="row">
                 <label>Type <select id="scan-kind"></select></label>
+              </div>
+              <div class="row">
                 <label class="grow">Opacity <input id="scan-opacity" type="range" min="0.15" max="1" step="0.05" /></label>
               </div>
               <label class="check small hidden" id="scan-vcol-row"><input id="scan-vcol" type="checkbox" /> Scan colours (from the file)</label>
@@ -416,13 +311,30 @@
               </div>
             </div>
             <label class="check small"><input id="scan-show-2d" type="checkbox" checked /> Show scan outlines in the slices</label>
-            <div class="muted small">Upper/lower jaw scans, antagonists and wax-ups (STL, PLY with colours, OBJ). Place each one in its original position, copy the alignment of a scan that is already aligned, or align it to the CBCT by points or surfaces.</div>
+            <div class="muted small">Upper / lower jaw scans, antagonists and wax-ups (STL, PLY with colours, OBJ): original position, copy another scan’s alignment, or align by points or surfaces.</div>
           </section>
         </aside>
 
         <section id="viewport">
           <div id="layout-mpr" class="layout"></div>
           <div id="layout-plan" class="layout hidden"></div>
+          <div id="start-screen" class="start-screen hidden">
+            <div class="start-drop">
+              <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="7" y="9" width="32" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M23 15v14M17 23l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <h2>Drop a CBCT here</h2>
+              <div class="muted">DICOM files, a folder, a ZIP or a saved project – or double-click a .dcm file once the app is installed.</div>
+              <div class="row start-actions">
+                <button class="primary" data-act="open-files">Open files…</button>
+                <button data-act="open-folder">Open folder…</button>
+                <button data-act="open-project">Open project…</button>
+                <button data-act="demo">Demo</button>
+              </div>
+              <div id="start-recent" class="start-recent hidden">
+                <div class="muted small">Recent</div>
+                <ul class="obj-list recent-list"></ul>
+              </div>
+            </div>
+          </div>
           <div id="drop-overlay" class="hidden">Drop DICOM files or a folder</div>
           <div id="launch-banner" class="launch-banner hidden" role="dialog" aria-live="polite">
             <div class="lb-text"><b>Opened <span id="lb-file"></span></b><span class="muted" id="lb-msg"></span></div>
@@ -433,7 +345,119 @@
           <div id="loading" class="hidden"><div class="box"><div id="loading-text">Loading…</div><div class="bar"><div id="loading-bar"></div></div></div></div>
         </section>
       </div>
-      <footer id="status"><span id="status-cursor"></span><span id="status-msg"></span></footer>
+      <footer id="status"><span id="status-hint"></span><span id="status-msg"></span><span id="status-cursor"></span></footer>
+    </div>
+
+    <!-- menus and popovers (placed under their buttons by src/ui/popover.ts) -->
+    <div id="pop-open" class="popover menu hidden" role="menu">
+      <button id="btn-open" role="menuitem">CBCT files… <span class="kbd">Ctrl+O</span></button>
+      <button id="btn-open-folder" role="menuitem">Folder…</button>
+      <button id="btn-open-project" role="menuitem">Project (.qdp.zip)…</button>
+      <button id="btn-demo" role="menuitem">Demo volume</button>
+      <div id="open-recent" class="hidden"><hr /><div class="menu-hd">Recent</div><div class="recent-items"></div></div>
+    </div>
+    <div id="pop-export" class="popover menu hidden" role="menu">
+      <button id="btn-export-stl" role="menuitem">STL files – bone, segments, implants, nerves…</button>
+      <button id="btn-export-save" role="menuitem">Project (.qdp.zip) <span class="kbd">Ctrl+S</span></button>
+    </div>
+    <div id="pop-patient" class="popover hidden" role="dialog" aria-label="Patient and scan">
+      <div id="patient-fields" class="hidden">
+        <label class="field">Last name <input id="pt-last" type="text" maxlength="64" autocomplete="off" /></label>
+        <label class="field">First name <input id="pt-first" type="text" maxlength="64" autocomplete="off" /></label>
+        <div id="pt-details" class="small muted"></div>
+      </div>
+      <div id="vol-info" class="muted small">No scan open.</div>
+      <div class="row"><button id="btn-tags" class="hidden" title="Show every DICOM attribute of the series">DICOM tags</button></div>
+    </div>
+    <div id="pop-settings" class="popover hidden" role="dialog" aria-label="Settings">
+      <div class="pop-hd">Input</div>
+      <div class="row">
+        <div class="seg small" id="input-seg">
+          <button data-input="mouse" title="Mouse: wheel scrolls slices, Ctrl/⌘+wheel zooms">Mouse</button>
+          <button data-input="trackpad" title="Trackpad: two-finger swipe scrolls, pinch zooms, ⌘+swipe pans, ⇧+swipe brightness/contrast">Trackpad</button>
+        </div>
+        <button id="btn-trackpad-guide" title="How to use the app with a Mac trackpad">Trackpad guide</button>
+      </div>
+      <div class="pop-hd">Right-drag</div>
+      <div class="seg small" id="rd-seg">
+        <button data-rd="zoom" title="Right-drag down/up zooms in/out">Zoom</button>
+        <button data-rd="wl" title="Right-drag adjusts brightness / contrast">Brightness / contrast</button>
+      </div>
+      <div class="pop-hd">Opening a scan</div>
+      <label class="check small"><input id="set-open-plan" type="checkbox" /> Open scans directly in ② Plan (skip Reorient)</label>
+      <div class="pop-hd">3Dconnexion SpaceMouse</div>
+      <div class="row">
+        <button id="btn-spacemouse" title="Connect a 3Dconnexion SpaceMouse (Chrome or Edge). Afterwards it reconnects automatically.">Connect SpaceMouse</button>
+        <span id="sm-status" class="muted small"></span>
+      </div>
+      <div id="sm-settings" class="hidden">
+        <label class="slider">Speed <span id="sm-speed-val"></span>
+          <input id="sm-speed" type="range" min="0.2" max="3" step="0.1" />
+        </label>
+        <label class="check small"><input id="sm-inv-rot" type="checkbox" /> Invert rotation</label>
+        <label class="check small"><input id="sm-inv-tr" type="checkbox" /> Invert pan / zoom</label>
+        <div class="muted small">Tilt/twist = rotate, push sideways = pan, pull up / push down = zoom. Left button = fit, right button = next view.</div>
+      </div>
+      <div id="settings-desktop">
+      <div class="pop-hd">Desktop</div>
+      <div class="row">
+        <button id="btn-install" class="hidden" title="Install as a desktop app – then double-clicking a .dcm file opens it here">Install app</button>
+        <button id="btn-helper" class="hidden" title="Helper: double-click a DICOM file to open the whole series with no questions">Windows helper</button>
+        <a id="btn-mobile" class="btn-link hidden" href="mobile.html?ui=mobile" title="Simplified version for phones">Mobile version</a>
+      </div>
+      </div>
+    </div>
+
+    <!-- view settings: placed into the 3D and panoramic views by src/ui/viewTools.ts -->
+    <div id="v3d-tools" class="view-tools">
+      <button id="btn-vr-menu" title="Rendering mode and thresholds">Surface ▾</button>
+      <button id="btn-3dview-menu" title="View direction">View ▾</button>
+    </div>
+    <div id="pano-tools" class="view-tools">
+      <div class="seg small" id="pano-mode">
+        <button data-pm="slab" title="Thick averaged panoramic">Slab</button>
+        <button data-pm="slice" title="Thin panoramic slice (mouse wheel in the panoramic moves it buccal/lingual)">Slice</button>
+      </div>
+      <button id="btn-pano-menu" title="Slab / slice thickness, slice position and cross-section spacing">12 mm · 2 mm ▾</button>
+    </div>
+    <div id="pop-vr" class="popover hidden" role="dialog" aria-label="3D rendering">
+      <div class="seg" id="vr-mode">
+        <button data-vr="surface">Surface</button>
+        <button data-vr="translucent">Translucent</button>
+        <button data-vr="mip">MIP</button>
+      </div>
+      <label class="slider">Lower threshold <span><input id="vr-lo-num" type="number" step="10" /></span>
+        <input id="vr-lo" type="range" />
+      </label>
+      <label class="slider">Upper threshold <span><input id="vr-hi-num" type="number" step="10" /></span>
+        <input id="vr-hi" type="range" />
+      </label>
+      <div class="row"><button id="btn-vr-auto" title="Bone threshold from the histogram">Auto threshold</button></div>
+      <div class="muted small">The crop box also clips the 3D view.</div>
+    </div>
+    <div id="pop-3dview" class="popover hidden" role="dialog" aria-label="3D view direction">
+      <div class="row presets">
+        <button data-preset="front">Front</button>
+        <button data-preset="back">Back</button>
+        <button data-preset="left">Left</button>
+        <button data-preset="right">Right</button>
+        <button data-preset="top">Top</button>
+        <button data-preset="bottom">Bottom</button>
+      </div>
+      <button id="btn-3d-reset" title="Initial position and rotation centre (also: ⟲ in the 3D view, or double-click it)">Reset view</button>
+    </div>
+    <div id="pop-pano" class="popover hidden" role="dialog" aria-label="Panoramic settings">
+      <label class="slider"><span class="lbl" id="slab-label">Slab thickness</span> <span id="slab-val"></span>
+        <input id="slab" type="range" min="2" max="30" step="1" />
+      </label>
+      <div class="row small">
+        <span class="muted">Slice position</span>
+        <span id="pano-off">0.0 mm</span>
+        <button id="btn-pano-center" title="Back onto the drawn curve">Center</button>
+      </div>
+      <label class="slider">Cross-section spacing <span id="spacing-val"></span>
+        <input id="spacing" type="range" min="0.5" max="10" step="0.5" />
+      </label>
     </div>
     <script type="module" src="./src/main.ts"></script>
   </body>

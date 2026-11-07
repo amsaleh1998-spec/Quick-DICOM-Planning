@@ -1228,7 +1228,8 @@ export class View3D extends View {
     }
     const modeName = { surface: 'Surface', translucent: 'Translucent', mip: 'MIP' }[app.vr.mode];
     const thr = app.vr.mode === 'mip' ? `W ${Math.round(app.wl.width)} L ${Math.round(app.wl.center)}` : `${Math.round(app.vr.lo)} – ${Math.round(app.vr.hi)}`;
-    drawLabel(o, `${modeName} · ${thr}`, this.w - 62, 16, '#9fb0c8', 'right');
+    // the desktop layout shows mode and threshold in the view's own header buttons
+    if (!this.el.querySelector('.view-tools.in-view')) drawLabel(o, `${modeName} · ${thr}`, this.w - 62, 16, '#9fb0c8', 'right');
     this.drawPivot(o);
     this.editor.draw(o);
     if (this.texFactor > 1) drawLabel(o, `rendered at 1/${this.texFactor} resolution`, this.w - 8, this.h - 10, '#9fb0c8', 'right');

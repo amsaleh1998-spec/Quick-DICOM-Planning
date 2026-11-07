@@ -3,6 +3,24 @@
 A lightweight, browser-only viewer for quick dental implant planning on CBCT scans.
 Everything runs locally in the browser – no data is uploaded anywhere.
 
+## Interface
+
+- **Start screen**: drop a CBCT (files, folder, ZIP or project), use the buttons, or reopen a scan from **Recent**
+  (Chrome / Edge remember the files you opened through *Open*; reopening may ask for read access again).
+- **Top bar** (one row): the **patient chip** (name and scan date; click for ID, birth date, the editable name, volume
+  details and *DICOM tags*) · **Open ▾** (files, folder, project, demo, recent) · **Save** · **Export ▾** (STL, project) ·
+  the steps **① Reorient / ② Plan** · undo / redo · *Ruler* / *Clear* · window / level · **⚙ Settings** (mouse or
+  trackpad and the trackpad guide, right-drag zoom or brightness, *Open scans directly in ② Plan*, SpaceMouse, install
+  app, double-click helper) · **?** (every shortcut, also with the **?** key).
+- **Left rail**: one side panel at a time – Reorient (step ①), Curve, Implants, Nerves (step ②), Segments and Scans
+  (both steps). Click the open icon again (or the arrow at the bottom) to hide the panel and give the views the full
+  width. Each panel lists its objects (eye = show / hide) and below that the settings of the selected one; rarely used
+  options sit in collapsed sections.
+- **View settings in the views**: the 3D view's header has the rendering mode and thresholds (*Surface 796+ ▾*) and the
+  view direction (*View ▾*); the panoramic's header has *Slab / Slice* and the thickness, slice position and
+  cross-section spacing (*12 mm · sections 2 mm ▾*).
+- **Status bar**: a one-line hint for the open panel, messages, and the value under the cursor.
+
 ## Features
 
 **Import**
@@ -18,8 +36,8 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   and a maxilla with a palate whose teeth touch the lower teeth in occlusion, on a slightly tilted occlusal plane.
 
 **Patient & DICOM metadata**
-- The patient's last and first name (from the DICOM Patient's Name, `LAST^FIRST`) are shown in the toolbar and in the
-  Patient panel, with ID, birth date and sex. The names can be edited (e.g. for anonymised scans) and are saved with
+- The patient's last and first name (from the DICOM Patient's Name, `LAST^FIRST`) are shown in the patient chip (top
+  bar); click it for ID, birth date and sex. The names can be edited (e.g. for anonymised scans) and are saved with
   the project and used for the project file name.
 - *DICOM tags* opens every attribute of the series' first file – tag, name, VR, value – with search (also inside
   sequences), expandable sequences and *Copy all*.
@@ -41,11 +59,11 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   rotation centre.
 - Implants and abutments are drawn in 3D; the crop box clips the rendering (e.g. to hide the opposing jaw).
 
-**Automatic segmentation (AI)** (Segmentation panel → *Automatic segmentation (AI)*) – see
+**Automatic segmentation (AI)** (Segments panel → *Automatic (AI) – Run…*) – see
 [Automatic segmentation](#automatic-segmentation-dentalsegmentator) below: maxilla & upper skull, mandible, upper teeth,
 lower teeth and mandibular canals in one go, with the DentalSegmentator model by Dot et al. (2024).
 
-**Segmentation** (3D render panel → *Segmentation*; works in both layouts)
+**Segmentation** (Segments panel → *Segment by threshold, separation cuts*; works in both steps)
 - Adjust the 3D *lower/upper threshold* until the structures are separated, add a segment (*+ Maxilla*, *+ Mandible*,
   *+ Tooth*, *+ Implant*, *+ Other*) and click the structure in the 3D view or in any slice. The connected voxels within the
   threshold range are grown into a coloured 3D object (volume shown in cm³). Click more places to add disconnected parts;
@@ -72,7 +90,7 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - While tracing, drag a point to move it, double-click a point to delete it, *Undo point* takes back the last one.
 - Implants report their surface-to-surface distance to each nerve; closer than 2 mm is flagged (⚠ in the list).
 
-**3Dconnexion SpaceMouse** (3D render panel)
+**3Dconnexion SpaceMouse** (⚙ Settings)
 - *Connect SpaceMouse* once (Chrome / Edge, via WebHID: wired, wireless and Universal Receiver models); afterwards it
   reconnects automatically. Browsers without WebHID are supported only if they expose the device as a game controller.
 - Object mode – the model follows the cap: tilt / twist = rotate (any axis), push sideways = pan, pull up / push down =
@@ -93,7 +111,7 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   switches to the curve it belongs to. Curves can be renamed (Maxilla / Mandible suggestions), redrawn and deleted,
   and are all saved in projects.
 - Panoramic reconstruction along the curve, switchable between a thick **slab** and a thin **slice** (separate adjustable
-  thicknesses; switch in the sidebar or inside the panoramic view). The mouse wheel in the panoramic moves the slice
+  thicknesses; switch in the panoramic view's header). The mouse wheel in the panoramic moves the slice
   position buccal (up) / lingual (down); Alt+wheel moves the cross-sections along the curve. *Center* puts it back on the curve.
 - Three cross-sections perpendicular to the curve (adjustable spacing); each wheel notch moves them exactly 1 mm along
   the curve. The *Curve* button in the axial view shows / hides the blue curve there (curve points can only be
@@ -142,20 +160,20 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - Settings sheet: implant list (tap to jump to its cross-section; nerve-distance warnings), segment and nerve visibility,
   brightness/contrast, 3D mode/threshold/view presets. Implants, segmentation and nerve tracing are edited on the desktop.
 - Phones are sent to it before the desktop page renders; *Full desktop version* (`index.html?ui=desktop`) is remembered on
-  that phone, and *Mobile version* in the desktop toolbar (`?ui=mobile`) switches back. Memory/GPU budgets are lower on
+  that phone, and *Mobile version* in ⚙ Settings (`?ui=mobile`) switches back. Memory/GPU budgets are lower on
   phones (series above ~110 M voxels are downsampled on load).
 
 **Projects (pause and continue later)**
-- *Save project* (or **Ctrl+S**) writes one `.qdp.zip` file to your computer containing the CBCT voxels and the complete
+- *Save* (or **Ctrl+S**) writes one `.qdp.zip` file to your computer containing the CBCT voxels and the complete
   plan: orientation/rotation, crop box, window/level, panoramic curve and slice settings, implants and abutments,
   segments (clicks, thresholds, colours, visibility), separation cuts, traced nerves, measurements, zoom/pan of every
   view, the 3D camera and which view was maximized. Segments are re-grown from their clicks when the project is opened.
-- *Open project* (or drag the file onto the page / *Open files*) restores everything exactly as it was.
+- *Open ▾ → Project* (or drag the file onto the page, or pick it under *Recent*) restores everything exactly as it was.
 - The file is a normal ZIP: `project.json` (plan + view state) and `volume.raw` (int16, little endian, x fastest;
   dimensions/spacing in `project.json`).
 
 **Measurements**
-- *Ruler* (toolbar or **R**): click the first point, then the second point on any slice – MPR, axial, cross-sections,
+- *Ruler* (top bar or **R**): click the first point, then the second point on any slice – MPR, axial, cross-sections,
   tangential, or the panoramic (distances on the developed panoramic surface). The tool then switches off; ruler ends can
   be dragged at any time to adjust them. Hover a ruler and press Delete (or double-click it) to remove it, *Clear* removes
   all, Esc cancels a ruler in progress. A ruler shows on the slice it was drawn on.
@@ -164,7 +182,7 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   followed by a Ø3 × 15 mm prosthetic axis (shown translucent, not clickable) along the abutment direction; *Auto-align* picks angulation + rotation that bring the abutment closest to vertical. Abutment-to-abutment
   angles are listed next to the implant angles.
 
-**Mac trackpad** (Input → Trackpad; chosen automatically on a Mac, with a built-in *Trackpad guide* shown on first visit)
+**Mac trackpad** (⚙ Settings → Input → Trackpad; chosen automatically on a Mac, with a built-in *Trackpad guide* shown on first visit)
 - Two-finger swipe: scroll slices (smoothly, ~28 px per slice); panoramic: up/down = slice position, left/right = along
   the curve; tangential: rotate; 3D: orbit.
 - Pinch: zoom (Chrome/Firefox ctrl+wheel and Safari gesture events). ⌘ + swipe: pan. ⇧ + swipe: brightness/contrast.
@@ -178,14 +196,14 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   to scroll; down moves the same way as the mouse wheel. Works with touch on phones.
 
 **Common mouse controls**: wheel = scroll / navigate · Ctrl+wheel or right-drag (down = in, up = out) = zoom;
-the toolbar switch makes right-drag adjust brightness/contrast instead · Shift+drag or middle-drag = pan ·
+⚙ Settings can make right-drag adjust brightness/contrast instead · Shift+drag or middle-drag = pan ·
 Alt/middle-drag = pan (also Shift-drag outside the MPR) · F = fit all views ·
 M or the ⤢ button = maximize/restore a view · Esc = cancel / deselect / leave the segmentation tool ·
 Enter = finish a cut · Del = delete selected implant.
 
 ## Automatic segmentation (DentalSegmentator)
 
-*Segmentation* panel → **Automatic segmentation (AI)** segments the **maxilla & upper skull**, the **mandible**, the
+*Segments* panel → **Automatic (AI) – Run…** segments the **maxilla & upper skull**, the **mandible**, the
 **upper teeth**, the **lower teeth** and the **mandibular canals** of a CBCT or CT with
 **[DentalSegmentator](https://doi.org/10.1016/j.jdent.2024.105130)**, the open deep-learning model by Gauthier Dot et al.
 It runs entirely in the browser (ONNX Runtime Web – on the graphics card with WebGPU in Chrome / Edge, otherwise on the
@@ -235,7 +253,7 @@ Like any automatic method it can be wrong (metal artefacts, unusual anatomy, low
 
 ## Intraoral scans
 
-**Intraoral scans** (side panel → *Import scan…*, or drop the file on the viewer) imports upper/lower jaw scans,
+**Intraoral scans** (Scans panel → *Import…*, or drop the file on the viewer) imports upper/lower jaw scans,
 antagonists and wax-ups as STL (binary/ASCII), PLY (binary/ASCII, with vertex colours, e.g. TRIOS exports) or OBJ.
 The type is guessed from the file name (upper / lower / wax-up …) and can be changed. Each scan is then placed:
 
@@ -263,7 +281,7 @@ changed per scan. They are saved in projects, follow *Apply rotate + crop*, and 
 
 ## Export STL
 
-**Export STL** (toolbar) writes binary STL files in millimetres in the **original DICOM patient coordinates**
+**Export ▾ → STL** (top bar) writes binary STL files in millimetres in the **original DICOM patient coordinates**
 (LPS, as in ImagePositionPatient; the header carries `SPACE=LPS` for 3D Slicer), so the models line up with the CBCT
 in other software and with each other. The mapping is recorded when the series is loaded (axis reordering, flips,
 downsampling), follows *Apply rotate + crop* and is saved in projects. Series without position information (and the
@@ -286,7 +304,7 @@ oriented.
 
 The app can be installed from Chrome or Microsoft Edge and then registered for `.dcm`, `.dicom`, `.dic` and `.ima` files:
 
-1. Open the app in Chrome or Edge and click **Install app** in the toolbar (or the install icon in the address bar /
+1. Open the app in Chrome or Edge and click **Install app** in ⚙ Settings (or the install icon in the address bar /
    ⋯ → *Apps* → *Install this site as an app*).
 2. Double-click a `.dcm` file in Explorer. The first time, Windows asks which app to use: choose
    **Quick DICOM Planning** and tick *Always*. The browser may also ask once to allow the app to open these files.
@@ -299,7 +317,7 @@ The app can be installed from Chrome or Microsoft Edge and then registered for `
 
 **Never be asked (Windows helper).** Browsers only ever hand a web app the one file that was double-clicked, so
 the steps above need the scans folder once. To skip even that, download
-[`Install-QuickDICOM-Helper.cmd`](public/windows/Install-QuickDICOM-Helper.cmd) (also linked in the app: *Install app*
+[`Install-QuickDICOM-Helper.cmd`](public/windows/Install-QuickDICOM-Helper.cmd) (also linked in the app: ⚙ Settings → *Install app*
 dialog, or *Never ask again…* on the launch banner) and run it once. It installs for the current Windows user only
 (no admin rights, files in `%LOCALAPPDATA%\QuickDICOMPlanning`), registers *Quick DICOM Planning (whole series)* for
 `.dcm/.dicom/.dic/.ima`, and opens the *Open with* dialog: choose it and tick *Always*. On a double-click it packs
@@ -312,7 +330,7 @@ when the browser has not registered it (yet), through the app's Start menu / des
 
 **macOS.** Install the app from Chrome or Edge the same way; in Finder select a `.dcm` file → *File → Get Info* →
 *Open with: Quick DICOM Planning* → *Change All…*. To skip the folder question there too, run the Mac helper once in
-Terminal (also shown in the app under *Install app* / *Mac helper*):
+Terminal (also shown in the app under ⚙ Settings → *Install app* / *Mac helper*):
 
 ```bash
 curl -fsSL https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/mac/install-helper.sh | bash
@@ -358,6 +376,8 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/render.ts` | CPU reslicing of planes/lines with optional slab (average/MIP) and crop |
 | `src/curve.ts` | Panoramic curve (centripetal Catmull-Rom, arc-length parametrised) |
 | `src/app.ts` | Application state: orientation frame, crop, curve, implants, tangential plane |
+| `src/main.ts` | Wires the page to the app state: top bar, panels, file opening, launch handling |
+| `src/ui/rail.ts`, `src/ui/popover.ts`, `src/ui/help.ts`, `src/ui/viewTools.ts`, `src/ui/recent.ts` | Interface: panel rail, menus, shortcut sheet, view header tools, recent scans |
 | `src/views/View.ts` | Base view (canvas, zoom/pan/W-L), planar view, implant rasterisation & dragging |
 | `src/views/MprView.ts` | Axial/coronal/sagittal MPR with Slicer-style rotation and crop box |
 | `src/views/PlanViews.ts` | Planning axial, panoramic, cross-section and tangential views |
