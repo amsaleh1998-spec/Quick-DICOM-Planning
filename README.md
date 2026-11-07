@@ -325,6 +325,14 @@ Log: `~/Library/Application Support/QuickDICOMPlanning/log.txt`; remove with `un
 Files without an extension cannot be associated in Windows; open their folder with *Open folder* or drag & drop.
 The installed app also works offline.
 
+## Anonymize DICOM files (portable Windows app)
+
+[`DICOM-Anonymizer.exe`](https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/windows/DICOM-Anonymizer.exe) is a
+small stand-alone Windows program (no installation, no admin rights, offline) that writes copies of DICOM scans with the
+patient's name, ID, birth date, dates, institution, physicians, private tags etc. removed and the UIDs replaced, while the
+images stay byte-identical. Drag folders into its window, choose the output folder, click *Anonymize*. Details, the
+exact list of what is removed and build instructions: [`tools/dicom-anonymizer`](tools/dicom-anonymizer/README.md).
+
 ## Development
 
 ```bash

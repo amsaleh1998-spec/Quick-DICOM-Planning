@@ -25,6 +25,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/dicom-anonymizer/go.mod
+          cache: false
+      - name: Test and build the Windows DICOM Anonymizer
+        working-directory: tools/dicom-anonymizer
+        run: |
+          go test ./...
+          ./build.sh ../../dist/windows/DICOM-Anonymizer.exe
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

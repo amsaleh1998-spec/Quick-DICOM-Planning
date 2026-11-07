@@ -1,0 +1,30 @@
+// Resources of DICOM-Anonymizer.exe: icon, manifest (visual styles, DPI awareness), version info.
+// Compiled by build.sh: x86_64-w64-mingw32-windres --preprocessor=cpp -O coff -i winres/app.rc -o rsrc_windows_amd64.syso
+
+
+APP ICON "app.ico"
+1 24 "app.manifest"
+
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILEOS 0x40004 // VOS_NT_WINDOWS32
+FILETYPE 0x1 // VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "DICOM Anonymizer - removes patient data from DICOM files"
+      VALUE "FileVersion", "1.0.0"
+      VALUE "InternalName", "DICOM-Anonymizer"
+      VALUE "OriginalFilename", "DICOM-Anonymizer.exe"
+      VALUE "ProductName", "DICOM Anonymizer"
+      VALUE "ProductVersion", "1.0.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
