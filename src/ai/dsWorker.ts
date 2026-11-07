@@ -4,6 +4,7 @@
 import type * as OrtNs from 'onnxruntime-web';
 import { DS_MODEL } from './dsPlan';
 import { DsEngine, EngineInput, nonzeroBox } from './dsEngine';
+import { GpuInfo, findGpu, gpuBuffersTooSmall } from './gpu';
 
 type Ort = typeof OrtNs;
 
@@ -17,8 +18,8 @@ export interface StartMsg {
 
 export type WorkerMsg =
   | { type: 'progress'; phase: 'download'; done: number; total: number }
-  | { type: 'progress'; phase: 'init'; device: string }
-  | { type: 'progress'; phase: 'run'; done: number; total: number; skipped: number; device: string; msPerTile: number }
+  | { type: 'progress'; phase: 'init'; device: string; gpu?: string }
+  | { type: 'progress'; phase: 'run'; done: number; total: number; skipped: number; device: string; gpu?: string; msPerTile: number }
   | { type: 'progress'; phase: 'finish' }
   | { type: 'note'; text: string }
   | { type: 'done'; cls: Uint8Array; margin: Uint8Array; counts: number[]; device: string; seconds: number; tiles: number; skipped: number }
@@ -93,20 +94,6 @@ function widen(parts: ArrayBuffer[]): Uint8Array {
   return new Uint8Array(out.buffer);
 }
 
-async function webgpuUsable(): Promise<string | null> {
-  const gpu = (navigator as unknown as { gpu?: { requestAdapter(o?: object): Promise<{ limits: Record<string, number> } | null> } }).gpu;
-  if (!gpu) return 'this browser has no WebGPU';
-  try {
-    const a = await gpu.requestAdapter({ powerPreference: 'high-performance' });
-    if (!a) return 'no WebGPU adapter';
-    // the largest activation is 64 × 128 × 160 × 112 floats (≈ 590 MB)
-    if ((a.limits.maxStorageBufferBindingSize ?? 0) < 600e6 || (a.limits.maxBufferSize ?? 0) < 600e6) return 'the GPU buffers are too small';
-    return null;
-  } catch (e) {
-    return (e as Error).message;
-  }
-}
-
 self.onmessage = async (e: MessageEvent<StartMsg>) => {
   if (e.data.type !== 'start') return;
   const { modelBase, ortBase, input, prefer } = e.data;
@@ -135,8 +122,9 @@ self.onmessage = async (e: MessageEvent<StartMsg>) => {
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(8, navigator.hardwareConcurrency || 4)) : 1;
     ort.env.logLevel = 'error';
     const external = [{ path: man.weights.externalPath, data: weights }];
+    let gpu: GpuInfo | null = null;
     const create = async (device: 'webgpu' | 'wasm') => {
-      post({ type: 'progress', phase: 'init', device });
+      post({ type: 'progress', phase: 'init', device, gpu: device === 'webgpu' ? gpu?.label : undefined });
       return ort.InferenceSession.create(device === 'webgpu' && graph2d ? graph2d : graph3d, {
         executionProviders: [device],
         externalData: external,
@@ -146,9 +134,14 @@ self.onmessage = async (e: MessageEvent<StartMsg>) => {
     let device: 'webgpu' | 'wasm' = 'wasm';
     let session: OrtNs.InferenceSession | null = null;
     if (prefer === 'auto') {
-      const why = await webgpuUsable();
+      const found = await findGpu();
+      const why = typeof found === 'string' ? found : gpuBuffersTooSmall(found) ? `the graphics card (${found.label}) has too little memory for the model` : null;
       if (why) post({ type: 'note', text: `Running on the CPU (${why}) – this takes much longer than on a graphics card.` });
       else {
+        gpu = found as GpuInfo;
+        // the adapter we checked (high-performance), not whatever the runtime would pick
+        ort.env.webgpu.adapter = gpu.adapter as OrtNs.Env.WebGpuFlags['adapter'];
+        ort.env.webgpu.powerPreference = 'high-performance';
         try {
           session = await create('webgpu');
           device = 'webgpu';
@@ -220,7 +213,7 @@ self.onmessage = async (e: MessageEvent<StartMsg>) => {
         skipped++;
         eng.addTile(tiles[i], null);
       }
-      post({ type: 'progress', phase: 'run', done: i + 1, total: tiles.length, skipped, device, msPerTile: ran ? runMs / ran : 0 });
+      post({ type: 'progress', phase: 'run', done: i + 1, total: tiles.length, skipped, device, gpu: device === 'webgpu' ? gpu?.label : undefined, msPerTile: ran ? runMs / ran : 0 });
     }
     post({ type: 'progress', phase: 'finish' });
     const res = eng.finish();

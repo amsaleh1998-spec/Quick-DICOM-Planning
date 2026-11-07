@@ -195,6 +195,10 @@ CPU); the scan is never uploaded. The model (62 MB) is downloaded on first use, 
   tiles (about 4× quicker; on a test CBCT the result agreed with Standard at Dice 0.94–0.98).
 - The run happens in a background worker with progress, time estimate and *Cancel*; *Run in background* lets you keep
   working.
+- The dialog names the graphics card that will be used. **Laptops with two GPUs**: Chrome / Edge on Windows use the GPU
+  that Windows assigns to the browser, not the one a web page asks for, so they often run on the slow integrated Intel
+  graphics. Set the browser to *High performance* in Windows *Settings → System → Display → Graphics* (or in the NVIDIA
+  Control Panel) and restart it – the dialog shows these steps when it detects integrated Intel graphics.
 - The result appears as five ordinary segments (marked *AI*): show / hide, recolour, rename, delete, add parts by
   clicking, use them as the CBCT surface when aligning intraoral scans, and export them with *Export STL*. Their
   surfaces are smooth (the network's class margins are interpolated, not the voxel staircase). They are saved in

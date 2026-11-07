@@ -8,6 +8,7 @@ import type { App } from '../app';
 import { Vec3, fromFrame } from '../math';
 import { DS_CREDIT, DS_MODEL, contextBox, modelAxes, modelGrid, patchCount } from './dsPlan';
 import { nonzeroBox } from './dsEngine';
+import { DEDICATED_GPU_HELP, findGpu, gpuBuffersTooSmall } from './gpu';
 import type { StartMsg, WorkerMsg } from './dsWorker';
 
 export interface AiHooks {
@@ -101,6 +102,7 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
         <label class="check"><input type="radio" name="ai-step" value="0.5" checked /> Standard – overlapping tiles, as the original model</label>
         <label class="check"><input type="radio" name="ai-step" value="1" /> Fast – about 4× quicker, slightly less accurate at the tile borders</label>
         <p class="muted small" id="ai-est"></p>
+        <div class="ai-gpu small" id="ai-gpu">Checking the graphics card…</div>
         ${hasAi ? '<p class="muted small">The automatic segments from the previous run are replaced.</p>' : ''}
         <p class="muted small">The first run downloads the model (62 MB), later runs use the saved copy. A graphics card (WebGPU, Chrome / Edge) makes it many times faster than the CPU.</p>
       </div>
@@ -143,6 +145,7 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
   };
   m.addEventListener('change', updateEst);
   updateEst();
+  showGpu(m.querySelector<HTMLDivElement>('#ai-gpu')!);
 
   const close = () => {
     if (running) {
@@ -170,6 +173,27 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
   $<HTMLButtonElement>('#ai-go').onclick = () => start(app, hooks, m, opt(), () => {
     window.removeEventListener('keydown', onKey, true);
   });
+}
+
+/** Which graphics card will run the model – with help when it is the slow integrated one. */
+async function showGpu(el: HTMLDivElement) {
+  const g = await findGpu();
+  if (typeof g === 'string') {
+    el.className = 'ai-gpu small warn';
+    el.innerHTML = `<b>No usable graphics card</b> (${g}) – the model runs on the CPU, which is much slower. Use a current Chrome or Edge.`;
+  } else if (gpuBuffersTooSmall(g)) {
+    el.className = 'ai-gpu small warn';
+    el.innerHTML = `Graphics card: <b>${g.label}</b> – too little memory for the model, it runs on the CPU (much slower).`;
+  } else if (g.integrated) {
+    el.className = 'ai-gpu small warn';
+    el.innerHTML = `Graphics card: <b>${g.label}</b> (integrated – slow). If this computer also has an <b>NVIDIA</b> or AMD
+      graphics card, the browser is not using it: Chrome on Windows ignores the page's request and uses the card set
+      for the browser in Windows.
+      <details><summary>Use the NVIDIA card (many times faster)</summary>${DEDICATED_GPU_HELP}</details>`;
+  } else {
+    el.className = 'ai-gpu small ok';
+    el.innerHTML = `Graphics card: <b>${g.label}</b>`;
+  }
 }
 
 function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' | 'crop'; step: number }, onEnd: () => void) {
@@ -282,7 +306,7 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' |
       notes.append(li);
     } else if (d.type === 'progress') {
       if (d.phase === 'download') setProgress((0.1 * d.done) / d.total, `Loading the model… ${Math.round((100 * d.done) / d.total)} %`, `${(d.done / 1e6).toFixed(1)} of ${(d.total / 1e6).toFixed(1)} MB`);
-      else if (d.phase === 'init') setProgress(0.1, 'Preparing the model…', d.device === 'webgpu' ? 'graphics card (WebGPU)' : 'CPU (WebAssembly)');
+      else if (d.phase === 'init') setProgress(0.1, 'Preparing the model…', d.device === 'webgpu' ? `graphics card: ${d.gpu ?? 'WebGPU'}` : 'CPU (WebAssembly)');
       else if (d.phase === 'run') {
         if (!tilesStart) tilesStart = performance.now();
         const el = (performance.now() - tilesStart) / 1000;
@@ -290,7 +314,7 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' |
         setProgress(
           0.1 + (0.88 * d.done) / d.total,
           `Segmenting… ${Math.round((100 * d.done) / d.total)} %${d.done >= 2 && d.done < d.total ? ` · about ${fmtTime(left)} left` : ''}`,
-          `tile ${d.done} of ${d.total}${d.skipped ? ` (${d.skipped} empty)` : ''} · ${d.device === 'webgpu' ? 'graphics card' : 'CPU'}${d.msPerTile ? ` · ${(d.msPerTile / 1000).toFixed(1)} s per tile` : ''}`,
+          `tile ${d.done} of ${d.total}${d.skipped ? ` (${d.skipped} empty)` : ''} · ${d.device === 'webgpu' ? d.gpu ?? 'graphics card' : 'CPU'}${d.msPerTile ? ` · ${(d.msPerTile / 1000).toFixed(1)} s per tile` : ''}`,
         );
       } else if (d.phase === 'finish') setProgress(0.99, 'Finishing…', '');
     } else if (d.type === 'done') {
