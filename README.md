@@ -376,8 +376,15 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/render.ts` | CPU reslicing of planes/lines with optional slab (average/MIP) and crop |
 | `src/curve.ts` | Panoramic curve (centripetal Catmull-Rom, arc-length parametrised) |
 | `src/app.ts` | Application state: orientation frame, crop, curve, implants, tangential plane |
-| `src/main.ts` | Wires the page to the app state: top bar, panels, file opening, launch handling |
-| `src/ui/rail.ts`, `src/ui/popover.ts`, `src/ui/help.ts`, `src/ui/viewTools.ts`, `src/ui/recent.ts` | Interface: panel rail, menus, shortcut sheet, view header tools, recent scans |
+| `src/main.ts` | Desktop entry: top bar, window / level, and the redraw that refreshes every panel when the state changes |
+| `src/ui/shell.ts` | The `App` instance, status bar, loading overlay and small HTML helpers shared by all panels |
+| `src/ui/layout.ts` | The two layouts, mode tabs, panel rail and start screen visibility |
+| `src/ui/files.ts`, `src/ui/save.ts` | Opening scans and projects (Open menu, Recent, drag & drop, files double-clicked in Explorer / Finder), saving and file delivery |
+| `src/ui/install.ts` | Install app and the Windows / Mac double-click helper |
+| `src/ui/reorientPanel.ts`, `curvePanel.ts`, `implantsPanel.ts`, `segmentsPanel.ts`, `nervesPanel.ts`, `scansPanel.ts` | One module per side panel: its controls and its refresh |
+| `src/ui/viewSettings.ts`, `settings.ts`, `patient.ts` | Settings inside the 3D / panoramic views, the ⚙ Settings popover (input, SpaceMouse), the patient chip |
+| `src/ui/undoUi.ts`, `keyboard.ts` | Undo / redo buttons and keyboard shortcuts |
+| `src/ui/rail.ts`, `src/ui/popover.ts`, `src/ui/help.ts`, `src/ui/viewTools.ts`, `src/ui/recent.ts` | Interface building blocks: panel rail, menus, shortcut sheet, view header tools, recent scans |
 | `src/views/View.ts` | Base view (canvas, zoom/pan/W-L), planar view, implant rasterisation & dragging |
 | `src/views/MprView.ts` | Axial/coronal/sagittal MPR with Slicer-style rotation and crop box |
 | `src/views/PlanViews.ts` | Planning axial, panoramic, cross-section and tangential views |
