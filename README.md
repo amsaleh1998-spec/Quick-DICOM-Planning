@@ -297,9 +297,11 @@ the steps above need the scans folder once. To skip even that, download
 dialog, or *Never ask again…* on the launch banner) and run it once. It installs for the current Windows user only
 (no admin rights, files in `%LOCALAPPDATA%\QuickDICOMPlanning`), registers *Quick DICOM Planning (whole series)* for
 `.dcm/.dicom/.dic/.ima`, and opens the *Open with* dialog: choose it and tick *Always*. On a double-click it packs
-all files of that folder into one uncompressed bundle (a ZIP named `.dcm` in `%TEMP%`, cleaned up after 12 h) and
-starts the installed app with it, so the whole series opens with no prompt. `uninstall.cmd` in the same folder
-removes it. The app also opens any ZIP of DICOM files (drag & drop or *Open files*).
+all files of that folder into one uncompressed bundle (a ZIP named `.dcm` in `%USERPROFILE%\QuickDICOMPlanning\bundles`,
+cleaned up after 12 h) and starts the installed app with it, so the whole series opens with no prompt. (Chrome and Edge
+do not let web apps read files under AppData / the temp folder or in hidden dot-folders of the user folder, so the
+bundle must live in a plain folder; the Mac helper uses `~/QuickDICOMPlanning/bundles`.) If the app is installed in both
+Chrome and Edge, the helper opens the Edge copy. `uninstall.cmd` in the same folder removes it. The app also opens any ZIP of DICOM files (drag & drop or *Open files*).
 
 **macOS.** Install the app from Chrome or Edge the same way; in Finder select a `.dcm` file → *File → Get Info* →
 *Open with: Quick DICOM Planning* → *Change All…*. To skip the folder question there too, run the Mac helper once in

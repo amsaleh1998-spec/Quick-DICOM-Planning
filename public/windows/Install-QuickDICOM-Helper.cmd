@@ -16,7 +16,8 @@ exit /b
 #  Quick DICOM Planning app with it, so the whole scan opens without any prompt.
 #
 #  Installs for the current user only (no admin rights). Files go to
-#  %LOCALAPPDATA%\QuickDICOMPlanning; uninstall with uninstall.cmd there.
+#  %LOCALAPPDATA%\QuickDICOMPlanning; uninstall with uninstall.cmd there. The temporary
+#  series bundles go to %USERPROFILE%\QuickDICOMPlanning\bundles (deleted after 12 hours).
 # ============================================================================
 
 $ErrorActionPreference = 'Stop'
@@ -139,10 +140,16 @@ try {
   Log ('folder: ' + $dir + '  -> ' + $all.Count + ' files, ' + [math]::Round($total / 1MB, 1) + ' MB')
   if ($all.Count -le 1) { Start-App $File; exit 0 }
 
-  # one bundle (a ZIP named .dcm, which the app unpacks). Not in %TEMP%: Chrome refuses to let web
-  # apps read files under AppData (SecurityError), so it goes to %USERPROFILE%\.quick-dicom-planning
-  $out = Join-Path $env:USERPROFILE '.quick-dicom-planning\bundles'
+  # one bundle (a ZIP named .dcm, which the app unpacks). Chrome / Edge refuse to let web apps read
+  # files under AppData (temp folder included) and in hidden dot-folders of the user folder
+  # (SecurityError), so it goes to a plain folder in the user folder: %USERPROFILE%\QuickDICOMPlanning
+  $root = Join-Path $env:USERPROFILE 'QuickDICOMPlanning'
+  $out = Join-Path $root 'bundles'
   New-Item -ItemType Directory -Force -Path $out | Out-Null
+  $readme = Join-Path $root 'README.txt'
+  if (-not (Test-Path -LiteralPath $readme)) {
+    [IO.File]::WriteAllText($readme, "Quick DICOM Planning helper: temporary copies of the DICOM series opened by double-click`r`n(bundles\*.dcm, deleted after 12 hours). Safe to delete.`r`n")
+  }
   Get-ChildItem -LiteralPath $out -File -ErrorAction SilentlyContinue |
     Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-12) } |
     Remove-Item -Force -ErrorAction SilentlyContinue
@@ -183,6 +190,7 @@ for %%e in (.dcm .dicom .dic .ima) do reg delete "HKCU\Software\Classes\%%e\Open
 echo Done. Double-clicked DICOM files now open with the app as before (Open with - Choose another app).
 pause
 cd /d "%TEMP%"
+rmdir /s /q "%USERPROFILE%\QuickDICOMPlanning" >nul 2>&1
 rmdir /s /q "%USERPROFILE%\.quick-dicom-planning" >nul 2>&1
 rmdir /s /q "%LOCALAPPDATA%\QuickDICOMPlanning"
 '@
@@ -262,6 +270,8 @@ Write-Host '  From then on, double-clicking a DICOM file opens the whole series 
 Write-Host "  To remove the helper later, run uninstall.cmd in $Base"
 
 # --- 4. let the user make it the default for .dcm ----------------------------------
+# bundles of older helper versions (a hidden folder the browsers no longer allow)
+Remove-Item -LiteralPath (Join-Path $env:USERPROFILE '.quick-dicom-planning') -Recurse -Force -ErrorAction SilentlyContinue
 $exDir = Join-Path $Base 'example'
 New-Item -ItemType Directory -Force -Path $exDir | Out-Null
 $ex = Join-Path $exDir 'example.dcm'

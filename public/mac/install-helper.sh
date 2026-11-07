@@ -56,6 +56,8 @@ main() {
 
   # --- 2. launcher script ---------------------------------------------------------------
   mkdir -p "$BASE" "$HOME/Applications"
+  # bundles of older versions (a hidden folder the browsers no longer allow)
+  rm -rf "$HOME/.quick-dicom-planning"
   printf '%s\n' "$APP" > "$BASE/app-path.txt"
   echo "$(date '+%Y-%m-%d %H:%M:%S')  installed; app $APP" >> "$BASE/log.txt"
 
@@ -95,10 +97,13 @@ shopt -u nocasematch
 log "folder: $DIR  -> ${#NAMES[@]} files"
 if [ "${#NAMES[@]}" -le 1 ]; then start_app "$FILE"; exit 0; fi
 
-# one uncompressed bundle (a ZIP named .dcm, which the app unpacks) in the temp folder
-# not in the system temp folder: Chrome may refuse to let web apps read files there
-OUT="$HOME/.quick-dicom-planning/bundles"
+# one uncompressed bundle (a ZIP named .dcm, which the app unpacks). Chrome / Edge refuse to let
+# web apps read files in system folders (temp, ~/Library) and in hidden dot-folders of the home
+# folder, so it goes to a plain folder in the home folder (deleted after 12 hours)
+ROOT="$HOME/QuickDICOMPlanning"
+OUT="$ROOT/bundles"
 mkdir -p "$OUT"
+[ -f "$ROOT/README.txt" ] || printf '%s\n' "Quick DICOM Planning helper: temporary copies of the DICOM series opened by double-click" "(bundles/*.dcm, deleted after 12 hours). Safe to delete." > "$ROOT/README.txt"
 find "$OUT" -type f -mmin +720 -delete 2>/dev/null
 LEAF="$(printf '%s' "$(basename "$DIR")" | tr -c 'A-Za-z0-9._ -' '_')"
 [ -n "$LEAF" ] || LEAF="series"
@@ -119,7 +124,7 @@ LAUNCHER
 #!/bin/bash
 echo "Removing the $NAME macOS helper..."
 "$LSREG" -u "$DEST" >/dev/null 2>&1
-rm -rf "$DEST" "$BASE" "$HOME/.quick-dicom-planning"
+rm -rf "$DEST" "$BASE" "$HOME/QuickDICOMPlanning" "$HOME/.quick-dicom-planning"
 echo "Done. DICOM files open with $NAME directly again (Finder - Get Info - Open with)."
 UNINSTALL
   chmod +x "$BASE/uninstall.sh"
