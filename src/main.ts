@@ -13,6 +13,7 @@ import { refreshSettings } from './ui/settings';
 import { refreshReorientPanel } from './ui/reorientPanel';
 import { refreshCurvePanel } from './ui/curvePanel';
 import { refreshImplantsPanel } from './ui/implantsPanel';
+import { refreshWaxupPanel } from './ui/waxupPanel';
 import { refreshSegmentsPanel } from './ui/segmentsPanel';
 import { refreshNervesPanel } from './ui/nervesPanel';
 import { refreshScanUi } from './ui/scansPanel';
@@ -63,6 +64,7 @@ function refreshUi() {
   refreshViewSettings();
   refreshReorientPanel();
   refreshCurvePanel();
+  refreshWaxupPanel();
   refreshImplantsPanel();
   refreshSegmentsPanel();
   refreshNervesPanel();

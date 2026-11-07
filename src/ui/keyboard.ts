@@ -6,6 +6,7 @@ import { app } from './shell';
 import { setMode } from './layout';
 import { pickAndOpen, saveProject } from './files';
 import { undoRedo } from './undoUi';
+import { removeTooth } from '../waxup/waxApp';
 
 // ---- keyboard ---------------------------------------------------------------
 window.addEventListener('keydown', (e) => {
@@ -29,6 +30,18 @@ window.addEventListener('keydown', (e) => {
     const redo = e.key === 'y' || e.key === 'Y' || e.shiftKey;
     undoRedo(redo);
     return;
+  }
+  // waxup panel open: Del removes the selected tooth, Esc deselects it
+  if (app.wax.editing && app.wax.selected !== null && !app.ruler && !app.drawing) {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      removeTooth(app, app.wax.selected);
+      return;
+    }
+    if (e.key === 'Escape') {
+      app.wax.selected = null;
+      app.changed();
+      return;
+    }
   }
   if (e.key === 'Enter' && app.segTool === 'cut' && app.cutDraft) {
     app.finishCut();

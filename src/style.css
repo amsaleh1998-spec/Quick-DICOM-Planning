@@ -1904,3 +1904,75 @@ a.btn-link {
 .ask-save footer .grow {
   flex: 1;
 }
+
+/* ---- waxup panel ---- */
+.wax-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.03));
+}
+.wax-chart.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.wax-row {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 2px;
+}
+.wax-row button {
+  min-width: 0;
+  padding: 3px 0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 4px;
+  color: var(--muted, #8a94a6);
+}
+.wax-row button.mid {
+  margin-left: 4px;
+}
+.wax-row.upper button {
+  border-bottom-left-radius: 9px;
+  border-bottom-right-radius: 9px;
+}
+.wax-row.lower button {
+  border-top-left-radius: 9px;
+  border-top-right-radius: 9px;
+}
+.wax-row button.on {
+  background: #ece2c8;
+  color: #3a3320;
+  border-color: #ece2c8;
+}
+.wax-row button.sel {
+  background: #ffbe5a;
+  border-color: #ffbe5a;
+  color: #2a1d05;
+}
+.wax-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wax-opts label.small {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wax-help {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 0;
+  color: var(--muted, #8a94a6);
+}
+.wax-help dt {
+  color: var(--text, #cfd6e4);
+  white-space: nowrap;
+}
+.wax-help dd {
+  margin: 0;
+}

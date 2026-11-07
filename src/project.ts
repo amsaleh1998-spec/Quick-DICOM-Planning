@@ -8,6 +8,8 @@ import { readZip, writeZip } from './zip';
 import { Placement, Scan, ScanKind, reserveScanIds } from './scans';
 import type { Affine } from './register';
 import type { ViewState } from './views/View';
+import { WaxTooth, Waxup, newGeo } from './waxup/waxup';
+import { ensureLibrary, loadedLibrary, type ToothLibrary } from './waxup/library';
 
 /**
  * Project file = ZIP with
@@ -77,7 +79,19 @@ interface ProjectFile {
     showScanContours?: boolean;
     /** automatic segmentation grid (data in ai/cls.bin and ai/margin.bin) */
     ai?: Omit<AiLayer, 'cls' | 'margin'> | null;
+    /** waxup: library teeth (shaped ones' vertices in waxup/<fdi>.f32, library coordinates) */
+    waxup?: SavedWaxup;
   };
+}
+
+interface SavedWaxup {
+  library: string;
+  placement: Waxup['placement'];
+  teeth: { fdi: number; T: Affine; shaped: boolean }[];
+  color: [number, number, number];
+  opacity: number;
+  visible: { upper: boolean; lower: boolean };
+  contours: boolean;
 }
 
 interface SavedScan {
@@ -202,6 +216,17 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
         const { cls: _c, margin: _m, ...meta } = a;
         return meta;
       })(),
+      waxup: app.wax.model.teeth.length
+        ? {
+            library: 'generic',
+            placement: app.wax.model.placement,
+            teeth: app.wax.model.teeth.map((t) => ({ fdi: t.fdi, T: t.T, shaped: t.geo !== 0 })),
+            color: app.wax.color,
+            opacity: app.wax.opacity,
+            visible: app.wax.visible,
+            contours: app.wax.contours,
+          }
+        : undefined,
     },
   };
   const json = new TextEncoder().encode(JSON.stringify(file, null, 1));
@@ -211,6 +236,9 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       { name: 'project.json', data: json },
       { name: 'volume.raw', data: raw },
       ...app.scans.map((sc) => ({ name: `scans/${sc.id}.bin`, data: scanBytes(sc) })),
+      ...app.wax.model.teeth
+        .filter((t) => t.geo !== 0)
+        .map((t) => ({ name: `waxup/${t.fdi}.f32`, data: new Uint8Array(t.pos.buffer.slice(t.pos.byteOffset, t.pos.byteOffset + t.pos.byteLength)) })),
       ...(app.seg.ai
         ? [
             { name: 'ai/cls.bin', data: app.seg.ai.cls },
@@ -323,9 +351,46 @@ export function applyProjectState(app: App, file: ProjectFile, entries?: Map<str
   reserveScanIds(Math.max(0, ...app.scans.map((x) => x.id)));
   app.activeScanId = st.activeScanId ?? null;
   app.showScanContours = st.showScanContours ?? true;
+  restoreWaxup(app, st.waxup, entries);
   app.resetHistory();
   app.markSaved();
   app.onWindowChange();
   app.changed();
 }
 
+
+/** Whether the project has waxup teeth (the tooth library must be loaded before restoring it). */
+export function projectHasWaxup(file: ProjectFile): boolean {
+  return !!file.state.waxup?.teeth.length;
+}
+
+function restoreWaxup(app: App, saved: SavedWaxup | undefined, entries?: Map<string, Uint8Array>) {
+  app.wax.clear();
+  if (!saved?.teeth.length) return;
+  const apply = (lib: ToothLibrary) => {
+    const m = app.wax.model;
+    m.lib = lib;
+    m.placement = saved.placement;
+    m.teeth = saved.teeth
+      .filter((t) => lib.teeth.has(t.fdi))
+      .map((s): WaxTooth => {
+        const tpl = lib.teeth.get(s.fdi)!;
+        const data = s.shaped ? entries?.get(`waxup/${s.fdi}.f32`) : undefined;
+        const ok = data && data.byteLength === tpl.pos.byteLength;
+        return { fdi: s.fdi, jaw: tpl.jaw, idx: tpl.idx, T: s.T, pos: ok ? new Float32Array(data.slice().buffer) : tpl.pos, geo: ok ? newGeo() : 0 };
+      });
+    app.wax.color = saved.color;
+    app.wax.opacity = saved.opacity;
+    app.wax.visible = { ...saved.visible };
+    app.wax.contours = saved.contours;
+  };
+  const lib = loadedLibrary();
+  if (lib) apply(lib);
+  else
+    // not loaded yet (mobile): restore when it is, as part of the opened project
+    void ensureLibrary().then((l) => {
+      apply(l);
+      app.resetHistory();
+      app.markSaved();
+    });
+}
