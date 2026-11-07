@@ -100,7 +100,20 @@ self.onmessage = async (e: MessageEvent<StartMsg>) => {
   try {
     const t0 = performance.now();
     // ---- model --------------------------------------------------------------------
-    const man: Manifest = await (await fetch(modelBase + 'manifest.json', { cache: 'no-cache' })).json();
+    // the manifest is checked online (new model version?), the last copy is used offline
+    const manUrl = modelBase + 'manifest.json';
+    const manCache = typeof caches !== 'undefined' ? await caches.open('qdp-ai-manifest').catch(() => null) : null;
+    let man: Manifest;
+    try {
+      const r = await fetch(manUrl, { cache: 'no-cache' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      man = await r.clone().json();
+      await manCache?.put(manUrl, r).catch(() => undefined);
+    } catch (err) {
+      const hit = await manCache?.match(manUrl);
+      if (!hit) throw new Error(`Could not download the model (${(err as Error).message}) – the first run needs an internet connection.`);
+      man = await hit.json();
+    }
     const cacheName = `qdp-ai-dentalsegmentator-${man.version}`;
     const files = [man.graph, ...(man.graph2d ? [man.graph2d] : []), ...man.weights.chunks];
     const total = files.reduce((a, f) => a + f.bytes, 0);
@@ -117,6 +130,15 @@ self.onmessage = async (e: MessageEvent<StartMsg>) => {
     chunks.length = 0;
 
     // ---- runtime ------------------------------------------------------------------
+    // load the whole runtime once up front: the service worker keeps a copy, so later runs work offline
+    // (the runtime itself fetches some of these files only when it needs them)
+    await Promise.all(
+      ['ort.webgpu.min.mjs', 'ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm'].map((f) =>
+        fetch(ortBase + f)
+          .then((r) => r.arrayBuffer())
+          .catch(() => undefined),
+      ),
+    );
     const ort: Ort = await import(/* @vite-ignore */ ortBase + 'ort.webgpu.min.mjs');
     ort.env.wasm.wasmPaths = ortBase;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(8, navigator.hardwareConcurrency || 4)) : 1;

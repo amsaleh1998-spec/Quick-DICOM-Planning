@@ -39,7 +39,8 @@ self.addEventListener('fetch', (e) => {
       })
       .catch(() =>
         caches
-          .match(req)
+          // module scripts send an Origin header; the cached copy may have been stored without one
+          .match(req, { ignoreVary: true })
           .then((r) => r || caches.match('./'))
           .then(isolated),
       ),
