@@ -49,6 +49,8 @@ export interface Segment {
   seeds: Seed[];
   /** voxel count (excluding the shell), updated after every rebuild */
   voxels: number;
+  /** 3D surface opacity (1 = opaque; older projects have none) */
+  opacity?: number;
   /** automatic segment: class `cls` of the stored AI result (Segmentation.ai) instead of seeds */
   ai?: { cls: number; model: string };
 }
@@ -106,9 +108,12 @@ export type Cut = PlaneCut | PanoCut;
 /** A cut before it has been given an id. */
 export type NewCut = Omit<PlaneCut, 'id'> | Omit<PanoCut, 'id'>;
 
-export const SEGMENT_PRESETS: { name: string; color: RGB }[] = [
-  { name: 'Maxilla', color: [236, 178, 112] },
-  { name: 'Mandible', color: [104, 178, 240] },
+/** the jaws are slightly see-through by default, so teeth roots, canals and implants show */
+export const JAW_OPACITY = 0.7;
+
+export const SEGMENT_PRESETS: { name: string; color: RGB; opacity?: number }[] = [
+  { name: 'Maxilla', color: [236, 178, 112], opacity: JAW_OPACITY },
+  { name: 'Mandible', color: [104, 178, 240], opacity: JAW_OPACITY },
   { name: 'Tooth', color: [248, 244, 222] },
   { name: 'Implant', color: [178, 186, 202] },
   { name: 'Segment', color: [140, 220, 150] },
@@ -194,7 +199,7 @@ export class Segmentation {
     return this.segments.find((s) => s.id === id) ?? null;
   }
 
-  addSegment(name: string, color?: RGB): Segment | null {
+  addSegment(name: string, color?: RGB, opacity = 1): Segment | null {
     const used = new Set(this.segments.map((s) => s.id));
     let id = 1;
     while (used.has(id)) id++;
@@ -207,6 +212,7 @@ export class Segmentation {
       visible: true,
       seeds: [],
       voxels: 0,
+      opacity,
     };
     // a second "Maxilla" etc. gets its own colour
     if (color && same) seg.color = EXTRA_COLORS[this.colorIdx++ % EXTRA_COLORS.length];

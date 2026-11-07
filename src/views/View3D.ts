@@ -64,6 +64,7 @@ uint labAt(vec3 p) {
 vec4 segInfo(uint l) { return texelFetch(uSegTab, ivec2(int(l), 0), 0); }
 float segLo(uint l) { return texelFetch(uSegTab, ivec2(int(l), 1), 0).r; }
 bool segAi(uint l) { return texelFetch(uSegTab, ivec2(int(l), 1), 0).g > 0.5; }
+float segOpacity(uint l) { return texelFetch(uSegTab, ivec2(int(l), 1), 0).b; }
 // trilinear blend of the eight voxels around p: +margin where the voxel is segment l, -margin elsewhere
 float aiField(vec3 p, uint l) {
   vec3 g = clamp(p * uLabInv, vec3(0.0), vec3(uLabMax));
@@ -225,6 +226,10 @@ void main() {
     }
   }
   float tSurf = 1e20;
+  // first opaque surface, and the translucent layers in front of it (depth, opacity)
+  float tOpaque = 1e20;
+  vec4 layT = vec4(1e20);
+  vec4 layA = vec4(0.0);
 
   vec2 b1 = boxHit(ro, rd, vec3(0.0), uBoxMax);
   mat3 Ft = transpose(uFrame);
@@ -234,74 +239,89 @@ void main() {
   vec4 acc = vec4(0.0);
   if (tn < tf) {
     if (uMode == 0) {
+      // surfaces front to back: a translucent segment adds its shaded surface weighted by its
+      // opacity, then the ray passes through it; the first opaque surface ends the ray
       float t = tn;
-      bool hit = false;
       bool first = true;
-      vec3 base = vec3(0.93, 0.88, 0.79);
-      float lo = uLo;
-      float hi = uHi;
-      uint lab = 0u;
-      bool aiHit = false;
-      for (int i = 0; i < 4096; i++) {
-        if (t > tf) break;
-        vec3 p = ro + rd * t;
-        float v = vol(p);
-        if (uSegOn == 1) {
-          uint l = labAt(p);
-          if (l == 0u) {
-            if (uShowUnseg == 1 && v >= uLo && v <= uHi) { hit = true; break; }
-          } else {
-            vec4 si = segInfo(l);
-            if (si.w > 0.5) {
-              if (segAi(l)) {
-                if (aiField(p, l) >= 0.0) { hit = true; base = si.rgb; lab = l; aiHit = true; break; }
-              } else {
-                float slo = segLo(l);
-                if (v >= slo) { hit = true; base = si.rgb; lo = slo; hi = 1e9; lab = l; break; }
+      float trans = 1.0;
+      uint skipLab = 0u;
+      int steps = 0;
+      for (int layer = 0; layer < 4; layer++) {
+        bool hit = false;
+        vec3 base = vec3(0.93, 0.88, 0.79);
+        float lo = uLo;
+        float hi = uHi;
+        uint lab = 0u;
+        bool aiHit = false;
+        float alpha = 1.0;
+        for (int i = 0; i < 4096; i++) {
+          if (t > tf || steps >= 4096) break;
+          steps++;
+          vec3 p = ro + rd * t;
+          float v = vol(p);
+          if (uSegOn == 1) {
+            uint l = labAt(p);
+            // inside the translucent segment just drawn: go on until the ray leaves it
+            if (skipLab != 0u) {
+              if (l == skipLab) { t += uStep; continue; }
+              skipLab = 0u;
+            }
+            if (l == 0u) {
+              if (uShowUnseg == 1 && v >= uLo && v <= uHi) { hit = true; break; }
+            } else {
+              vec4 si = segInfo(l);
+              if (si.w > 0.5) {
+                if (segAi(l)) {
+                  if (aiField(p, l) >= 0.0) { hit = true; base = si.rgb; lab = l; aiHit = true; alpha = segOpacity(l); break; }
+                } else {
+                  float slo = segLo(l);
+                  if (v >= slo) { hit = true; base = si.rgb; lo = slo; hi = 1e9; lab = l; alpha = segOpacity(l); break; }
+                }
               }
             }
+          } else if (v >= uLo && v <= uHi) { hit = true; break; }
+          first = false;
+          t += uStep;
+        }
+        if (!hit) break;
+        vec3 n = -rd;
+        if (!first) {
+          float a = t - uStep;
+          float b = t;
+          if (aiHit) {
+            for (int k = 0; k < 6; k++) {
+              float m = 0.5 * (a + b);
+              if (aiField(ro + rd * m, lab) >= 0.0) b = m; else a = m;
+            }
+            t = b;
+            vec3 g = aiGrad(ro + rd * t, lab);
+            if (length(g) > 1e-6) n = -normalize(g);
+          } else {
+            float va = vol(ro + rd * a);
+            // inner face (cut between two segments / a hidden neighbour): voxel shading
+            bool inner = lab != 0u && va >= lo;
+            if (!inner) {
+              for (int k = 0; k < 6; k++) {
+                float m = 0.5 * (a + b);
+                float v = vol(ro + rd * m);
+                if (v >= lo && v <= hi) b = m; else a = m;
+              }
+            }
+            t = b;
+            vec3 g = inner ? labGrad(ro + rd * t, lab) : grad(ro + rd * t);
+            if (length(g) > 1e-6) n = -normalize(g);
           }
-        } else if (v >= uLo && v <= uHi) { hit = true; break; }
+        }
+        if (layer == 0) tSurf = t;
+        if (layer < 4) { layT[layer] = t; layA[layer] = alpha; }
+        acc.rgb += trans * alpha * shade(base, n, rd, L, 0.25);
+        trans *= 1.0 - alpha;
+        if (alpha > 0.995 || trans < 0.03) { tOpaque = t; break; }
+        skipLab = lab;
         first = false;
         t += uStep;
       }
-      if (hit && aiHit) {
-        vec3 n = -rd;
-        if (!first) {
-          float a = t - uStep;
-          float b = t;
-          for (int k = 0; k < 6; k++) {
-            float m = 0.5 * (a + b);
-            if (aiField(ro + rd * m, lab) >= 0.0) b = m; else a = m;
-          }
-          t = b;
-          tSurf = t;
-          vec3 g = aiGrad(ro + rd * t, lab);
-          if (length(g) > 1e-6) n = -normalize(g);
-        }
-        acc = vec4(shade(base, n, rd, L, 0.25), 1.0);
-      } else if (hit) {
-        vec3 n = -rd;
-        if (!first) {
-          float a = t - uStep;
-          float b = t;
-          float va = vol(ro + rd * a);
-          // inner face (cut between two segments / a hidden neighbour): voxel shading
-          bool inner = lab != 0u && va >= lo;
-          if (!inner) {
-            for (int k = 0; k < 6; k++) {
-              float m = 0.5 * (a + b);
-              float v = vol(ro + rd * m);
-              if (v >= lo && v <= hi) b = m; else a = m;
-            }
-          }
-          t = b;
-          tSurf = t;
-          vec3 g = inner ? labGrad(ro + rd * t, lab) : grad(ro + rd * t);
-          if (length(g) > 1e-6) n = -normalize(g);
-        }
-        acc = vec4(shade(base, n, rd, L, 0.25), 1.0);
-      }
+      acc.a = 1.0 - trans;
     } else if (uMode == 1) {
       float t = tn;
       for (int i = 0; i < 4096; i++) {
@@ -359,8 +379,8 @@ void main() {
   }
   // prosthetic axis guides: translucent, in front of whatever they cover
   if (tGuide < min(tImp, tSurf)) col = mix(col, shade(cGuide, nGuide, rd, L, 0.3), 0.42);
-  // nerve hidden behind bone: still visible as a ghost
-  if (tNerve < 1e19 && tNerve > tSurf) col = mix(col, shade(uNerveCol, nNerve, rd, L, 0.3), 0.45);
+  // nerve hidden behind opaque bone: still visible as a ghost
+  if (tNerve < 1e19 && tNerve > tOpaque) col = mix(col, shade(uNerveCol, nNerve, rd, L, 0.3), 0.45);
   if (uScanOn == 1) {
     vec2 uv = gl_FragCoord.xy / uRes;
     vec4 sc = texture(uScanCol, uv);
@@ -370,6 +390,12 @@ void main() {
       float tS = ze / dot(rd, uFwd);
       // a scan lying on the bone/teeth surface wins the tie (0.2 mm)
       if (tS < min(tImp, tSurf + 0.2)) col = mix(col, sc.rgb, sc.a);
+      else if (tS < min(tImp, tOpaque + 0.2)) {
+        // behind translucent segments: seen through the layers in front of it
+        float tr = 1.0;
+        for (int k = 0; k < 4; k++) if (layT[k] < tS) tr *= 1.0 - layA[k];
+        col = mix(col, sc.rgb, sc.a * tr);
+      }
     }
   }
   outColor = vec4(col, 1.0);
@@ -568,6 +594,7 @@ export class View3D extends View {
       tab.set([g.color[0] / 255, g.color[1] / 255, g.color[2] / 255, g.visible ? 1 : 0], g.id * 4);
       tab[(128 + g.id) * 4] = seg.segmentLo(g);
       tab[(128 + g.id) * 4 + 1] = g.ai ? 1 : 0;
+      tab[(128 + g.id) * 4 + 2] = g.opacity ?? 1;
     }
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.segTabTex);

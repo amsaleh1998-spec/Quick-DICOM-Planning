@@ -988,6 +988,13 @@ segColor.oninput = () => {
   s.color = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
   app.changed();
 };
+const segOpacity = $<HTMLInputElement>('seg-opacity');
+segOpacity.oninput = () => {
+  const s = app.activeSegment();
+  if (!s) return;
+  s.opacity = Number(segOpacity.value);
+  app.changed();
+};
 $('btn-ai-seg').onclick = () => showDentalSegmentator(app, { setStatus });
 $('btn-seg-nerves').onclick = () => {
   if (app.activeSegId === null) return;
@@ -1427,6 +1434,8 @@ function refreshSegUi() {
   if (s) {
     if (document.activeElement !== segName) segName.value = s.name;
     if (document.activeElement !== segColor) segColor.value = toHex(s.color);
+    if (document.activeElement !== segOpacity) segOpacity.value = String(s.opacity ?? 1);
+    $('seg-opacity-val').textContent = `${Math.round((s.opacity ?? 1) * 100)} %`;
     const grow = $('btn-seg-grow');
     grow.classList.toggle('active', tool === 'grow');
     grow.textContent = tool === 'grow' ? 'Clicking… (Esc)' : 'Click to add';

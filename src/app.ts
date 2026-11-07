@@ -1037,7 +1037,7 @@ export class App {
   newSegment(preset: number) {
     if (!this.vol) return;
     const p = SEGMENT_PRESETS[preset] ?? SEGMENT_PRESETS[SEGMENT_PRESETS.length - 1];
-    const seg = this.seg.addSegment(p.name, p.color);
+    const seg = this.seg.addSegment(p.name, p.color, p.opacity ?? 1);
     if (!seg) {
       this.onStatus('Too many segments – delete some first.', true);
       return;
@@ -1209,13 +1209,15 @@ export class App {
     const added: Segment[] = [];
     for (const l of DS_LABELS) {
       if ((res.counts[l.cls] ?? 0) < 20) continue; // nothing (or only noise) found
-      const g = seg.addSegment(l.name, l.color);
+      const g = seg.addSegment(l.name, l.color, l.opacity);
       if (!g) break;
       g.color = [...l.color];
       g.ai = { cls: l.cls, model };
       added.push(g);
     }
     if (!added.length) seg.setAi(null);
+    // the AI segments cover the jaws: hide the remaining (unsegmented) bone in 3D
+    else this.showUnsegmented = false;
     this.activeSegId = null;
     this.rebuildSegments('Showing the automatic segmentation…');
     return added;
@@ -1348,7 +1350,7 @@ export class App {
     const s = this.seg;
     return JSON.stringify([
       s.version,
-      s.segments.map((g) => [g.id, g.visible, g.color, g.voxels]),
+      s.segments.map((g) => [g.id, g.visible, g.color, g.voxels, g.opacity ?? 1]),
       s.cuts.map((c) => c.id),
       this.showSegOverlay,
       this.showUnsegmented,
