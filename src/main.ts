@@ -20,7 +20,7 @@ import { Rail } from './ui/rail';
 import { bindPopover, closePopovers } from './ui/popover';
 import { showHelp } from './ui/help';
 import { mountViewTools } from './ui/viewTools';
-import { RecentEntry, RecentSource, addRecent, ago, listRecent, readRecent, removeRecent } from './ui/recent';
+import { RecentEntry, RecentSource, addRecent, ago, handlesFromDrop, listRecent, readRecent, recentFromHandles, removeRecent } from './ui/recent';
 import { SCAN_KINDS, Scan, ScanKind, createScan, placementLabel } from './scans';
 import { showAlignment, showPlacement } from './alignUi';
 
@@ -749,6 +749,8 @@ window.addEventListener('drop', async (e) => {
   dragDepth = 0;
   drop.classList.add('hidden');
   if (!e.dataTransfer) return;
+  // both read the items synchronously (they are gone after the first await)
+  const handles = handlesFromDrop(e.dataTransfer);
   const files = await filesFromDataTransfer(e.dataTransfer);
   // surface models (intraoral scans) go into the open CBCT
   const meshes = files.filter((f) => /\.(stl|ply|obj)$/i.test(f.name));
@@ -757,6 +759,7 @@ window.addEventListener('drop', async (e) => {
     else await importScans(meshes);
     return;
   }
+  pendingRecent = recentFromHandles(await handles);
   loadFiles(files);
 });
 void viewport;

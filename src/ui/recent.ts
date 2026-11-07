@@ -119,3 +119,29 @@ export function ago(t: number): string {
   const days = Math.round(d / 86400);
   return days < 14 ? `${days} days ago` : new Date(t).toLocaleDateString();
 }
+
+type HandleItem = DataTransferItem & { getAsFileSystemHandle?(): Promise<FileSystemHandle | null> };
+
+/**
+ * Handles of dropped files / folders (Chrome, Edge), so a drop can be listed under Recent too.
+ * Must be called synchronously inside the drop event – the items are gone after the first await.
+ */
+export function handlesFromDrop(dt: DataTransfer): Promise<FileSystemHandle[]> {
+  const ps: Promise<FileSystemHandle | null>[] = [];
+  for (const item of Array.from(dt.items) as HandleItem[]) {
+    if (item.kind !== 'file' || !item.getAsFileSystemHandle) continue;
+    try {
+      ps.push(item.getAsFileSystemHandle().catch(() => null));
+    } catch {
+      /* not offered for this item */
+    }
+  }
+  return Promise.all(ps).then((hs) => hs.filter((h): h is FileSystemHandle => !!h));
+}
+
+/** What a drop of these handles should be remembered as (null: not worth remembering). */
+export function recentFromHandles(hs: FileSystemHandle[], depth = 4): RecentSource | null {
+  if (hs.length === 1 && hs[0].kind === 'directory') return { kind: 'folder', handles: hs, depth };
+  if (!hs.length || hs.length > 2 || hs.some((h) => h.kind !== 'file')) return null;
+  return { kind: /\.(zip|qdp)$/i.test(hs[0].name) ? 'project' : 'files', handles: hs, depth: 0 };
+}
