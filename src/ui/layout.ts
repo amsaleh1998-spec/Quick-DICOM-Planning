@@ -49,8 +49,14 @@ export function setMode(m: Mode) {
   mprLayout.classList.toggle('hidden', m !== 'mpr');
   planLayout.classList.toggle('hidden', m !== 'plan');
   rail.setMode(m);
+  // planning starts with the panoramic curve; once there is one, the last panel used comes back
+  const noCurve = m === 'plan' && !!app.vol && !app.curves.length;
+  if (noCurve) rail.prefer('curve');
   moveView3d(m === 'mpr' ? mprLayout : planLayout);
+  if (m !== 'plan' && app.drawing && !app.drawing.length) app.cancelDrawing(); // nothing drawn yet
   app.setMode(m);
+  // … and it is already drawing: the first click in the axial view is the first point
+  if (noCurve && !app.drawing && !app.placing) app.startDrawing();
 }
 tabButtons.forEach((b) => (b.onclick = () => setMode(b.dataset.mode as Mode)));
 document.querySelectorAll<HTMLButtonElement>('[data-goto]').forEach((b) => (b.onclick = () => setMode(b.dataset.goto as Mode)));

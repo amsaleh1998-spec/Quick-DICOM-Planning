@@ -392,6 +392,7 @@ $('btn-demo').onclick = async () => {
   await new Promise((r) => setTimeout(r, 30));
   try {
     app.setVolume(createPhantom());
+    if (app.mode === 'plan') setMode('plan'); // ready to draw the curve
     setStatus('Demo phantom loaded (mandible + maxilla in occlusion) – the occlusal plane is tilted a few degrees; try Ctrl+Alt+drag in the sagittal view.');
   } finally {
     hideLoading();

@@ -33,8 +33,9 @@ test('every kind of change is undone and redone, one step each', async ({ page }
   await page.keyboard.press('2');
 
   // panoramic curve: clicked point by point, Enter
-  await page.click('[data-panel="curve"]');
-  await page.click('#btn-draw-curve');
+  // entering Plan without a curve starts drawing it
+  await expect(page.locator('#panel-curve')).toBeVisible();
+  await expect(page.locator('#btn-draw-curve')).toHaveText('Finish curve');
   for (const [x, y] of [[0.25, 0.6], [0.35, 0.4], [0.5, 0.33], [0.65, 0.4], [0.75, 0.6]]) {
     await clickView(page, 'planAxial', x, y);
     await page.waitForTimeout(100);
@@ -170,6 +171,7 @@ test('automatic segmentation is one step', async ({ page }) => {
 test('a new scan starts a new history', async ({ page }) => {
   await openDemo(page);
   await page.click('[data-mode="plan"]');
+  await page.click('[data-panel="implants"]');
   await page.click('#btn-add-lower');
   await clickView(page, 'planAxial', 0.3, 0.75);
   await expect.poll(() => page.evaluate(() => window.app.undoCount)).toBeGreaterThan(0);
