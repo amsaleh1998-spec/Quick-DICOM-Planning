@@ -43,8 +43,9 @@ test('every kind of change is undone and redone, one step each', async ({ page }
   await page.keyboard.press('Enter');
   await expect.poll(async () => (await state(page)).curves).toBe(1);
 
+  // finishing the curve switches to the implants
+  await expect(page.locator('#panel-plan')).toBeVisible();
   // implant placed and deleted straight away: two steps
-  await page.click('[data-panel="implants"]');
   await page.click('#btn-add-lower');
   await clickView(page, 'planAxial', 0.32, 0.5);
   await page.mouse.move(5, 5);

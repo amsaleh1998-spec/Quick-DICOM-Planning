@@ -1881,3 +1881,26 @@ a.btn-link {
   width: 0;
   min-width: 0;
 }
+
+/* unsaved plan */
+#btn-save-project.dirty::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 1px;
+}
+
+/* "Save the plan first?" */
+.ask-save {
+  max-width: 460px;
+}
+.ask-save footer {
+  gap: 8px;
+}
+.ask-save footer .grow {
+  flex: 1;
+}

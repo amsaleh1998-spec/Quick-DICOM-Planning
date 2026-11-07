@@ -61,9 +61,19 @@ export function setMode(m: Mode) {
 tabButtons.forEach((b) => (b.onclick = () => setMode(b.dataset.mode as Mode)));
 document.querySelectorAll<HTMLButtonElement>('[data-goto]').forEach((b) => (b.onclick = () => setMode(b.dataset.goto as Mode)));
 
-/** Start screen, rail badges, and the one-time nudge towards ② Plan. */
+// once the curve is drawn, the next step is placing implants
+app.onCurveDrawn = () => rail.select('implants');
+
+/** Start screen, rail badges, the unsaved dot on Save, and the one-time nudge towards ② Plan. */
 export function refreshLayout() {
   const vol = app.vol;
+  // unsaved plan: a dot on Save
+  const save = $('btn-save-project');
+  const dirty = app.unsaved;
+  if (save.classList.contains('dirty') !== dirty) {
+    save.classList.toggle('dirty', dirty);
+    save.title = dirty ? 'Save the plan – it has changes that are not saved yet (Ctrl+S)' : 'Save the CBCT, plan and views to a project file (Ctrl+S)';
+  }
 
   $('start-screen').classList.toggle('hidden', !!vol);
   rail.setBadges({

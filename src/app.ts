@@ -186,6 +186,8 @@ export class App {
   onWindowChange: () => void = () => {};
   onCursor: (text: string) => void = () => {};
   onStatus: (msg: string, error?: boolean) => void = () => {};
+  /** a panoramic curve has just been drawn (the next step is placing implants) */
+  onCurveDrawn: () => void = () => {};
   /** show / hide a busy overlay (null hides it) */
   onBusy: (text: string | null) => void = () => {};
 
@@ -280,6 +282,7 @@ export class App {
     this.fitAll();
     this.onWindowChange();
     this.resetHistory();
+    this.markSaved(); // a freshly opened scan has nothing to save yet
     this.changed();
   }
 
@@ -452,6 +455,7 @@ export class App {
     this.restoreSegmentation(segments, cuts, nerves, ai);
     this.scans = scans;
     this.resetHistory(); // coordinates changed: earlier states no longer apply
+    this.savedKey = null; // the resampled volume itself is a change worth saving
     this.onWindowChange();
     this.fitAll();
     this.changed();
@@ -494,6 +498,10 @@ export class App {
       this.s = this.curve!.length / 2;
       this.panoOffset = 0;
       this.pano.vs.fitted = false;
+      this.drawingNew = false;
+      this.changed();
+      this.onCurveDrawn();
+      return;
     }
     this.drawingNew = false;
     this.changed();
@@ -801,6 +809,26 @@ export class App {
       if (this.pointersDown > 0) this.scheduleCommit(); // still dragging
       else this.commitHistory();
     }, 400);
+  }
+
+  /** the plan as it was last saved or opened; null = changed in a way the plan text does not show */
+  private savedKey: string | null = null;
+
+  /** The current plan is what is in the project file (just saved or opened). */
+  markSaved() {
+    this.savedKey = this.history?.stateKey() ?? null;
+    this.changed();
+  }
+
+  /** Something outside the plan history changed (e.g. the patient's name). */
+  markUnsaved() {
+    this.savedKey = null;
+    this.changed();
+  }
+
+  /** The plan has changes that are not in a project file yet (the demo volume never counts). */
+  get unsaved(): boolean {
+    return !!this.vol && this.vol.info.source !== 'Demo phantom' && (this.savedKey === null || this.history.stateKey() !== this.savedKey);
   }
 
   /** Start a new history (new scan, project opened, coordinates changed). */

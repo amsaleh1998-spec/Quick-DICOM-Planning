@@ -19,6 +19,7 @@ import { importScans } from './scansPanel';
 /** Load DICOM files, a ZIP of them or a project. Resolves to an error message, or null on success. */
 export async function loadFiles(files: File[]): Promise<string | null> {
   if (!files.length) return 'No files received.';
+  if (!(await askToSave())) return ((pendingRecent = null), null);
   if (files.length === 1 && (await isZipFile(files[0]))) {
     // a project, or a ZIP of DICOM files (e.g. a whole series handed over by the Windows helper)
     showLoading('Unpacking…', 0);
@@ -198,6 +199,7 @@ launchQueue?.setConsumer(async (params) => {
 
 // ---- projects ----------------------------------------------------------------------
 export async function openProject(file: File): Promise<string | null> {
+  if (!(await askToSave())) return ((pendingRecent = null), null);
   try {
     showLoading('Opening project…', 0.2);
     const buf = await file.arrayBuffer();
@@ -219,10 +221,10 @@ export async function openProject(file: File): Promise<string | null> {
   }
 }
 
-export async function saveProject() {
+export async function saveProject(): Promise<boolean> {
   if (!app.vol) {
     setStatus('Nothing to save – open a CBCT first.', true);
-    return;
+    return false;
   }
   try {
     showLoading('Packing project…', 0);
@@ -230,10 +232,13 @@ export async function saveProject() {
     hideLoading();
     const name = projectFileName(app);
     const ok = await deliverFile(blob, name);
+    if (ok) app.markSaved();
     setStatus(ok ? `Project saved as ${name} (${(blob.size / 1e6).toFixed(1)} MB)` : 'Save cancelled');
+    return ok;
   } catch (e) {
     console.error(e);
     setStatus((e as Error).message, true);
+    return false;
   } finally {
     hideLoading();
   }
@@ -388,6 +393,7 @@ folderInput.onchange = () => {
   folderInput.value = '';
 };
 $('btn-demo').onclick = async () => {
+  if (!(await askToSave())) return;
   showLoading('Generating demo volume…', 0.3);
   await new Promise((r) => setTimeout(r, 30));
   try {
@@ -432,3 +438,56 @@ window.addEventListener('drop', async (e) => {
   pendingRecent = recentFromHandles(await handles);
   loadFiles(files);
 });
+
+// Closing the app (or the tab) with an unsaved plan: the browser asks whether to leave. Browsers
+// only offer their own Leave / Cancel question – Cancel keeps the app open to save (Ctrl+S).
+window.addEventListener('beforeunload', (e) => {
+  if (!app.unsaved) return;
+  e.preventDefault();
+  e.returnValue = ''; // older browsers
+});
+
+// Opening another scan replaces the plan: ask first when it has unsaved changes.
+let mayReplace: number | null = null; // volume whose plan the user chose to save or leave
+
+/** Resolves to true when the current plan may be replaced (saved, not wanted, or nothing to save). */
+function askToSave(): Promise<boolean> {
+  const vol = app.vol;
+  if (!vol || !app.unsaved || mayReplace === vol.id) return Promise.resolve(true);
+  hideLoading();
+  return new Promise((resolve) => {
+    const m = document.createElement('div');
+    m.className = 'modal-backdrop';
+    m.innerHTML = `
+      <div class="modal ask-save" role="alertdialog" aria-modal="true" aria-labelledby="as-title">
+        <header><h2 id="as-title">Save the plan first?</h2><button class="modal-close" title="Cancel (Esc)">×</button></header>
+        <p>The plan of <b>${escapeHtml(formatPatientName(vol.info.patientName) || vol.info.seriesDescription || 'this scan')}</b> has changes that are not saved.
+          Opening another scan replaces it.</p>
+        <footer><button class="as-cancel">Cancel</button><span class="grow"></span><button class="as-discard danger">Don't save</button><button class="as-save primary">Save…</button></footer>
+      </div>`;
+    const done = (ok: boolean) => {
+      window.removeEventListener('keydown', onKey, true);
+      m.remove();
+      if (ok) mayReplace = vol.id;
+      else setStatus('Kept the current plan.');
+      resolve(ok);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      done(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    m.querySelector<HTMLButtonElement>('.modal-close')!.onclick = () => done(false);
+    m.querySelector<HTMLButtonElement>('.as-cancel')!.onclick = () => done(false);
+    m.querySelector<HTMLButtonElement>('.as-discard')!.onclick = () => done(true);
+    m.querySelector<HTMLButtonElement>('.as-save')!.onclick = async () => {
+      m.style.display = 'none';
+      if (await saveProject()) done(true);
+      else m.style.display = ''; // not saved: ask again
+    };
+    document.body.append(m);
+    m.querySelector<HTMLButtonElement>('.as-save')!.focus();
+  });
+}

@@ -38,6 +38,11 @@ export class History {
     return out;
   }
 
+  /** The whole plan as text (to tell whether it changed since it was saved). */
+  stateKey(): string {
+    return JSON.stringify(this.capture());
+  }
+
   /** Forget everything (new scan, or coordinates changed so old states no longer apply). */
   reset() {
     this.undoStack = [];

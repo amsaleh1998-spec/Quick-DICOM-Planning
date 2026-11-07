@@ -119,6 +119,88 @@ test('Plan opens on the panoramic curve until there is one, then on the last pan
   await expect(page.locator('#panel-plan')).toBeVisible();
 });
 
+test('drawing the curve leads on to the implants', async ({ page }) => {
+  await openDemo(page);
+  await page.click('[data-mode="plan"]');
+  for (const [x, y] of [[0.25, 0.6], [0.4, 0.38], [0.6, 0.38], [0.75, 0.6]]) await clickView(page, 'planAxial', x, y);
+  await page.click('#btn-draw-curve'); // Finish curve
+  await expect(page.locator('#panel-plan')).toBeVisible();
+  await expect(page.locator('#btn-add-lower')).toBeVisible();
+  expect(await page.evaluate(() => window.app.curves.length)).toBe(1);
+});
+
+test('closing with an unsaved plan asks first, not after saving', async ({ page }) => {
+  const asked: string[] = [];
+  page.on('dialog', (d) => asked.push(d.type())); // (accepted by the fixture)
+  await page.goto('./');
+  await page.setInputFiles('#file-input', dicomFiles());
+  await page.waitForFunction(() => !!window.app.vol);
+  await expect(page.locator('#btn-save-project')).not.toHaveClass(/dirty/); // nothing planned yet
+  await page.click('[data-mode="plan"]');
+  await page.keyboard.press('Escape');
+  await page.click('[data-panel="implants"]');
+  await page.click('#btn-add-lower');
+  await clickView(page, 'planAxial', 0.5, 0.5);
+  await expect(page.locator('#btn-save-project')).toHaveClass(/dirty/);
+  // saved: no question when leaving
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#btn-save-project')]);
+  await dl.path();
+  await expect(page.locator('#btn-save-project')).not.toHaveClass(/dirty/);
+  // changed again: leaving asks
+  await page.fill('#imp-l', '12');
+  await page.dispatchEvent('#imp-l', 'input');
+  await expect(page.locator('#btn-save-project')).toHaveClass(/dirty/);
+  await page.close({ runBeforeUnload: true });
+  await expect.poll(() => asked).toEqual(['beforeunload']);
+});
+
+test('opening another scan over an unsaved plan asks: cancel, save, or leave it', async ({ page }) => {
+  await page.goto('./');
+  await page.setInputFiles('#file-input', dicomFiles());
+  await page.waitForFunction(() => !!window.app.vol);
+  await page.click('[data-mode="plan"]');
+  await page.keyboard.press('Escape');
+  await page.click('[data-panel="implants"]');
+  await page.click('#btn-add-lower');
+  await clickView(page, 'planAxial', 0.5, 0.5);
+  await expect(page.locator('#btn-save-project')).toHaveClass(/dirty/);
+  const openDemoFromMenu = async () => {
+    await page.click('#btn-open-menu');
+    await page.click('#btn-demo');
+  };
+  // Cancel: the plan stays
+  await openDemoFromMenu();
+  await expect(page.locator('.ask-save')).toBeVisible();
+  await expect(page.locator('.ask-save')).toContainText('TEST, Loader');
+  await page.click('.ask-save .as-cancel');
+  await expect(page.locator('.ask-save')).toBeHidden();
+  expect(await page.evaluate(() => [window.app.vol.info.source.includes('slices'), window.app.implants.length])).toEqual([true, 1]);
+  // Save…: saved, then replaced
+  await openDemoFromMenu();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.ask-save .as-save')]);
+  await dl.path();
+  await expect.poll(() => page.evaluate(() => window.app.vol.info.source)).toBe('Demo phantom');
+  // a new plan on another scan, then Don't save
+  await page.setInputFiles('#file-input', dicomFiles());
+  await page.waitForFunction(() => window.app.vol.info.source !== 'Demo phantom');
+  await page.click('[data-mode="plan"]');
+  await page.keyboard.press('Escape');
+  await page.click('[data-panel="implants"]');
+  await page.click('#btn-add-lower');
+  await clickView(page, 'planAxial', 0.5, 0.5);
+  await expect(page.locator('#btn-save-project')).toHaveClass(/dirty/);
+  await openDemoFromMenu();
+  await page.click('.ask-save .as-discard');
+  await expect.poll(() => page.evaluate(() => window.app.vol.info.source)).toBe('Demo phantom');
+  // the demo itself never asks
+  await page.keyboard.press('Escape');
+  await page.click('[data-panel="implants"]');
+  await page.click('#btn-add-lower');
+  await clickView(page, 'planAxial', 0.3, 0.75);
+  await openDemoFromMenu();
+  await expect(page.locator('.ask-save')).toHaveCount(0);
+});
+
 test('rail, help sheet and keyboard', async ({ page }) => {
   await openDemo(page);
   await page.click('#rail-collapse');

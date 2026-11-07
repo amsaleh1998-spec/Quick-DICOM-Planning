@@ -16,6 +16,13 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   (both steps). Click the open icon again (or the arrow at the bottom) to hide the panel and give the views the full
   width. Each panel lists its objects (eye = show / hide) and below that the settings of the selected one; rarely used
   options sit in collapsed sections.
+- **Guided planning**: ② Plan starts on the Curve panel, already drawing the panoramic curve (click along the arch in
+  the axial view, Enter or *Finish curve*); once the curve is finished the Implants panel opens. With a curve, ② Plan
+  opens on the panel used last.
+- **Unsaved plan**: a dot on **Save** shows changes that are not in a project file yet. Opening another scan, project
+  or the demo then asks *Save the plan first?* (*Save… / Don't save / Cancel*); closing the window or tab makes the
+  browser ask whether to leave (browsers only allow their own Leave / Cancel question there – Cancel, then Ctrl+S).
+  The demo volume never asks.
 - **View settings in the views**: the 3D view's header has the rendering mode and thresholds (*Surface 796+ ▾*) and the
   view direction (*View ▾*); the panoramic's header has *Slab / Slice* and the thickness, slice position and
   cross-section spacing (*12 mm · sections 2 mm ▾*).
