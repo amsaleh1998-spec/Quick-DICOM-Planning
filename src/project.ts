@@ -323,7 +323,7 @@ export function applyProjectState(app: App, file: ProjectFile, entries?: Map<str
   reserveScanIds(Math.max(0, ...app.scans.map((x) => x.id)));
   app.activeScanId = st.activeScanId ?? null;
   app.showScanContours = st.showScanContours ?? true;
-  app.resetImplantHistory();
+  app.resetHistory();
   app.onWindowChange();
   app.changed();
 }

@@ -53,7 +53,6 @@ $('btn-seg-nerves').onclick = () => {
 };
 $('btn-seg-grow').onclick = () => app.setSegTool(app.segTool === 'grow' ? null : 'grow');
 $('btn-seg-regrow').onclick = () => app.activeSegId !== null && app.regrowSegment(app.activeSegId);
-$('btn-seg-undo').onclick = () => app.activeSegId !== null && app.undoSegmentClick(app.activeSegId);
 $('btn-seg-clear').onclick = () => app.activeSegId !== null && app.clearSegment(app.activeSegId);
 $('btn-seg-delete').onclick = () => app.activeSegId !== null && app.deleteSegment(app.activeSegId);
 const segShowUnseg = $<HTMLInputElement>('seg-show-unseg');
@@ -110,7 +109,6 @@ export function refreshSegmentsPanel() {
       : `${s.seeds.length} click${s.seeds.length === 1 ? '' : 's'} · threshold ${thr} · ${vol}`;
     $('btn-seg-nerves').classList.toggle('hidden', s.ai?.cls !== 5);
     $('btn-seg-regrow').toggleAttribute('disabled', !s.seeds.length);
-    $('btn-seg-undo').toggleAttribute('disabled', !s.seeds.length);
   }
   segShowUnseg.checked = app.showUnsegmented;
   segShow2d.checked = app.showSegOverlay;

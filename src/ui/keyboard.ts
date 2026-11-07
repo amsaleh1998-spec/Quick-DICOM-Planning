@@ -20,9 +20,12 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target as HTMLElement).tagName)) return;
-  // Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z or Ctrl+Y redo (implant changes; unlimited)
+  // a keyboard command is a step of its own (e.g. Del right after placing an implant)
+  app.commitHistory();
+  // Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z or Ctrl+Y redo: every change of the plan, unlimited
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y')) {
     e.preventDefault();
+    if (document.querySelector('.modal-backdrop:not([style*="display: none"])')) return; // a dialog is open
     const redo = e.key === 'y' || e.key === 'Y' || e.shiftKey;
     undoRedo(redo);
     return;

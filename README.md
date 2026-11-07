@@ -130,9 +130,12 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   Per implant: tick *Tapered* and set the apex diameter (default 1 mm narrower than the platform), or drag the
   apical half of the side outline; the coronal half still sets the platform diameter. The apex is never wider than the
   platform.
-- **Undo / redo**: Ctrl+Z (⌘Z) undoes implant changes – moves, tilts, resizing, typed values, adding / deleting,
-  abutment changes – with unlimited history; Ctrl+Shift+Z or Ctrl+Y (⇧⌘Z) redoes. A whole drag is one step. Also as
-  Undo / Redo buttons above the implant list.
+- **Undo / redo**: Ctrl+Z (⌘Z) undoes any change of the plan – implants (moves, tilts, sizes, abutments, adding /
+  deleting), panoramic curves, segments (clicks, cuts, colours, opacity, automatic segmentation), nerve points, scans
+  (placement, appearance, deleting) and rulers – in one unlimited history; Ctrl+Shift+Z or Ctrl+Y (⇧⌘Z) redoes. Every
+  click or drag is one step, typing in a field becomes a step once you pause. Also the ↶ ↷ buttons in the top bar.
+  Not part of the history: how the scan is viewed (slices, zoom, window / level, 3D thresholds, show / hide) and
+  *Apply* in ① Reorient, which resamples the volume and starts a new history.
 - **Show / hide**: the eye button in the implant list hides an implant (with its abutment and axis); the **MUA** button
   hides only its abutment. Hidden items are not drawn in any view (including 3D) and cannot be clicked; *Show all*
   brings everything back. Visibility is saved with the project and is not part of the undo history.

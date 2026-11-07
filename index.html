@@ -52,7 +52,7 @@
           </div>
         </div>
         <span class="tb-sep"></span>
-        <button id="btn-undo" class="icon-btn" title="Undo the last implant change (Ctrl+Z / ⌘Z)" disabled>
+        <button id="btn-undo" class="icon-btn" title="Undo the last change – implants, curves, segments, nerves, scans, rulers (Ctrl+Z / ⌘Z)" disabled>
           <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M5 4L2 7l3 3M2.5 7H10a4 4 0 010 8H7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button id="btn-redo" class="icon-btn" title="Redo (Ctrl+Shift+Z or Ctrl+Y / ⇧⌘Z)" disabled>
           <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M11 4l3 3-3 3M13.5 7H6a4 4 0 000 8h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -226,7 +226,6 @@
                 <button id="btn-seg-regrow" title="Grow this segment again with the current 3D thresholds">Use current threshold</button>
               </div>
               <div class="row">
-                <button id="btn-seg-undo" title="Take back the last click (e.g. when it leaked into a neighbour)">Undo click</button>
                 <button id="btn-seg-clear" title="Remove everything from this segment (keeps it in the list)">Clear</button>
                 <button id="btn-seg-delete" class="danger">Delete</button>
               </div>
@@ -277,11 +276,10 @@
               <div id="nerve-info" class="muted small"></div>
               <div class="row">
                 <button id="btn-nerve-trace" title="Click along the canal to add points">Add points</button>
-                <button id="btn-nerve-undo" title="Remove the last point added">Undo point</button>
                 <button id="btn-nerve-delete" class="danger">Delete</button>
               </div>
             </div>
-            <div class="muted small">Click the centre of the canal on the cross-sections or in the panoramic, in any order. Implants closer than 2 mm are flagged. An automatic canal segment can also be turned into nerve paths (Segments).</div>
+            <div class="muted small">Click the centre of the canal on the cross-sections or in the panoramic, in any order (Ctrl+Z takes a point back). Implants closer than 2 mm are flagged. An automatic canal segment can also be turned into nerve paths (Segments).</div>
           </section>
 
           <section id="panel-scans" class="panel" data-panel="scans">

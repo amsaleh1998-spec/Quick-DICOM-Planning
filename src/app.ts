@@ -1,5 +1,5 @@
 import { ArchCurve } from './curve';
-import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, reserveImplantIds, setApicalDiameter, setImplantAxis, setImplantLength } from './implant';
+import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, setApicalDiameter, setImplantAxis, setImplantLength } from './implant';
 import {
   Frame,
   Vec2,
@@ -27,6 +27,8 @@ import { AiLayer, Cut, SEGMENT_PRESETS, Segment, Segmentation } from './segment'
 import { DS_LABELS } from './ai/dsPlan';
 import { canalCentrelines } from './ai/canal';
 import { Volume, composeAffine, resampleVolume } from './volume';
+import type { History } from './history';
+import { planHistory } from './planHistory';
 import { MprView } from './views/MprView';
 import { View3D } from './views/View3D';
 import { CrossView, PanoView, PlanAxialView, TangView } from './views/PlanViews';
@@ -169,8 +171,6 @@ export class App {
   showCurveAxial = true;
   /** draw the blue curve / level / slab guide lines in the cross-sections */
   showCurveCross = false;
-  /** nerve points added in this session (for undo) */
-  private nerveHistory: Vec3[] = [];
 
   activeView: View | null = null;
   readonly mprViews: MprView[];
@@ -193,9 +193,20 @@ export class App {
   private uiPending = false;
 
   constructor() {
-    // track pressed pointers so an implant drag is recorded as one undo step
-    window.addEventListener('pointerdown', () => this.pointersDown++, true);
-    const up = () => (this.pointersDown = Math.max(0, this.pointersDown - 1));
+    // every gesture (click, drag) is one undo step: commit when it starts and once it has ended
+    window.addEventListener(
+      'pointerdown',
+      () => {
+        this.pointersDown++;
+        this.commitHistory();
+      },
+      true,
+    );
+    const up = () => {
+      this.pointersDown = Math.max(0, this.pointersDown - 1);
+      // after the gesture's own handlers (pointerup, click) have run
+      setTimeout(() => this.pointersDown === 0 && this.commitHistory(), 0);
+    };
     window.addEventListener('pointerup', up, true);
     window.addEventListener('pointercancel', up, true);
     this.mprViews = [new MprView(this, 0), new MprView(this, 1), new MprView(this, 2)];
@@ -206,6 +217,7 @@ export class App {
     this.tang = new TangView(this);
     this.view3d = new View3D(this);
     this.views = [...this.mprViews, this.planAxial, this.pano, ...this.crossViews, this.tang, this.view3d];
+    this.history = planHistory(this);
   }
 
   // ---- scheduling -----------------------------------------------------------
@@ -221,7 +233,7 @@ export class App {
 
   /** State changed: re-render and refresh the side panel. */
   changed() {
-    this.scheduleImplantCommit();
+    this.scheduleCommit();
     this.requestRender();
     if (this.uiPending) return;
     this.uiPending = true;
@@ -249,7 +261,6 @@ export class App {
     this.activeCurveId = null;
     this.drawing = null;
     this.implants = [];
-    this.resetImplantHistory();
     this.selectedId = null;
     this.placing = null;
     this.measurements = [];
@@ -266,9 +277,9 @@ export class App {
     this.activeNerveId = null;
     this.segTool = null;
     this.cutDraft = null;
-    this.nerveHistory = [];
     this.fitAll();
     this.onWindowChange();
+    this.resetHistory();
     this.changed();
   }
 
@@ -428,7 +439,6 @@ export class App {
     this.setVolume(nv);
     this.X = X2;
     this.implants = implants;
-    this.resetImplantHistory(); // coordinates changed: old snapshots no longer apply
     this.measurements = measurements;
     this.selectedId = selectedId;
     this.curves = curveSlots;
@@ -441,6 +451,7 @@ export class App {
     Object.assign(this, { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth });
     this.restoreSegmentation(segments, cuts, nerves, ai);
     this.scans = scans;
+    this.resetHistory(); // coordinates changed: earlier states no longer apply
     this.onWindowChange();
     this.fitAll();
     this.changed();
@@ -625,6 +636,29 @@ export class App {
     this.curve = active?.curve ?? null;
   }
 
+  /** Undo / redo: the curves as they were (same ids keep their own navigation). */
+  restoreCurveList(list: [number, string, Vec2[]][]) {
+    this.drawing = null;
+    const old = new Map(this.curves.map((c) => [c.id, c]));
+    const prevActive = this.activeCurveId;
+    this.curves = list.map(([id, name, ctrl]) => {
+      const o = old.get(id);
+      const curve = o && JSON.stringify(o.curve.ctrl) === JSON.stringify(ctrl) ? o.curve : new ArchCurve(ctrl);
+      return { id, name, curve, nav: o?.nav ?? { s: curve.length / 2, focusC: this.focusC, panoOffset: 0, panoVs: null } };
+    });
+    nextCurveId = Math.max(nextCurveId, ...list.map((c) => c[0] + 1));
+    const active = this.curves.find((c) => c.id === prevActive) ?? this.curves[this.curves.length - 1] ?? null;
+    this.activeCurveId = active?.id ?? null;
+    this.curve = active?.curve ?? null;
+    if (active && active.id !== prevActive) {
+      this.s = clamp(active.nav.s, 0, active.curve.length);
+      this.focusC = active.nav.focusC;
+      this.panoOffset = active.nav.panoOffset;
+      this.pano.vs.fitted = false;
+    } else if (this.curve) this.s = clamp(this.s, 0, this.curve.length);
+    this.changed();
+  }
+
   /** Curves for saving: current navigation of the active curve included. */
   curvesForSave(): { list: { name: string; ctrl: Vec2[]; nav: CurveSlot['nav'] }[]; active: number } {
     this.saveCurveNav();
@@ -745,101 +779,58 @@ export class App {
   implantChanged(_imp: Implant | null, final = false) {
     this.followSelected();
     this.changed();
-    if (final) this.commitImplants();
+    if (final) this.commitHistory();
   }
 
-  // ---- implant undo / redo ---------------------------------------------------
-  //
-  // Snapshots of the implant list are taken at "commit points": the end of a
-  // drag, or after edits have settled (no button held, short pause). Every
-  // commit that differs from the previous one becomes one undo step; the
-  // history is unlimited. Show/hide state is not part of the history.
+  // ---- undo / redo (see planHistory.ts) ------------------------------------------
 
-  private undoStack: string[] = [];
-  private redoStack: string[] = [];
-  private committed = '[]';
+  private history!: History;
   private commitTimer = 0;
   private pointersDown = 0;
 
-  private implantSnapshot(): string {
-    return JSON.stringify(this.implants.map(({ hidden: _h, abutmentHidden: _a, ...rest }) => rest));
-  }
-
-  /** Record the current implants as an undo step if they changed since the last one. */
-  commitImplants() {
+  /** Record the changes since the last commit as one undo step. */
+  commitHistory() {
     clearTimeout(this.commitTimer);
-    const cur = this.implantSnapshot();
-    if (cur === this.committed) return;
-    this.undoStack.push(this.committed);
-    this.redoStack = [];
-    this.committed = cur;
+    this.history?.commit();
   }
 
-  private scheduleImplantCommit() {
+  /** Edits outside a gesture (typing, sliders, keys) become a step once they have settled. */
+  private scheduleCommit() {
     clearTimeout(this.commitTimer);
     this.commitTimer = window.setTimeout(() => {
-      if (this.pointersDown > 0) this.scheduleImplantCommit(); // still dragging
-      else this.commitImplants();
+      if (this.pointersDown > 0) this.scheduleCommit(); // still dragging
+      else this.commitHistory();
     }, 400);
   }
 
-  resetImplantHistory() {
+  /** Start a new history (new scan, project opened, coordinates changed). */
+  resetHistory() {
     clearTimeout(this.commitTimer);
-    this.visMemory.clear();
-    this.undoStack = [];
-    this.redoStack = [];
-    this.committed = this.implantSnapshot();
+    this.history?.reset();
   }
 
   get undoCount() {
-    return this.undoStack.length + (this.implantSnapshot() !== this.committed ? 1 : 0);
+    return this.history.undoCount;
   }
   get redoCount() {
-    return this.redoStack.length;
+    return this.history.redoCount;
   }
 
-  /** show/hide state by implant id, remembered across undo/redo (not part of the history) */
-  private visMemory = new Map<number, { hidden: boolean; abutmentHidden: boolean }>();
-
-  private restoreImplants(json: string) {
-    for (const i of this.implants) this.visMemory.set(i.id, { hidden: i.hidden, abutmentHidden: i.abutmentHidden });
-    const vis = this.visMemory;
-    const list = JSON.parse(json) as Omit<Implant, 'hidden' | 'abutmentHidden'>[];
-    this.implants = list.map((i) => ({ ...i, hidden: vis.get(i.id)?.hidden ?? false, abutmentHidden: vis.get(i.id)?.abutmentHidden ?? false }));
-    reserveImplantIds(Math.max(0, ...this.implants.map((i) => i.id)));
-    if (!this.implantById(this.selectedId)) this.selectedId = null;
-    this.committed = json;
-    this.followSelected();
-    this.requestRender();
-    this.onStateChangeSoon();
+  /** Undo the last change of the plan; returns what it changed, or null when there is nothing to undo. */
+  undo(): string[] | null {
+    clearTimeout(this.commitTimer);
+    this.drawing = null;
+    this.cutDraft = null;
+    this.cancelPendingMeasurement();
+    return this.history.undo();
   }
 
-  /** Undo the last implant change; returns false when there is nothing to undo. */
-  undoImplants(): boolean {
-    this.commitImplants(); // include edits that have not been committed yet
-    const prev = this.undoStack.pop();
-    if (prev === undefined) return false;
-    this.redoStack.push(this.committed);
-    this.restoreImplants(prev);
-    return true;
-  }
-
-  redoImplants(): boolean {
-    this.commitImplants();
-    const next = this.redoStack.pop();
-    if (next === undefined) return false;
-    this.undoStack.push(this.committed);
-    this.restoreImplants(next);
-    return true;
-  }
-
-  private onStateChangeSoon() {
-    if (this.uiPending) return;
-    this.uiPending = true;
-    requestAnimationFrame(() => {
-      this.uiPending = false;
-      this.onStateChange();
-    });
+  redo(): string[] | null {
+    clearTimeout(this.commitTimer);
+    this.drawing = null;
+    this.cutDraft = null;
+    this.cancelPendingMeasurement();
+    return this.history.redo();
   }
 
   // ---- implant visibility -------------------------------------------------------
@@ -1112,16 +1103,6 @@ export class App {
     this.rebuildSegments();
   }
 
-  /** Take back the last click of a segment. */
-  undoSegmentClick(id: number) {
-    const s = this.seg.segmentById(id);
-    if (!s || !s.seeds.length) return;
-    let last = 0;
-    s.seeds.forEach((d, i) => d.order > s.seeds[last].order && (last = i));
-    s.seeds.splice(last, 1);
-    this.rebuildSegments();
-  }
-
   /** Remove all seeds of a segment (keeps the entry, ready for new clicks). */
   clearSegment(id: number) {
     const s = this.seg.segmentById(id);
@@ -1290,17 +1271,13 @@ export class App {
     const n = this.activeNerve();
     if (!n) return -1;
     const i = insertNervePoint(n.pts, w);
-    this.nerveHistory.push(w);
     this.changed();
     return i;
   }
 
-  /** Move a nerve control point (keeps the undo history pointing at it). */
+  /** Move a nerve control point (while dragging). */
   moveNervePoint(n: Nerve, idx: number, w: Vec3) {
-    const old = n.pts[idx];
     n.pts[idx] = w;
-    const h = this.nerveHistory.indexOf(old);
-    if (h >= 0) this.nerveHistory[h] = w;
     this.requestRender();
   }
 
@@ -1309,26 +1286,6 @@ export class App {
     if (!n) return;
     n.pts.splice(idx, 1);
     this.changed();
-  }
-
-  /** Remove the most recently added point that still exists. */
-  undoNervePoint() {
-    while (this.nerveHistory.length) {
-      const p = this.nerveHistory.pop()!;
-      for (const n of this.nerves) {
-        const i = n.pts.indexOf(p);
-        if (i >= 0) {
-          n.pts.splice(i, 1);
-          this.changed();
-          return;
-        }
-      }
-    }
-    const n = this.activeNerve();
-    if (n?.pts.length) {
-      n.pts.pop();
-      this.changed();
-    }
   }
 
   deleteNerve(id: number) {

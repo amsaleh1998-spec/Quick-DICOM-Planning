@@ -19,7 +19,6 @@ $('btn-nerve-trace').onclick = () => {
   if (app.segTool === 'nerve') app.setSegTool(null);
   else app.traceNerve(n.side);
 };
-$('btn-nerve-undo').onclick = () => app.undoNervePoint();
 $('btn-nerve-delete').onclick = () => app.activeNerveId !== null && app.deleteNerve(app.activeNerveId);
 
 const nerveList = $('nerve-list');
@@ -54,7 +53,6 @@ export function refreshNervesPanel() {
     tr.textContent = tool === 'nerve' ? 'Done' : 'Add points';
     $('nerve-info').textContent =
       n.pts.length < 2 ? 'Click at least two points along the canal.' : `${n.pts.length} points · ${nerveLength(n).toFixed(1)} mm long`;
-    $('btn-nerve-undo').toggleAttribute('disabled', !n.pts.length);
   }
   for (const id of ['btn-nerve-right', 'btn-nerve-left']) $(id).toggleAttribute('disabled', !app.vol);
 }
