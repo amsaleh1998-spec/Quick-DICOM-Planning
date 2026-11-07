@@ -59,7 +59,7 @@ $cands = @($found | Where-Object { "$($_.Name) $($_.Command)" -like '*DICOM*' })
 # installed in Chrome and Edge: use the Edge copy (Edge can be given the NVIDIA card on its own)
 $pick = $cands | Where-Object { $_.Command -match 'msedge' } | Select-Object -First 1
 if (-not $pick) { $pick = $cands | Select-Object -First 1 }
-if ($cands.Count -gt 1) { Write-Host '  The app is installed in more than one browser - using the Microsoft Edge copy.' }
+if ($cands.Count -gt 1 -and $pick.Command -match 'msedge') { Write-Host '  The app is installed in more than one browser - using the Microsoft Edge copy.' }
 if (-not $pick -and $found.Count -eq 1) { $pick = $found[0] }
 if (-not $pick) {
   # slower fallback: look through all registered file types of this user
@@ -75,7 +75,36 @@ if (-not $pick) {
   }
 }
 if (-not $pick) {
+  # the browser has not registered the app for DICOM files (Edge may do that only later): use the
+  # app's Start menu / desktop shortcut instead - started with --app-id=<id> and a file, the
+  # browser opens the file in the installed app exactly like a registered file handler
+  $shortcuts = @()
+  try {
+    $wsh = New-Object -ComObject WScript.Shell
+    $dirs = @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('CommonPrograms'), [Environment]::GetFolderPath('Desktop'))
+    foreach ($d in ($dirs | Where-Object { $_ -and (Test-Path -LiteralPath $_) })) {
+      foreach ($f in (Get-ChildItem -LiteralPath $d -Filter '*.lnk' -Recurse -ErrorAction SilentlyContinue)) {
+        if ($f.BaseName -notlike "*$AppName*" -or $f.BaseName -like '*whole series*') { continue }
+        $l = $wsh.CreateShortcut($f.FullName)
+        $args0 = [string]$l.Arguments
+        if (-not ($args0 -match '--app-id=([A-Za-z0-9_-]+)')) { continue }
+        $appId = $Matches[1]
+        $prof = ''
+        if ($args0 -match '(--profile-directory=("[^"]*"|\S+))') { $prof = $Matches[1] + ' ' }
+        $cmd = '"' + $l.TargetPath + '" ' + $prof + '--app-id=' + $appId + ' --single-argument %1'
+        $shortcuts += New-Object psobject -Property @{ ProgId = ''; Command = $cmd; Name = $f.BaseName; Icon = [string]$l.IconLocation }
+      }
+    }
+  } catch { Write-Host ('  (Could not read the Start menu shortcuts: ' + $_.Exception.Message + ')') }
+  $pick = $shortcuts | Where-Object { $_.Command -match 'msedge' } | Select-Object -First 1
+  if (-not $pick) { $pick = $shortcuts | Select-Object -First 1 }
+}
+if (-not $pick) {
   Write-Host '  The installed Quick DICOM Planning app was not found.' -ForegroundColor Yellow
+  Write-Host ''
+  Write-Host '  Programs registered for .dcm files:'
+  if (-not $found.Count) { Write-Host '    (none from a browser)' }
+  foreach ($x in $found) { Write-Host ('    ' + $x.Name + ' : ' + $x.Command) }
   Write-Host ''
   Write-Host '  1. Open https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/ in Chrome or Edge'
   Write-Host '     and click "Install app".'
@@ -244,7 +273,9 @@ Set-Item -LiteralPath "$pk\shell\open\command" -Value $openCommand
 Set-ItemProperty -LiteralPath "$pk\shell\open" -Name 'FriendlyAppName' -Value $HelperName
 Set-ItemProperty -LiteralPath "$pk\Application" -Name 'ApplicationName' -Value $HelperName
 Set-ItemProperty -LiteralPath "$pk\Application" -Name 'ApplicationCompany' -Value $AppName
-$icon = Get-Default "$Classes\$($pick.ProgId)\DefaultIcon"
+$icon = $null
+if ($pick.ProgId) { $icon = Get-Default "$Classes\$($pick.ProgId)\DefaultIcon" }
+elseif ($pick.Icon) { $icon = $pick.Icon }
 if ($icon) {
   Ensure-Key "$pk\DefaultIcon"
   Set-Item -LiteralPath "$pk\DefaultIcon" -Value $icon

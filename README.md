@@ -301,7 +301,8 @@ all files of that folder into one uncompressed bundle (a ZIP named `.dcm` in `%U
 cleaned up after 12 h) and starts the installed app with it, so the whole series opens with no prompt. (Chrome and Edge
 do not let web apps read files under AppData / the temp folder or in hidden dot-folders of the user folder, so the
 bundle must live in a plain folder; the Mac helper uses `~/QuickDICOMPlanning/bundles`.) If the app is installed in both
-Chrome and Edge, the helper opens the Edge copy. `uninstall.cmd` in the same folder removes it. The app also opens any ZIP of DICOM files (drag & drop or *Open files*).
+Chrome and Edge, the helper opens the Edge copy. It finds the app through the browser's file-type registration or,
+when the browser has not registered it (yet), through the app's Start menu / desktop shortcut. `uninstall.cmd` in the same folder removes it. The app also opens any ZIP of DICOM files (drag & drop or *Open files*).
 
 **macOS.** Install the app from Chrome or Edge the same way; in Finder select a `.dcm` file → *File → Get Info* →
 *Open with: Quick DICOM Planning* → *Change All…*. To skip the folder question there too, run the Mac helper once in
