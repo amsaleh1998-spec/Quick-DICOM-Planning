@@ -1,6 +1,7 @@
 // Handing files to the user (projects, STL exports).
 
 import { hideLoading, setStatus, showLoading } from './shell';
+import { writeZip } from '../zip';
 
 type DownloadsNs = { save(r: { filename: string; data: Blob }): Promise<unknown> };
 type ClaudeHost = { use(name: string): Promise<unknown> };
@@ -20,6 +21,17 @@ export async function deliverFile(blob: Blob, filename: string, fileType: FileTy
       } catch (e) {
         const code = (e as { code?: string }).code;
         if (code === 'declined') return false;
+        // a host that does not take this file type (e.g. .stl): hand it over packed in a ZIP
+        if (code === 'rejected_extension' && !/\.zip$/i.test(filename)) {
+          const zip = await writeZip([{ name: filename, data: new Uint8Array(await blob.arrayBuffer()) }]);
+          try {
+            await dl.save({ filename: `${filename}.zip`, data: zip });
+            return true;
+          } catch (e2) {
+            if ((e2 as { code?: string }).code === 'declined') return false;
+            throw new Error(`Saving failed (${(e2 as { code?: string }).code ?? (e2 as Error).message})`);
+          }
+        }
         throw new Error(`Saving failed (${code ?? (e as Error).message})`);
       }
     }

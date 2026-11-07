@@ -50,8 +50,10 @@ const missing = (jaw: Jaw) => jawOrder(jaw).filter((f) => f % 10 !== 8 && !wax.m
 $('wax-all-upper').onclick = () => void add(missing('upper'));
 $('wax-all-lower').onclick = () => void add(missing('lower'));
 $('wax-clear').onclick = () => {
-  if (!wax.model.teeth.length || !confirm('Remove all waxup teeth?')) return;
+  if (!wax.model.teeth.length) return;
+  app.commitHistory();
   for (const t of [...wax.model.teeth]) removeTooth(app, t.fdi);
+  setStatus('All waxup teeth removed – Ctrl+Z brings them back.');
 };
 
 const toolButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#wax-tool button'));
@@ -96,9 +98,9 @@ for (const jaw of ['upper', 'lower'] as Jaw[]) {
   cb.onchange = () => ((wax.visible[jaw] = cb.checked), app.changed());
   $(`wax-refit-${jaw}`).onclick = async () => {
     if (!wax.model.teeth.some((t) => t.jaw === jaw)) return;
-    if (!confirm(`Set the ${jaw} teeth up again on the current curve? Their changes are lost.`)) return;
+    app.commitHistory();
     const err = await refitJaw(app, jaw);
-    if (err) setStatus(err, true);
+    setStatus(err ?? `The ${jaw} teeth are set up again on the current curve – Ctrl+Z restores their previous places.`, !!err);
   };
 }
 
