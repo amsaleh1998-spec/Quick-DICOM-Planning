@@ -67,6 +67,7 @@ app.onCurveDrawn = () => rail.select('implants');
 
 // teeth of the waxup react to the mouse only while its panel is open (so they never get in the
 // way of implant planning, where their outlines overlap the implant heads)
+app.wax.openPanel = () => rail.select('waxup');
 rail.onChange = () => {
   const on = app.mode === 'plan' && rail.current === 'waxup' && rail.open;
   if (app.wax.editing === on) return;

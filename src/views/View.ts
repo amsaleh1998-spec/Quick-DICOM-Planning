@@ -72,6 +72,10 @@ export abstract class View {
   protected shiftPans = true;
   /** waxup teeth editing in this view (views that show teeth set it) */
   protected waxEditor: WaxupEditor | null = null;
+  /** teeth show they can be clicked even while another panel is open (3D view) */
+  protected waxAnyPanel(_p: Pt): boolean {
+    return false;
+  }
   /** Which kind of measurements this view shows/creates (null = no ruler). */
   protected measureKind: 'plane' | 'pano' | null = null;
   private rulerDrag: { m: Measurement; end: 'a' | 'b'; created: boolean } | null = null;
@@ -723,7 +727,7 @@ export abstract class View {
           if (app.ruler && this.measureKind) this.el.style.cursor = 'crosshair';
           else if (this.measureKind && this.hitMeasureEnd(p)) this.el.style.cursor = 'move';
           else {
-            const wc = this.waxEditor && app.wax.editing ? this.waxEditor.hover(p) : null;
+            const wc = !this.waxEditor ? null : app.wax.editing ? this.waxEditor.hover(p) : this.waxAnyPanel(p) ? this.waxEditor.peek(p) : null;
             if (wc) this.el.style.cursor = wc;
             else this.onHover(p, e);
           }

@@ -98,15 +98,17 @@ export class WaxupEditor {
       const hit = part ? null : this.ad.pick(p);
       const hov = part?.fdi ?? hit?.fdi ?? null;
       if (hov !== w.hover || JSON.stringify(part) !== prev) {
+        if (hov !== w.hover) this.hint(hov);
         w.hover = hov;
         this.app.requestRender();
       }
-      return part ? 'grab' : hit ? 'pointer' : null;
+      return part ? 'grab' : hit ? 'move' : null;
     }
     const hit = this.ad.pick(p);
     const fdi = hit?.fdi ?? null;
     if (fdi !== w.hover) {
       w.hover = fdi;
+      this.hint(fdi);
       this.app.requestRender();
     }
     if (w.tool === 'freeform' && this.ad.sculpt) {
@@ -115,6 +117,42 @@ export class WaxupEditor {
       return hit ? 'crosshair' : null;
     }
     return hit ? (w.tool === 'position' ? 'move' : 'pointer') : null;
+  }
+
+  /** Status line for the tooth under the mouse. */
+  private hint(fdi: number | null) {
+    if (fdi === null) return;
+    const how =
+      this.w.tool === 'parts'
+        ? 'drag a blue dot to reshape a cusp · drag the tooth to move it'
+        : this.w.tool === 'freeform'
+          ? this.ad.sculpt
+            ? 'drag to add material · Ctrl: remove · Shift: smooth'
+            : 'freeform works in the 3D view'
+          : 'drag to move · Shift+drag: scale · Ctrl+drag: rotate';
+    this.app.onStatus(`Tooth ${fdi}: ${how}`);
+  }
+
+  /** A click on a tooth while the Waxup panel is closed: open the panel with that tooth selected. */
+  clickToEdit(p: Pt): boolean {
+    const hit = this.ad.pick(p);
+    if (!hit) return false;
+    this.w.selected = hit.fdi;
+    this.w.openPanel();
+    this.hint(hit.fdi);
+    this.app.changed();
+    return true;
+  }
+
+  /** Mouse over a tooth while the Waxup panel is closed: highlight it, a click opens the panel. */
+  peek(p: Pt): string | null {
+    const fdi = this.ad.pick(p)?.fdi ?? null;
+    if (fdi !== this.w.hover) {
+      this.w.hover = fdi;
+      if (fdi !== null) this.app.onStatus(`Tooth ${fdi}: click it to edit the waxup (Waxup panel)`);
+      this.app.requestRender();
+    }
+    return fdi !== null ? 'pointer' : null;
   }
 
   leave() {
@@ -144,11 +182,7 @@ export class WaxupEditor {
         this.app.changed();
         return true;
       }
-      const hit = this.ad.pick(p);
-      if (!hit) return false;
-      w.selected = hit.fdi; // shows its parts
-      this.app.changed();
-      return true;
+      // not on a dot: the tooth itself moves (and is selected, which shows its dots)
     }
     const hit = this.ad.pick(p);
     if (!hit) return false;
@@ -167,12 +201,12 @@ export class WaxupEditor {
       this.app.changed();
       return true;
     }
-    // position
-    const jaw = w.scope === 'jaw';
+    // position (also a body drag with the parts tool)
+    const jaw = w.scope === 'jaw' && w.tool === 'position';
     const center = jaw ? this.m.jawCenter(t.jaw)! : this.m.center(t);
     const up = this.app.frame[2];
     const links = !jaw && w.chain ? chainLinks(this.m, t.jaw, up) : null;
-    this.drag = { kind: mode, tooth: t, jaw, anchor: hit.w, center, last: p, links, mirror: !jaw && w.mirror };
+    this.drag = { kind: w.tool === 'parts' ? 'move' : mode, tooth: t, jaw, anchor: hit.w, center, last: p, links, mirror: !jaw && w.mirror };
     this.app.changed();
     return true;
   }
