@@ -2,7 +2,7 @@ import type { App, Measurement, Mode, RenderMode } from './app';
 import { Implant, reserveImplantIds } from './implant';
 import { Frame, Vec2, Vec3 } from './math';
 import { Nerve, reserveNerveIds } from './nerve';
-import type { Cut, Segment } from './segment';
+import type { AiLayer, Cut, Segment } from './segment';
 import { Volume, VolumeInfo } from './volume';
 import { readZip, writeZip } from './zip';
 import { Placement, Scan, ScanKind, reserveScanIds } from './scans';
@@ -13,6 +13,8 @@ import type { ViewState } from './views/View';
  * Project file = ZIP with
  *   project.json – plan, orientation and view state
  *   volume.raw   – the CBCT voxels (int16 little endian, x fastest)
+ *   scans/<id>.bin – intraoral scan meshes
+ *   ai/cls.bin, ai/margin.bin – automatic segmentation (class and margin per voxel of its grid)
  */
 const FORMAT = 'quick-dicom-planning-project';
 const VERSION = 1;
@@ -73,6 +75,8 @@ interface ProjectFile {
     scans?: SavedScan[];
     activeScanId?: number | null;
     showScanContours?: boolean;
+    /** automatic segmentation grid (data in ai/cls.bin and ai/margin.bin) */
+    ai?: Omit<AiLayer, 'cls' | 'margin'> | null;
   };
 }
 
@@ -192,6 +196,12 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       })),
       activeScanId: app.activeScanId,
       showScanContours: app.showScanContours,
+      ai: (() => {
+        const a = app.seg.ai;
+        if (!a) return null;
+        const { cls: _c, margin: _m, ...meta } = a;
+        return meta;
+      })(),
     },
   };
   const json = new TextEncoder().encode(JSON.stringify(file, null, 1));
@@ -201,6 +211,12 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       { name: 'project.json', data: json },
       { name: 'volume.raw', data: raw },
       ...app.scans.map((sc) => ({ name: `scans/${sc.id}.bin`, data: scanBytes(sc) })),
+      ...(app.seg.ai
+        ? [
+            { name: 'ai/cls.bin', data: app.seg.ai.cls },
+            { name: 'ai/margin.bin', data: app.seg.ai.margin },
+          ]
+        : []),
     ],
     onProgress,
   );
@@ -289,7 +305,16 @@ export function applyProjectState(app: App, file: ProjectFile, entries?: Map<str
   app.activeNerveId = st.activeNerveId ?? null;
   const nerves = (st.nerves ?? []).map((n) => ({ ...n, pts: n.pts.map((p) => [...p] as Vec3) }));
   reserveNerveIds(Math.max(0, ...nerves.map((n) => n.id)));
-  app.restoreSegmentation(st.segments ?? [], st.cuts ?? [], nerves);
+  let ai: AiLayer | null = null;
+  const aiCls = entries?.get('ai/cls.bin');
+  const aiMargin = entries?.get('ai/margin.bin');
+  if (st.ai && aiCls && aiMargin) {
+    const n = st.ai.nx * st.ai.ny * st.ai.nz;
+    if (aiCls.length === n && aiMargin.length === n) ai = { ...st.ai, cls: aiCls.slice(), margin: aiMargin.slice() };
+  }
+  // automatic segments without their data (damaged project) are dropped
+  const segments = (st.segments ?? []).filter((g) => !g.ai || ai);
+  app.restoreSegmentation(segments, st.cuts ?? [], nerves, ai);
   app.scans = [];
   for (const meta of st.scans ?? []) {
     const data = entries?.get(`scans/${meta.id}.bin`);

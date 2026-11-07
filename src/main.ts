@@ -5,6 +5,7 @@ import { applyProjectState, buildProject, projectFileName, readProject } from '.
 import { initTrackpadGuide, showTrackpadGuide } from './tutorial';
 import { isZipFile, zipEntriesAsFiles } from './zip';
 import { showExportStl } from './exportStl';
+import { showDentalSegmentator } from './ai/dentalSegmentator';
 import { findScanFolder, parentOf, rememberScanFolder, type FolderHit, type ScanDir } from './scanFolders';
 import { formatDicomDate, formatPatientName, joinPersonName, splitPersonName } from './dicomMeta';
 import { showTagViewer } from './tagViewer';
@@ -987,6 +988,17 @@ segColor.oninput = () => {
   s.color = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
   app.changed();
 };
+$('btn-ai-seg').onclick = () => showDentalSegmentator(app, { setStatus });
+$('btn-seg-nerves').onclick = () => {
+  if (app.activeSegId === null) return;
+  const made = app.nervesFromCanal(app.activeSegId);
+  setStatus(
+    made.length
+      ? `Nerve path${made.length > 1 ? 's' : ''} created along the canal (${made.join(' and ')}) – check them on the cross-sections; implants closer than 2 mm are flagged.`
+      : 'No new nerve path: both sides are already traced (delete a nerve first to replace it) or the canal is too small.',
+    !made.length,
+  );
+};
 $('btn-seg-grow').onclick = () => app.setSegTool(app.segTool === 'grow' ? null : 'grow');
 $('btn-seg-regrow').onclick = () => app.activeSegId !== null && app.regrowSegment(app.activeSegId);
 $('btn-seg-undo').onclick = () => app.activeSegId !== null && app.undoSegmentClick(app.activeSegId);
@@ -1400,7 +1412,7 @@ function refreshSegUi() {
     segList,
     seg.segments.map((g) => {
       const cm3 = (g.voxels * seg.voxelVolume) / 1000;
-      const info = g.seeds.length ? `${cm3.toFixed(2)} cm³` : 'empty – click it';
+      const info = g.ai ? `AI · ${cm3.toFixed(2)} cm³` : g.seeds.length ? `${cm3.toFixed(2)} cm³` : 'empty – click it';
       return {
         key: String(g.id),
         sel: g.id === app.activeSegId,
@@ -1419,7 +1431,11 @@ function refreshSegUi() {
     grow.classList.toggle('active', tool === 'grow');
     grow.textContent = tool === 'grow' ? 'Clicking… (Esc)' : 'Click to add';
     const thr = s.seeds.length ? `${Math.round(Math.min(...s.seeds.map((d) => d.lo)))}–${Math.round(Math.max(...s.seeds.map((d) => d.hi)))}` : '–';
-    $('seg-info').textContent = `${s.seeds.length} click${s.seeds.length === 1 ? '' : 's'} · threshold ${thr} · ${((s.voxels * seg.voxelVolume) / 1000).toFixed(2)} cm³`;
+    const vol = `${((s.voxels * seg.voxelVolume) / 1000).toFixed(2)} cm³`;
+    $('seg-info').textContent = s.ai
+      ? `Automatic (${s.ai.model})${s.seeds.length ? ` + ${s.seeds.length} click${s.seeds.length === 1 ? '' : 's'}` : ''} · ${vol}`
+      : `${s.seeds.length} click${s.seeds.length === 1 ? '' : 's'} · threshold ${thr} · ${vol}`;
+    $('btn-seg-nerves').classList.toggle('hidden', s.ai?.cls !== 5);
     $('btn-seg-regrow').toggleAttribute('disabled', !s.seeds.length);
     $('btn-seg-undo').toggleAttribute('disabled', !s.seeds.length);
   }

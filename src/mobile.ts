@@ -176,9 +176,9 @@ async function openProject(file: File) {
     showLoading('Opening project…', 0.2);
     const buf = await file.arrayBuffer();
     showLoading('Unpacking project…', 0.5);
-    const { volume, file: pf } = await readProject(buf);
+    const { volume, file: pf, entries } = await readProject(buf);
     app.setVolume(volume);
-    applyProjectState(app, pf);
+    applyProjectState(app, pf, entries);
     // the desktop layout (maximized view, zoom per view) does not apply on a phone
     for (const el of Object.values(LAYOUT)) el.classList.remove('has-max');
     for (const v of app.views) v.el.classList.remove('max');
@@ -190,7 +190,7 @@ async function openProject(file: File) {
     toast((e as Error).message, true);
   } finally {
     // segment rebuilding shows its own progress
-    if (!app.seg.segments.some((s) => s.seeds.length)) hideLoading();
+    if (!app.seg.segments.some((s) => s.seeds.length || s.ai)) hideLoading();
   }
 }
 
@@ -400,7 +400,7 @@ function refresh() {
   );
 
   // segments
-  const segs = app.seg.segments.filter((s) => s.seeds.length);
+  const segs = app.seg.segments.filter((s) => s.seeds.length || s.ai);
   $('m-segments-box').classList.toggle('hidden', !segs.length);
   setList($('m-segments'), JSON.stringify([segs.map((s) => [s.id, s.name, s.color, s.visible, s.voxels]), app.showUnsegmented]), () => [
     ...segs.map((s) =>

@@ -42,6 +42,9 @@ uniform vec3 uLabInv;
 uniform ivec3 uLabMax;
 uniform int uSegOn;
 uniform int uShowUnseg;
+// automatic (AI) segments: logit margin per label voxel (×16); their surface is the zero level of
+// a smooth signed field instead of a CT threshold
+uniform highp usampler3D uMarg;
 // nerve canals: capsules (a.xyz, r) (b.xyz, 0) in a float texture
 uniform sampler2D uNerve;
 uniform int uNumNerve;
@@ -60,6 +63,30 @@ uint labAt(vec3 p) {
 }
 vec4 segInfo(uint l) { return texelFetch(uSegTab, ivec2(int(l), 0), 0); }
 float segLo(uint l) { return texelFetch(uSegTab, ivec2(int(l), 1), 0).r; }
+bool segAi(uint l) { return texelFetch(uSegTab, ivec2(int(l), 1), 0).g > 0.5; }
+// trilinear blend of the eight voxels around p: +margin where the voxel is segment l, -margin elsewhere
+float aiField(vec3 p, uint l) {
+  vec3 g = clamp(p * uLabInv, vec3(0.0), vec3(uLabMax));
+  ivec3 i0 = ivec3(floor(g));
+  ivec3 i1 = min(i0 + 1, uLabMax);
+  vec3 f = g - vec3(i0);
+  float acc = 0.0;
+  for (int c = 0; c < 8; c++) {
+    bvec3 hi = bvec3((c & 1) != 0, (c & 2) != 0, (c & 4) != 0);
+    ivec3 ic = ivec3(hi.x ? i1.x : i0.x, hi.y ? i1.y : i0.y, hi.z ? i1.z : i0.z);
+    vec3 w = mix(1.0 - f, f, vec3(hi));
+    float m = float(texelFetch(uMarg, ic, 0).r);
+    acc += w.x * w.y * w.z * (texelFetch(uLab, ic, 0).r == l ? m : -m);
+  }
+  return acc;
+}
+vec3 aiGrad(vec3 p, uint l) {
+  vec3 e = 0.5 / uLabInv;
+  return vec3(
+    aiField(p + vec3(e.x, 0.0, 0.0), l) - aiField(p - vec3(e.x, 0.0, 0.0), l),
+    aiField(p + vec3(0.0, e.y, 0.0), l) - aiField(p - vec3(0.0, e.y, 0.0), l),
+    aiField(p + vec3(0.0, 0.0, e.z), l) - aiField(p - vec3(0.0, 0.0, e.z), l));
+}
 vec3 labGrad(vec3 p, uint l) {
   vec3 e = 1.0 / uLabInv;
   return vec3(
@@ -214,6 +241,7 @@ void main() {
       float lo = uLo;
       float hi = uHi;
       uint lab = 0u;
+      bool aiHit = false;
       for (int i = 0; i < 4096; i++) {
         if (t > tf) break;
         vec3 p = ro + rd * t;
@@ -224,14 +252,35 @@ void main() {
             if (uShowUnseg == 1 && v >= uLo && v <= uHi) { hit = true; break; }
           } else {
             vec4 si = segInfo(l);
-            float slo = segLo(l);
-            if (si.w > 0.5 && v >= slo) { hit = true; base = si.rgb; lo = slo; hi = 1e9; lab = l; break; }
+            if (si.w > 0.5) {
+              if (segAi(l)) {
+                if (aiField(p, l) >= 0.0) { hit = true; base = si.rgb; lab = l; aiHit = true; break; }
+              } else {
+                float slo = segLo(l);
+                if (v >= slo) { hit = true; base = si.rgb; lo = slo; hi = 1e9; lab = l; break; }
+              }
+            }
           }
         } else if (v >= uLo && v <= uHi) { hit = true; break; }
         first = false;
         t += uStep;
       }
-      if (hit) {
+      if (hit && aiHit) {
+        vec3 n = -rd;
+        if (!first) {
+          float a = t - uStep;
+          float b = t;
+          for (int k = 0; k < 6; k++) {
+            float m = 0.5 * (a + b);
+            if (aiField(ro + rd * m, lab) >= 0.0) b = m; else a = m;
+          }
+          t = b;
+          tSurf = t;
+          vec3 g = aiGrad(ro + rd * t, lab);
+          if (length(g) > 1e-6) n = -normalize(g);
+        }
+        acc = vec4(shade(base, n, rd, L, 0.25), 1.0);
+      } else if (hit) {
         vec3 n = -rd;
         if (!first) {
           float a = t - uStep;
@@ -269,7 +318,7 @@ void main() {
             vec4 si = segInfo(l);
             if (si.w < 0.5) { t += uStep; continue; }
             tint = si.rgb;
-            lo = segLo(l);
+            lo = segAi(l) ? uLo : segLo(l);
           }
         }
         float a = clamp((v - lo) / max(1.0, uHi - lo), 0.0, 1.0);
@@ -367,6 +416,8 @@ export class View3D extends View {
   private segError = '';
   private lastKey = '';
   private labTex: WebGLTexture | null = null;
+  private margTex: WebGLTexture | null = null;
+  private margSrc: Uint8Array | null = null;
   // intraoral scans: mesh renderer + offscreen colour/depth target
   private meshGl: MeshGL | null = null;
   private scanFbo: WebGLFramebuffer | null = null;
@@ -431,13 +482,15 @@ export class View3D extends View {
       const names = [
         'uVol', 'uTexScale', 'uTexOffset', 'uTexel', 'uBoxMax', 'uCam', 'uRight', 'uUp', 'uFwd', 'uTanHalf', 'uRes',
         'uFrame', 'uOrigin', 'uCropMin', 'uCropMax', 'uLo', 'uHi', 'uStep', 'uOpac', 'uWC', 'uWW', 'uMode', 'uNumCyl', 'uCyl',
-        'uLab', 'uSegTab', 'uLabInv', 'uLabMax', 'uSegOn', 'uShowUnseg', 'uNerve', 'uNumNerve', 'uNerveMin', 'uNerveMax', 'uNerveCol',
+        'uLab', 'uSegTab', 'uLabInv', 'uLabMax', 'uSegOn', 'uShowUnseg', 'uMarg', 'uNerve', 'uNumNerve', 'uNerveMin', 'uNerveMax', 'uNerveCol',
         'uScanCol', 'uScanDepth', 'uScanOn', 'uNear', 'uFar',
       ];
       for (const n of names) this.uni[n] = gl.getUniformLocation(p, n);
       gl.bindVertexArray(gl.createVertexArray());
       // placeholders so every sampler always has a texture of the right type
       this.labTex = this.makeTex(gl.TEXTURE_3D);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8UI, 1, 1, 1, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, new Uint8Array(1));
+      this.margTex = this.makeTex(gl.TEXTURE_3D);
       gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8UI, 1, 1, 1, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, new Uint8Array(1));
       this.segTabTex = this.makeTex(gl.TEXTURE_2D);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 128, 2, 0, gl.RGBA, gl.FLOAT, new Float32Array(128 * 2 * 4));
@@ -495,6 +548,16 @@ export class View3D extends View {
       this.labVersion = seg.version;
     }
     gl.uniform1i(u.uLab, 1);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_3D, this.margTex);
+    const marg = segOn && seg.segments.some((g) => g.ai) ? seg.aiMargin : null;
+    if (marg && marg !== this.margSrc) {
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8UI, seg.nx, seg.ny, seg.nz, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, marg);
+      this.margSrc = marg;
+    }
+    gl.uniform1i(u.uMarg, 4);
+    gl.activeTexture(gl.TEXTURE1);
     gl.uniform3f(u.uLabInv, 1 / seg.gs[0], 1 / seg.gs[1], 1 / seg.gs[2]);
     gl.uniform3i(u.uLabMax, Math.max(0, seg.nx - 1), Math.max(0, seg.ny - 1), Math.max(0, seg.nz - 1));
     gl.uniform1i(u.uSegOn, segOn ? 1 : 0);
@@ -504,6 +567,7 @@ export class View3D extends View {
     for (const g of seg.segments) {
       tab.set([g.color[0] / 255, g.color[1] / 255, g.color[2] / 255, g.visible ? 1 : 0], g.id * 4);
       tab[(128 + g.id) * 4] = seg.segmentLo(g);
+      tab[(128 + g.id) * 4 + 1] = g.ai ? 1 : 0;
     }
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.segTabTex);
@@ -933,7 +997,7 @@ export class View3D extends View {
           if (app.showUnsegmented && v >= lo && v <= hi) return q;
         } else {
           const g = seg.segmentById(l);
-          if (g && g.visible && v >= seg.segmentLo(g)) return q;
+          if (g && g.visible && seg.segmentHit(g, q, v)) return q;
         }
       } else if (v >= lo && v <= hi) return q;
     }

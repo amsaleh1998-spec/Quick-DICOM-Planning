@@ -1338,3 +1338,91 @@ a.btn-link {
   color: #04121f;
   border-color: var(--accent);
 }
+
+/* ---- automatic segmentation (DentalSegmentator) ---- */
+.ai-box {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.ai-box button {
+  width: 100%;
+  margin-bottom: 4px;
+}
+.ai-box a,
+.ai-credit a {
+  color: var(--accent);
+}
+.modal.ai-seg {
+  max-width: 600px;
+}
+.ai-seg h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ai-seg label.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+.ai-seg label.check.disabled {
+  opacity: 0.5;
+}
+.ai-run {
+  margin: 14px 0 6px;
+}
+.ai-phase {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.ai-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.ai-bar > div {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+.ai-notes {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--warn, #ffb81c);
+  font-size: 12px;
+}
+.ai-credit {
+  margin-top: 14px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: rgba(79, 179, 255, 0.06);
+  border-radius: 4px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.ai-credit b {
+  color: var(--text);
+}
+.ai-pill {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  padding: 8px 12px;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  cursor: pointer;
+}

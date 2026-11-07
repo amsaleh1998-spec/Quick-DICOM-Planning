@@ -312,6 +312,11 @@
 
           <section id="panel-seg" class="panel">
             <h3>Segmentation</h3>
+            <div class="ai-box">
+              <button id="btn-ai-seg" class="primary" title="Segment the maxilla, mandible, upper and lower teeth and the mandibular canals automatically (DentalSegmentator deep-learning model, runs in this browser)">Automatic segmentation (AI)</button>
+              <div class="muted small">Jaws, teeth and mandibular canals with <a href="https://doi.org/10.1016/j.jdent.2024.105130" target="_blank" rel="noopener" title="Dot G, et al. DentalSegmentator: robust open source deep learning-based CT and CBCT image segmentation. Journal of Dentistry (2024)">DentalSegmentator</a> (Dot et al. 2024, CC BY 4.0) · nnU-Net</div>
+            </div>
+            <div class="muted small">Or segment by threshold:</div>
             <ol class="help steps">
               <li>Set the 3D thresholds so the structures are separated.</li>
               <li>Add a segment, then click the structure in the 3D view (or in any slice).</li>
@@ -335,6 +340,7 @@
                 <button id="btn-seg-regrow" title="Grow this segment again with the current 3D thresholds">Use current threshold</button>
               </div>
               <div id="seg-info" class="muted small"></div>
+              <button id="btn-seg-nerves" class="hidden" title="Create the right and left nerve paths along this canal, so implants too close to the nerve are flagged">Make nerve paths from this canal</button>
               <div class="row">
                 <button id="btn-seg-undo" title="Take back the last click (e.g. when it leaked into a neighbour)">Undo click</button>
                 <button id="btn-seg-clear" title="Remove everything from this segment (keeps it in the list)">Clear</button>

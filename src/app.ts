@@ -23,7 +23,9 @@ import {
 import { Nerve, createNerve, implantNerveDistance, insertNervePoint } from './nerve';
 import { Scan, scansKey } from './scans';
 import { CropSpec } from './render';
-import { Cut, SEGMENT_PRESETS, Segment, Segmentation } from './segment';
+import { AiLayer, Cut, SEGMENT_PRESETS, Segment, Segmentation } from './segment';
+import { DS_LABELS } from './ai/dsPlan';
+import { canalCentrelines } from './ai/canal';
 import { Volume, composeAffine, resampleVolume } from './volume';
 import { MprView } from './views/MprView';
 import { View3D } from './views/View3D';
@@ -411,7 +413,7 @@ export class App {
         : { ...c, O: toNew(c.O), F: c.F.map(dirToNew) as Frame },
     );
     const nerves = this.nerves.map((n) => ({ ...n, pts: n.pts.map(toNew) }));
-    // scans: world_new = R·(world_old − corner0)
+    // scans and the AI result: world_new = R·(world_old − corner0)
     const oldToNew = [
       R[0][0], R[0][1], R[0][2], -(R[0][0] * corner0[0] + R[0][1] * corner0[1] + R[0][2] * corner0[2]),
       R[1][0], R[1][1], R[1][2], -(R[1][0] * corner0[0] + R[1][1] * corner0[1] + R[1][2] * corner0[2]),
@@ -419,6 +421,8 @@ export class App {
     ];
     const scans = this.scans;
     for (const sc of scans) if (sc.transform) sc.transform = composeAffine(oldToNew, sc.transform);
+    const oldAi = this.seg.ai;
+    const ai: AiLayer | null = oldAi && { ...oldAi, toWorld: composeAffine(oldToNew, oldAi.toWorld ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]) };
     const { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth } = this;
 
     this.setVolume(nv);
@@ -435,7 +439,7 @@ export class App {
     this.wl = wl;
     this.vr = vr;
     Object.assign(this, { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth });
-    this.restoreSegmentation(segments, cuts, nerves);
+    this.restoreSegmentation(segments, cuts, nerves, ai);
     this.scans = scans;
     this.onWindowChange();
     this.fitAll();
@@ -1123,6 +1127,8 @@ export class App {
     const s = this.seg.segmentById(id);
     if (!s) return;
     s.seeds = [];
+    delete s.ai;
+    if (!this.seg.segments.some((g) => g.ai)) this.seg.setAi(null);
     this.rebuildSegments();
   }
 
@@ -1182,13 +1188,74 @@ export class App {
   }
 
   /** Replace segments, cuts and nerves (project load, resampling) and rebuild the labels. */
-  restoreSegmentation(segments: Segment[], cuts: Cut[], nerves: Nerve[]) {
+  restoreSegmentation(segments: Segment[], cuts: Cut[], nerves: Nerve[], ai: AiLayer | null = null) {
     this.seg.restore(segments, cuts);
+    this.seg.setAi(ai);
     this.nerves = nerves;
     if (!this.seg.segmentById(this.activeSegId)) this.activeSegId = null;
     if (!nerves.some((n) => n.id === this.activeNerveId)) this.activeNerveId = null;
-    if (segments.some((s) => s.seeds.length)) this.rebuildSegments('Rebuilding segmentation…');
+    if (segments.some((s) => s.seeds.length || (s.ai && ai))) this.rebuildSegments('Rebuilding segmentation…');
     else this.changed();
+  }
+
+  /**
+   * Result of the automatic segmentation (classes + margins on the current label grid): replaces
+   * earlier automatic segments and adds one segment per structure found.
+   */
+  applyAiSegmentation(res: { cls: Uint8Array; margin: Uint8Array; counts: number[] }, model: string): Segment[] {
+    const seg = this.seg;
+    for (const s of seg.segments.filter((g) => g.ai)) seg.removeSegment(s.id);
+    seg.setAi({ model, created: new Date().toISOString(), nx: seg.nx, ny: seg.ny, nz: seg.nz, gs: [...seg.gs], cls: res.cls, margin: res.margin, toWorld: null });
+    const added: Segment[] = [];
+    for (const l of DS_LABELS) {
+      if ((res.counts[l.cls] ?? 0) < 20) continue; // nothing (or only noise) found
+      const g = seg.addSegment(l.name, l.color);
+      if (!g) break;
+      g.color = [...l.color];
+      g.ai = { cls: l.cls, model };
+      added.push(g);
+    }
+    if (!added.length) seg.setAi(null);
+    this.activeSegId = null;
+    this.rebuildSegments('Showing the automatic segmentation…');
+    return added;
+  }
+
+  /**
+   * Nerve paths along an automatically segmented mandibular canal (one per side). Sides that
+   * already have a traced nerve are left alone. Returns the sides created.
+   */
+  nervesFromCanal(segId: number): ('right' | 'left')[] {
+    const seg = this.seg;
+    // midline: centre of the mandible (or of the scan)
+    const mand = seg.segments.find((g) => g.ai?.cls === 2);
+    let midX = this.vol ? this.vol.extent[0] / 2 : 0;
+    if (mand && seg.labels) {
+      let sx = 0, n = 0;
+      for (let k = 0, idx = 0; k < seg.nz; k++)
+        for (let j = 0; j < seg.ny; j++)
+          for (let i = 0; i < seg.nx; i++, idx++)
+            if (seg.labels[idx] === mand.id) {
+              sx += i;
+              n++;
+            }
+      if (n) midX = (sx / n) * seg.gs[0];
+    }
+    const made: ('right' | 'left')[] = [];
+    for (const l of canalCentrelines(seg, segId, midX)) {
+      let nv = this.nerves.find((x) => x.side === l.side);
+      if (nv && nv.pts.length >= 2) continue;
+      if (!nv) {
+        nv = createNerve(l.side);
+        this.nerves.push(nv);
+      }
+      nv.pts = l.pts;
+      nv.diameter = l.diameter;
+      nv.visible = true;
+      made.push(l.side);
+    }
+    this.changed();
+    return made;
   }
 
   // ---- nerve tracing ------------------------------------------------------------
