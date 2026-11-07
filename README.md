@@ -283,7 +283,7 @@ the future teeth.
 - Teeth react to the mouse only while the Waxup panel is open, so they never get in the way of implant planning;
   their outlines stay in every slice. Undo / redo, projects and *Export ▾ → STL* (one file per jaw, DICOM patient
   coordinates) include the waxup.
-- The library (`public/library/teeth-generic.bin`, 32 crowns) is built from a generic exocad tooth set by
+- The library (`public/library/teeth-generic.json`, 32 crowns) is built from a generic exocad tooth set by
   `scripts/make-tooth-library.py` (split into teeth, FDI numbers, decimated to ~0.35 mm edges, cusp tips).
 
 ## Intraoral scans

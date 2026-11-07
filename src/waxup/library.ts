@@ -27,7 +27,7 @@ export interface ToothLibrary {
   teeth: Map<number, ToothTemplate>;
 }
 
-export const LIBRARY_URL = './library/teeth-generic.bin';
+export const LIBRARY_URL = './library/teeth-generic.json';
 
 interface Header {
   format: string;
@@ -65,10 +65,18 @@ export function parseLibrary(buf: ArrayBuffer): ToothLibrary {
   return { name: h.name, arch: h.arch, teeth };
 }
 
-/** Inflate a zlib (deflate) stream. */
-async function inflate(data: ArrayBuffer): Promise<ArrayBuffer> {
-  const ds = new DecompressionStream('deflate');
-  const out = new Blob([data]).stream().pipeThrough(ds);
+/** The library file: the compressed binary, base64 in a small JSON wrapper. */
+export interface LibraryFile {
+  format: string;
+  encoding: 'deflate+base64';
+  data: string;
+}
+
+/** Bytes of the library binary from its file (decompressed). */
+export async function unpackLibrary(f: LibraryFile): Promise<ArrayBuffer> {
+  if (f.format !== 'qdp-tooth-library') throw new Error('Not a tooth library');
+  const bin = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0));
+  const out = new Blob([bin]).stream().pipeThrough(new DecompressionStream('deflate'));
   return new Response(out).arrayBuffer();
 }
 
@@ -79,9 +87,9 @@ export function loadLibrary(): Promise<ToothLibrary> {
   loading ??= fetch(LIBRARY_URL)
     .then((r) => {
       if (!r.ok) throw new Error(`Tooth library not available (${r.status})`);
-      return r.arrayBuffer();
+      return r.json() as Promise<LibraryFile>;
     })
-    .then(inflate)
+    .then(unpackLibrary)
     .then(parseLibrary)
     .catch((e) => {
       loading = null;
