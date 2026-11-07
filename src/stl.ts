@@ -2,6 +2,7 @@
 // and a binary STL writer. All coordinates are world millimetres.
 
 import { Vec3, cross, normalize, sub } from './math';
+import { affineDet } from './volume';
 
 /**
  * A scalar field sampled on a regular grid. Inside the surface ⇔ s > 0. Linear interpolation of
@@ -432,6 +433,27 @@ export function concatTris(parts: Tris[]): Tris {
     o += t.length;
   }
   return out;
+}
+
+/**
+ * Move a mesh by a 3×4 affine (in place), e.g. into DICOM patient coordinates, keeping the
+ * triangles outward-facing when the affine mirrors.
+ */
+export function transformTris(tris: Tris, m: number[]) {
+  const flip = affineDet(m) < 0;
+  for (let i = 0; i < tris.length; i += 3) {
+    const x = tris[i], y = tris[i + 1], z = tris[i + 2];
+    tris[i] = m[0] * x + m[1] * y + m[2] * z + m[3];
+    tris[i + 1] = m[4] * x + m[5] * y + m[6] * z + m[7];
+    tris[i + 2] = m[8] * x + m[9] * y + m[10] * z + m[11];
+  }
+  if (flip)
+    for (let t = 0; t < tris.length; t += 9)
+      for (let k = 0; k < 3; k++) {
+        const a = tris[t + 3 + k];
+        tris[t + 3 + k] = tris[t + 6 + k];
+        tris[t + 6 + k] = a;
+      }
 }
 
 /** Binary STL (little endian), facet normals from the vertex order. */
