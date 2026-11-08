@@ -87,6 +87,8 @@ interface ProjectFile {
 interface SavedWaxup {
   library: string;
   placement: Waxup['placement'];
+  /** front / back teeth: -1 pointed … 1 flat (missing in older projects) */
+  abrasion?: Waxup['abrasion'];
   teeth: { fdi: number; T: Affine; shaped: boolean }[];
   color: [number, number, number];
   opacity: number;
@@ -220,6 +222,7 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
         ? {
             library: 'generic',
             placement: app.wax.model.placement,
+            abrasion: app.wax.model.abrasion,
             teeth: app.wax.model.teeth.map((t) => ({ fdi: t.fdi, T: t.T, shaped: t.geo !== 0 })),
             color: app.wax.color,
             opacity: app.wax.opacity,
@@ -377,6 +380,7 @@ function restoreWaxup(app: App, saved: SavedWaxup | undefined, entries?: Map<str
     const m = app.wax.model;
     m.lib = lib;
     m.placement = saved.placement;
+    m.abrasion = { anterior: 0, posterior: 0, ...saved.abrasion };
     m.teeth = saved.teeth
       .filter((t) => lib.teeth.has(t.fdi))
       .map((s): WaxTooth => {

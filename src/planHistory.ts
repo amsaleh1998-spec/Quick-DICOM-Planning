@@ -155,13 +155,13 @@ function scans(app: App): Channel {
 function waxup(app: App): Channel {
   // sculpted shapes are kept by reference: every stroke works on a fresh copy (see beginGeometryEdit)
   const shapes = new Map<number, { pos: Float32Array; idx: Uint32Array }>();
-  type Saved = { teeth: [number, number, Affine][]; placement: Waxup['placement'] };
+  type Saved = { teeth: [number, number, Affine][]; placement: Waxup['placement']; abrasion: Waxup['abrasion'] };
   return {
     label: 'waxup',
     key() {
       const m = app.wax.model;
       for (const t of m.teeth) if (t.geo) shapes.set(t.geo, { pos: t.pos, idx: t.idx });
-      const st: Saved = { teeth: m.teeth.map((t) => [t.fdi, t.geo, t.T]), placement: m.placement };
+      const st: Saved = { teeth: m.teeth.map((t) => [t.fdi, t.geo, t.T]), placement: m.placement, abrasion: m.abrasion };
       return JSON.stringify(st);
     },
     restore(key) {
@@ -182,6 +182,7 @@ function waxup(app: App): Channel {
           return t;
         });
       m.placement = st.placement;
+      m.abrasion = { ...{ anterior: 0, posterior: 0 }, ...st.abrasion };
       if (!m.tooth(app.wax.selected)) app.wax.selected = null;
       app.changed();
     },

@@ -291,6 +291,12 @@ the future teeth.
     are blue dots: drag one to move that part, Shift to scale, Ctrl to rotate; *Freeform* (3D view) – drag to add
     material, Ctrl to remove, Shift to smooth. *Anterior symmetry* mirrors every change to the other side (13 ↔ 23);
     *1-to-1 mirroring* makes the tooth on the other side the exact mirror image of the one changed.
+    *Antagonist*: with *Cut* on for a jaw, a tooth that is moved, rotated or scaled is cut where it reaches into the
+    opposing jaw – the visible, placed scans of that jaw (by their kind, or lying on the far side of the occlusal plane)
+    and its visible waxup teeth – keeping the set distance; *Apply to all* cuts every tooth of the jaw at once. The
+    cut follows the antagonist's surface along the vertical. *Abrasion*: for the front (13–23, 33–43) or the back
+    teeth, the slider wears the cusps and incisal edges flat or makes them more pointed (the library shape in the
+    middle); teeth added later get the same abrasion, and it is saved with the project.
   - **Chain**: the teeth of a row of neighbouring positions form a chain, shown in 3D as a tube through their contacts
     with a disc at each end and a green control point beside every tooth and disc. *Chain*: a dragged tooth carries
     the chain along, fading out towards pinned teeth (a rotation also towards the ends); *Single*: only the dragged

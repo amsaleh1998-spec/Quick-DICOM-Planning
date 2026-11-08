@@ -44,7 +44,9 @@ import {
   toothPin,
   toothScale,
 } from '../waxup/chain';
-import { contralateral } from '../waxup/library';
+import { Jaw, contralateral } from '../waxup/library';
+import { HeightField, cutTooth } from '../waxup/occlusion';
+import { buildCutter } from '../waxup/waxApp';
 import type { Pt } from './View';
 
 /** What the editor needs to know about a view. */
@@ -159,6 +161,8 @@ export class WaxupEditor {
   /** cursor position over a tooth (brush outline) */
   private hoverAt: Vec3 | null = null;
   private ctlCache: { key: string; ctl: ChainControls[] } | null = null;
+  /** antagonist cutting during a drag: the teeth's vertices when it started, and their cut copies */
+  private cutting: { hf: HeightField; gap: number; base: Map<WaxTooth, { pos: Float32Array; idx: Uint32Array; geo: number }>; own: Map<WaxTooth, number> } | null = null;
 
   constructor(
     private app: App,
@@ -420,6 +424,7 @@ export class WaxupEditor {
         const snap = snapshot(m, c.chain.teeth, w.pins);
         const anchor = snap.nodes[c.end === 'a' ? 0 : snap.nodes.length - 1];
         this.drag = { kind: 'disc', snap, end: c.end, tooth, start: p, anchor, T0: this.jawSnapshot(tooth), moved: false };
+        this.startCut(tooth.jaw);
         return true;
       }
     }
@@ -437,6 +442,7 @@ export class WaxupEditor {
             const sdir: Pt = [v[0] / l, v[1] / l];
             const r0 = Math.max(10, (p[0] - cs[0]) * sdir[0] + (p[1] - cs[1]) * sdir[1]);
             this.drag = { kind: 'axis', tooth: a.t, axis: a.h.axis, center, cs, sdir, r0, T0: this.jawSnapshot(a.t), f: 1 };
+            this.startCut(a.t.jaw);
             this.app.changed();
             return true;
           }
@@ -539,6 +545,7 @@ export class WaxupEditor {
       f: 1,
       shown: null,
     };
+    this.startCut(t.jaw);
     this.app.changed();
     return true;
   }
@@ -559,6 +566,7 @@ export class WaxupEditor {
       d.f = Math.min(2.5, Math.max(0.4, r / d.r0));
       d.tooth.T = compose(scaleAlong(d.center, [d.axis], d.f), d.T0.get(d.tooth)!);
       this.mirrorChanges(d.T0, d.tooth);
+      this.applyCut(d.T0);
       this.app.changed();
       return;
     }
@@ -572,6 +580,7 @@ export class WaxupEditor {
       const op: ChainOp = w.chainMode === 'tube' ? { kind: 'slide', ds: this.alongTube(mv, d.snap, d.snap.S[k], d.anchor) } : { kind: 'move', d: mv };
       applyChain(d.snap, { disc: d.end }, op, { mode: w.chainMode, scalable: w.scalable, contact: w.contact });
       this.mirrorChanges(d.T0, d.tooth);
+      this.applyCut(d.T0);
       this.app.changed();
       return;
     }
@@ -699,7 +708,45 @@ export class WaxupEditor {
       d.tooth.T = compose(D, T0g);
       this.mirrorChanges(d.T0, d.tooth);
     }
+    this.applyCut(d.T0);
     this.app.changed();
+  }
+
+  // ---- antagonist cutting ---------------------------------------------------------------------
+
+  /** Antagonist cutting is on for this jaw: the antagonist's surface and the teeth as they are now. */
+  private startCut(jaw: Jaw) {
+    this.cutting = null;
+    const w = this.w;
+    if (!w.editing || !w.cut[jaw]) return;
+    const hf = buildCutter(this.app, jaw);
+    if (!hf) return;
+    const base = new Map(this.m.teeth.filter((t) => t.jaw === jaw).map((t) => [t, { pos: t.pos, idx: t.idx, geo: t.geo }]));
+    this.cutting = { hf, gap: w.cutGap, base, own: new Map() };
+  }
+
+  /** Teeth that moved are cut where they reach into the antagonist (from their shape at the start). */
+  private applyCut(T0: Map<WaxTooth, Affine>) {
+    const c = this.cutting;
+    if (!c) return;
+    for (const [t, b] of c.base) {
+      const t0 = T0.get(t);
+      const moved = !t0 || t.T.some((v, i) => v !== t0[i]);
+      const cut = moved ? cutTooth(c.hf, t.T, b.pos, c.gap) : null;
+      if (cut) {
+        let g = c.own.get(t);
+        if (!g) c.own.set(t, (g = newGeo()));
+        t.pos = cut;
+        t.idx = b.idx;
+        t.geo = g;
+        t.ver = (t.ver ?? 0) + 1;
+      } else if (t.pos !== b.pos) {
+        t.pos = b.pos;
+        t.idx = b.idx;
+        t.geo = b.geo;
+        t.ver = (t.ver ?? 0) + 1;
+      }
+    }
   }
 
   // ---- symmetry -------------------------------------------------------------------------------
@@ -734,8 +781,9 @@ export class WaxupEditor {
   }
 
   /** 1-to-1 mirroring: the counterparts of the changed teeth become their exact mirror images. */
-  private mirrorShapes(teeth: WaxTooth[]) {
-    if (!this.w.mirrorShape) return;
+  private mirrorShapes(teeth: WaxTooth[]): WaxTooth[] {
+    const out: WaxTooth[] = [];
+    if (!this.w.mirrorShape) return out;
     for (const t of teeth) {
       const o = this.other(t);
       const M = this.reflectionOf(t);
@@ -747,7 +795,9 @@ export class WaxupEditor {
       o.idx = flipped(t.idx);
       o.geo = newGeo();
       o.ver = (o.ver ?? 0) + 1;
+      out.push(o);
     }
+    return out;
   }
 
   // ---- shaping ---------------------------------------------------------------------------------------
@@ -817,9 +867,21 @@ export class WaxupEditor {
       else w.pins.delete(d.key);
       this.app.onStatus(on ? `Pinned ${d.label}: it stays where it is while the chain changes` : `${d.label[0].toUpperCase()}${d.label.slice(1)} is free again`);
     }
-    if (d?.kind === 'xform' && d.moved) this.mirrorShapes([...d.T0.keys()].filter((t) => quadrant(t.fdi) === quadrant(d.tooth.fdi) && t.T.some((v, i) => v !== d.T0.get(t)![i])));
-    if (d?.kind === 'axis') this.mirrorShapes([d.tooth]);
-    if (d?.kind === 'disc' && d.moved) this.mirrorShapes(d.snap.teeth.filter((t) => quadrant(t.fdi) === quadrant(d.tooth.fdi)));
+    let copies: WaxTooth[] = [];
+    if (d?.kind === 'xform' && d.moved) copies = this.mirrorShapes([...d.T0.keys()].filter((t) => quadrant(t.fdi) === quadrant(d.tooth.fdi) && t.T.some((v, i) => v !== d.T0.get(t)![i])));
+    if (d?.kind === 'axis') copies = this.mirrorShapes([d.tooth]);
+    if (d?.kind === 'disc' && d.moved) copies = this.mirrorShapes(d.snap.teeth.filter((t) => quadrant(t.fdi) === quadrant(d.tooth.fdi)));
+    // mirror images are cut against the antagonist on their own side
+    const c = this.cutting;
+    if (c)
+      for (const o of copies) {
+        const cut = cutTooth(c.hf, o.T, o.pos, c.gap);
+        if (cut) {
+          o.pos = cut;
+          o.ver = (o.ver ?? 0) + 1;
+        }
+      }
+    this.cutting = null;
     this.app.changed();
   }
 

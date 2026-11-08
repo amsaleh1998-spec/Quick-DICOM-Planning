@@ -4,10 +4,12 @@
 
 import type { App } from '../app';
 import type { ArchCurve } from '../curve';
-import { Vec3, clamp, fromFrame } from '../math';
+import { Vec3, clamp, dot, fromFrame, sub } from '../math';
 import { IDENTITY } from '../register';
 import { Jaw, ToothLibrary, ensureLibrary, jawOf, jawOrder } from './library';
-import { JawPlacement, WaxTooth, Waxup, curveMidline } from './waxup';
+import { JawPlacement, WaxTooth, Waxup, curveMidline, toothWorld } from './waxup';
+import { HeightField, ToothGroup, jawFrame } from './occlusion';
+import { Scan, scanWorld } from '../scans';
 import { ChainMode, chainsOf, contacts, settleChain, toothAxes } from './chain';
 export type { Waxup };
 export type { ChainMode };
@@ -42,6 +44,12 @@ export class WaxState {
   mirror = false;
   /** the tooth on the other side becomes the exact mirror image of the one changed (1-to-1) */
   mirrorShape = false;
+  /** cut the teeth of a jaw where they reach into the antagonist when they are moved / scaled */
+  cut: Record<Jaw, boolean> = { upper: false, lower: false };
+  /** distance kept to the antagonist when cutting (mm) */
+  cutGap = 0;
+  /** the abrasion slider changes the front or the back teeth */
+  abrasionGroup: ToothGroup = 'posterior';
   /** pinned teeth / chain ends (see chain.ts toothPin / discPin) */
   pins = new Set<string>();
   selected: number | null = null;
@@ -98,6 +106,7 @@ export class WaxState {
   clear() {
     this.model.teeth = [];
     this.model.placement = {};
+    this.model.abrasion = { anterior: 0, posterior: 0 };
     this.selected = this.hover = null;
     this.hoverPart = null;
     this.hoverCtl = null;
@@ -296,3 +305,66 @@ export function removeTooth(app: App, fdi: number) {
   app.changed();
 }
 
+
+// ---- antagonist ----------------------------------------------------------------------------
+
+/**
+ * What the teeth of a jaw are cut against: the visible, placed scans of the opposing jaw (by their
+ * kind, or – antagonist / other – lying on the far side of the occlusal plane) and the opposing
+ * jaw's visible waxup teeth.
+ */
+export function antagonistsOf(app: App, jaw: Jaw): { scans: Scan[]; teeth: WaxTooth[] } {
+  const m = app.wax.model;
+  const pl = m.placement[jaw];
+  if (!pl) return { scans: [], teeth: [] };
+  const f = jawFrame(pl);
+  const other: Jaw = jaw === 'upper' ? 'lower' : 'upper';
+  const scans = app.scans.filter((s) => {
+    if (!s.transform || !s.visible || s.kind === jaw) return false;
+    if (s.kind === other) return true;
+    const w = scanWorld(s);
+    if (!w) return false;
+    let sum = 0, n = 0;
+    const step = 3 * Math.max(1, Math.floor(w.pos.length / 3 / 4000));
+    for (let i = 0; i < w.pos.length; i += step) {
+      sum += dot(sub([w.pos[i], w.pos[i + 1], w.pos[i + 2]], f.O), f.az);
+      n++;
+    }
+    const mean = sum / Math.max(1, n);
+    return jaw === 'upper' ? mean < f.level : mean > f.level;
+  });
+  return { scans, teeth: m.teeth.filter((t) => t.jaw === other && app.wax.visible[other]) };
+}
+
+/** The antagonist of a jaw as a height field over the region of its teeth (null: none). */
+export function buildCutter(app: App, jaw: Jaw): HeightField | null {
+  const m = app.wax.model;
+  const pl = m.placement[jaw];
+  const own = m.teeth.filter((t) => t.jaw === jaw);
+  if (!pl || !own.length) return null;
+  const src = antagonistsOf(app, jaw);
+  if (!src.scans.length && !src.teeth.length) return null;
+  const f = jawFrame(pl);
+  let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity, c0 = Infinity, c1 = -Infinity;
+  for (const t of own) {
+    const p = toothWorld(t).pos;
+    for (let i = 0; i < p.length; i += 9) {
+      const d = sub([p[i], p[i + 1], p[i + 2]], f.O);
+      const a = dot(d, f.ax), b = dot(d, f.ay), c = dot(d, f.az);
+      a0 = Math.min(a0, a);
+      a1 = Math.max(a1, a);
+      b0 = Math.min(b0, b);
+      b1 = Math.max(b1, b);
+      c0 = Math.min(c0, c);
+      c1 = Math.max(c1, c);
+    }
+  }
+  // room for the teeth to move while they are dragged
+  const hf = new HeightField(f, jaw === 'upper', a0 - 10, b0 - 10, a1 + 10, b1 + 10, c0 - 8, c1 + 8);
+  for (const s of src.scans) {
+    const w = scanWorld(s);
+    if (w) hf.add(w.pos, s.mesh.idx);
+  }
+  for (const t of src.teeth) hf.add(toothWorld(t).pos, t.idx);
+  return hf;
+}
