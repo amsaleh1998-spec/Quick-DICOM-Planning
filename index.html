@@ -143,26 +143,78 @@
               <button id="wax-all-lower" title="Add every lower tooth (47–37)">Lower arch</button>
               <button id="wax-clear" title="Remove all teeth">Clear</button>
             </div>
-            <div class="seg" id="wax-tool">
-              <button data-wt="position" class="active" title="Move, scale and rotate teeth (P)">Position</button>
-              <button data-wt="parts" title="Move tooth parts: cusps and incisal edges (A)">Parts</button>
-              <button data-wt="freeform" title="Add, remove and smooth material (F)">Freeform</button>
-            </div>
-            <div id="wax-pos-opts" class="wax-opts">
-              <div class="seg small" id="wax-scope">
-                <button data-ws="tooth" class="active" title="Change the tooth you drag">Single tooth</button>
-                <button data-ws="jaw" title="Change all teeth of the jaw together">Whole jaw</button>
+            <div class="wax-window">
+              <div class="wax-tabs" role="tablist">
+                <button data-wtab="simple" role="tab" title="Move, rotate and scale single teeth">Simple</button>
+                <button data-wtab="advanced" role="tab" title="Scale along tooth axes, reshape cusps, freeform, symmetry">Advanced</button>
+                <button data-wtab="chain" role="tab" title="Arrange the teeth as a chain: the neighbours follow">Chain</button>
               </div>
-              <label class="check" title="Moving, turning or scaling a tooth slides its neighbours along the arch so every contact stays as it was"><input type="checkbox" id="wax-chain" checked /> Chain mode</label>
-              <label class="check" title="Every change of a tooth is mirrored to the same tooth on the other side (e.g. 13 → 23)"><input type="checkbox" id="wax-mirror" /> Mirror left / right</label>
+              <div class="wax-page" data-page="simple">
+                <div class="wax-big" id="wax-action">
+                  <button data-wa="move" title="A drag moves the tooth"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg><span>Move</span></button>
+                  <button data-wa="rotate" title="A drag rotates the tooth around its centre (or hold Ctrl)"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12a7 7 0 0 1-12 4.9M5 12a7 7 0 0 1 12-4.9"/><path d="M17 3.5v3.6h-3.6M7 20.5v-3.6h3.6"/></svg><span>Rotate</span></button>
+                  <button data-wa="scale" title="A drag scales the tooth (or hold Shift; Ctrl+Shift scales in one direction)"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M12 4l-3 3M12 4l3 3M12 20l-3-3M12 20l3-3M7 4h10M7 20h10"/></svg><span>Scale</span></button>
+                </div>
+                <fieldset class="wax-box" id="wax-limit">
+                  <legend>Options</legend>
+                  <label class="check"><input type="radio" name="wax-limit" value="all" checked /> Move / scale / rotate in all directions</label>
+                  <label class="check"><input type="radio" name="wax-limit" value="md" /> Mesial / distal direction only</label>
+                  <label class="check"><input type="radio" name="wax-limit" value="bl" /> Buccal / lingual direction only</label>
+                  <label class="check"><input type="radio" name="wax-limit" value="oc" /> Occlusal direction only</label>
+                  <label class="check"><input type="radio" name="wax-limit" value="mdbl" /> Mesial / distal + buccal / lingual</label>
+                  <label class="check sep" title="Move, rotate or scale all teeth of the jaw together"><input type="checkbox" id="wax-move-all" /> Move all simultaneously</label>
+                </fieldset>
+              </div>
+              <div class="wax-page" data-page="advanced">
+                <div class="wax-big" id="wax-adv">
+                  <button data-wv="axis" title="Drag a coloured handle of the tooth to scale it along that axis"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 8.5c0-2.6 1.6-3.8 3.4-3.8.9 0 1.4.6 2.1.6s1.2-.6 2.1-.6c1.8 0 3.4 1.2 3.4 3.8 0 3.3-.9 5.4-1.8 8-.5 1.4-1.4 1.6-1.8.1l-.9-3.4h-2l-.9 3.4c-.4 1.5-1.3 1.3-1.8-.1-.9-2.6-1.8-4.7-1.8-8z"/><path d="M2 12h3M19 12h3M2 12l1.5-1.5M2 12l1.5 1.5M22 12l-1.5-1.5M22 12l-1.5 1.5"/></svg><span>Axis scaling</span></button>
+                  <button data-wv="cusps" title="Move, scale (Shift) or rotate (Ctrl) single cusps and incisal edges"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 8.5c0-2.6 1.6-3.8 3.4-3.8.9 0 1.4.6 2.1.6s1.2-.6 2.1-.6c1.8 0 3.4 1.2 3.4 3.8 0 3.3-.9 5.4-1.8 8-.5 1.4-1.4 1.6-1.8.1l-.9-3.4h-2l-.9 3.4c-.4 1.5-1.3 1.3-1.8-.1-.9-2.6-1.8-4.7-1.8-8z"/><circle cx="9.6" cy="5.4" r="1.6" fill="currentColor"/><path d="M9.6 2.6V.9"/></svg><span>Cusps</span></button>
+                  <button data-wv="freeform" title="Add material (drag), remove (Ctrl) or smooth (Shift) – in the 3D view"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20c2.5 0 4-1.2 4-3.2a2.3 2.3 0 0 0-4.6 0"/><path d="M8.6 15.4 19.5 4.5a1.6 1.6 0 0 1 2.3 2.3L10.9 17.7"/></svg><span>Freeform</span></button>
+                </div>
+                <div id="wax-free-opts" class="wax-box hidden">
+                  <label class="small">Brush radius <span id="wax-radius-val" class="dim"></span>
+                    <input type="range" id="wax-radius" min="0.5" max="4" step="0.1" value="1.5" /></label>
+                  <label class="small">Strength <span id="wax-strength-val" class="dim"></span>
+                    <input type="range" id="wax-strength" min="0.1" max="1" step="0.05" value="0.5" /></label>
+                </div>
+                <fieldset class="wax-box">
+                  <legend>Symmetry</legend>
+                  <div class="wax-big two">
+                    <button id="wax-sym" title="Every change of a tooth is mirrored to the same tooth on the other side (e.g. 13 → 23)" aria-pressed="false"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18" stroke-dasharray="2 2.2"/><path d="M3.5 9c0-2 1.2-3 2.6-3 .7 0 1 .4 1.6.4S8.6 6 9.3 6c.4 0 .7.1 1 .2M20.5 9c0-2-1.2-3-2.6-3-.7 0-1 .4-1.6.4s-.9-.4-1.6-.4c-.4 0-.7.1-1 .2M3.5 9c0 2.5.7 4 1.4 6 .4 1.1 1 1.2 1.4.1l.6-2.4M20.5 9c0 2.5-.7 4-1.4 6-.4 1.1-1 1.2-1.4.1l-.6-2.4"/><path d="M8 19.5h8M8 19.5l1.5-1.3M16 19.5l-1.5-1.3"/></svg><span>Anterior symmetry</span></button>
+                    <button id="wax-one" title="The tooth on the other side becomes the exact mirror image of the tooth you change (shape and position)" aria-pressed="false"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18" stroke-dasharray="2 2.2"/><rect x="3.5" y="6" width="6" height="9" rx="2.5"/><rect x="14.5" y="6" width="6" height="9" rx="2.5"/><path d="M6.5 18.5h11M15.5 17l2 1.5-2 1.5"/></svg><span>1-to-1 mirroring</span></button>
+                  </div>
+                </fieldset>
+              </div>
+              <div class="wax-page" data-page="chain">
+                <div class="wax-big" id="wax-cmode">
+                  <button data-cm="chain" title="Drag a tooth to move, rotate or scale the chain; the influence fades towards pinned teeth and ends"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="4.5" cy="9" r="2"/><circle cx="6.5" cy="14.5" r="2"/><circle cx="10" cy="18.3" r="2"/><circle cx="14" cy="18.3" r="2"/><circle cx="17.5" cy="14.5" r="2"/><circle cx="19.5" cy="9" r="2"/></svg><span>Chain</span></button>
+                  <button data-cm="single" title="Change one tooth; its neighbours slide along the chain to stay in contact"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 8.5c0-2.6 1.6-3.8 3.4-3.8.9 0 1.4.6 2.1.6s1.2-.6 2.1-.6c1.8 0 3.4 1.2 3.4 3.8 0 3.3-.9 5.4-1.8 8-.5 1.4-1.4 1.6-1.8.1l-.9-3.4h-2l-.9 3.4c-.4 1.5-1.3 1.3-1.8-.1-.9-2.6-1.8-4.7-1.8-8z"/><path d="M2.5 11h2M19.5 11h2M12 1.5v1.6"/></svg><span>Single</span></button>
+                  <button data-cm="tube" title="Slide the teeth along a fixed arch (the tube)"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17.5 21 6.5" stroke-width="4" stroke-opacity=".35"/><path d="M3 17.5 21 6.5"/><path transform="translate(1.5 1) scale(.8)" d="M6.5 8.5c0-2.6 1.6-3.8 3.4-3.8.9 0 1.4.6 2.1.6s1.2-.6 2.1-.6c1.8 0 3.4 1.2 3.4 3.8 0 3.3-.9 5.4-1.8 8-.5 1.4-1.4 1.6-1.8.1l-.9-3.4h-2l-.9 3.4c-.4 1.5-1.3 1.3-1.8-.1-.9-2.6-1.8-4.7-1.8-8z"/></svg><span>Tube</span></button>
+                </div>
+                <fieldset class="wax-box">
+                  <legend>Options</legend>
+                  <div class="wax-big two">
+                    <button id="wax-csym" title="Every change is mirrored to the other side of the jaw" aria-pressed="false"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18" stroke-dasharray="2 2.2"/><path d="M3.5 9c0-2 1.2-3 2.6-3 .7 0 1 .4 1.6.4S8.6 6 9.3 6c.4 0 .7.1 1 .2M20.5 9c0-2-1.2-3-2.6-3-.7 0-1 .4-1.6.4s-.9-.4-1.6-.4c-.4 0-.7.1-1 .2M3.5 9c0 2.5.7 4 1.4 6 .4 1.1 1 1.2 1.4.1l.6-2.4M20.5 9c0 2.5-.7 4-1.4 6-.4 1.1-1 1.2-1.4.1l-.6-2.4"/><path d="M8 19.5h8M8 19.5l1.5-1.3M16 19.5l-1.5-1.3"/></svg><span>Symmetry</span></button>
+                    <button id="wax-creset" title="Put teeth back on the arch…" aria-haspopup="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.2 3.6v3.6h3.6"/></svg><span>Reset</span></button>
+                  </div>
+                  <div id="wax-reset-menu" class="wax-menu hidden" role="menu">
+                    <button data-reset="unpinned" role="menuitem"><b>Reset (keep pinned)</b><span>Unpinned teeth back to their place on the arch; pinned teeth stay</span></button>
+                    <button data-reset="all" role="menuitem"><b>Reset all</b><span>Every tooth back to its place on the arch; shapes are kept</span></button>
+                    <button data-reset="global" role="menuitem"><b>Global reset</b><span>Every tooth back to the library shape and place</span></button>
+                    <button data-reset="cancel" role="menuitem"><b>Cancel</b><span>Keep the teeth as they are</span></button>
+                  </div>
+                  <label class="check" title="When the chain is stretched or squeezed the teeth are scaled to fill it"><input type="checkbox" id="wax-scalable" checked /> Teeth scalable</label>
+                  <label class="check" title="Neighbouring teeth stay in contact (switching it on again closes the contacts)"><input type="checkbox" id="wax-contact" checked /> Keep in contact</label>
+                  <label class="check" title="Tube, end discs and control points in the 3D view"><input type="checkbox" id="wax-show-chain" checked /> Show chain controls</label>
+                  <label class="check" title="Ctrl+drag only tilts the teeth buccally / lingually"><input type="checkbox" id="wax-limit-tilt" /> Limit rotation to buccal / lingual tilt</label>
+                </fieldset>
+              </div>
+              <dl id="wax-help" class="wax-help small"></dl>
+              <div class="row wax-undo">
+                <button id="wax-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+                <button id="wax-redo" title="Redo (Ctrl+Y)">Redo ↷</button>
+              </div>
             </div>
-            <div id="wax-free-opts" class="wax-opts hidden">
-              <label class="small">Brush radius <span id="wax-radius-val" class="dim"></span>
-                <input type="range" id="wax-radius" min="0.5" max="4" step="0.1" value="1.5" /></label>
-              <label class="small">Strength <span id="wax-strength-val" class="dim"></span>
-                <input type="range" id="wax-strength" min="0.1" max="1" step="0.05" value="0.5" /></label>
-            </div>
-            <dl id="wax-help" class="wax-help small"></dl>
             <div id="wax-sel" class="edit-box hidden">
               <div class="row"><b id="wax-sel-name"></b><span id="wax-sel-info" class="dim"></span></div>
               <div class="row">

@@ -238,7 +238,13 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       ...app.scans.map((sc) => ({ name: `scans/${sc.id}.bin`, data: scanBytes(sc) })),
       ...app.wax.model.teeth
         .filter((t) => t.geo !== 0)
-        .map((t) => ({ name: `waxup/${t.fdi}.f32`, data: new Uint8Array(t.pos.buffer.slice(t.pos.byteOffset, t.pos.byteOffset + t.pos.byteLength)) })),
+        .flatMap((t) => [
+          { name: `waxup/${t.fdi}.f32`, data: new Uint8Array(t.pos.buffer.slice(t.pos.byteOffset, t.pos.byteOffset + t.pos.byteLength)) },
+          // mirrored from the other side (1-to-1): its own triangles
+          ...(t.idx !== app.wax.model.lib?.teeth.get(t.fdi)?.idx
+            ? [{ name: `waxup/${t.fdi}.u32`, data: new Uint8Array(t.idx.buffer.slice(t.idx.byteOffset, t.idx.byteOffset + t.idx.byteLength)) }]
+            : []),
+        ]),
       ...(app.seg.ai
         ? [
             { name: 'ai/cls.bin', data: app.seg.ai.cls },
@@ -376,8 +382,11 @@ function restoreWaxup(app: App, saved: SavedWaxup | undefined, entries?: Map<str
       .map((s): WaxTooth => {
         const tpl = lib.teeth.get(s.fdi)!;
         const data = s.shaped ? entries?.get(`waxup/${s.fdi}.f32`) : undefined;
-        const ok = data && data.byteLength === tpl.pos.byteLength;
-        return { fdi: s.fdi, jaw: tpl.jaw, idx: tpl.idx, T: s.T, pos: ok ? new Float32Array(data.slice().buffer) : tpl.pos, geo: ok ? newGeo() : 0 };
+        const tri = s.shaped ? entries?.get(`waxup/${s.fdi}.u32`) : undefined;
+        const idx = tri && tri.byteLength % 12 === 0 ? new Uint32Array(tri.slice().buffer) : tpl.idx;
+        const nv = data ? data.byteLength / 12 : 0;
+        const ok = data && data.byteLength % 12 === 0 && (idx === tpl.idx ? data.byteLength === tpl.pos.byteLength : idx.every((i) => i < nv));
+        return { fdi: s.fdi, jaw: tpl.jaw, idx: ok ? idx : tpl.idx, T: s.T, pos: ok ? new Float32Array(data.slice().buffer) : tpl.pos, geo: ok ? newGeo() : 0 };
       });
     app.wax.color = saved.color;
     app.wax.opacity = saved.opacity;

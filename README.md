@@ -279,14 +279,26 @@ the future teeth.
   jaws are edentulous, where the teeth meet when they are not). *Upper arch* / *Lower arch* add 17–27 / 47–37. A second
   click selects a tooth, a third removes it (or Del). With one curve for both jaws the upper arch sits slightly outside
   the lower one; with a curve per jaw each jaw follows its own.
-- **Position** (in the 3D view, the slices and the panoramic): drag = move in the view plane, **Shift**+drag = scale,
-  **Ctrl**+drag = rotate around the view axis. **Chain mode** (on by default): the neighbours slide along the arch so
-  every contact stays as it was. **Mirror**: the same change on the other side (13 ↔ 23). **Whole jaw**: move, scale
-  or rotate all teeth of the jaw together (teeth added later follow).
-- **Parts**: the cusps (molars four, premolars two, canines the tip) and incisal edges are blue dots – drag one to move
-  that part of the tooth, Shift+drag to scale it, Ctrl+drag to rotate it; the region it moves is shaded while hovered.
-- **Freeform** (3D view): drag over a tooth to add material, **Ctrl** to remove, **Shift** to smooth; brush radius and
-  strength in the panel.
+  The new teeth are set up in contact with each other (and with teeth already there).
+- The panel's tooth placement window has three tabs, laid out like the tooth placement step of a dental CAD. In
+  every tab (3D view, slices, panoramic): **Ctrl**+drag = rotate (3D: the grabbed point follows the mouse around the
+  tooth centre; slices: around the view axis), **Shift**+drag = scale, **Ctrl+Shift**+drag = scale in the drag direction.
+  - **Simple**: *Move* / *Rotate* / *Scale* choose what a plain drag does; the options limit a change to the
+    mesial-distal, buccal-lingual or occlusal direction of the tooth (or the first two); *Move all simultaneously*
+    changes all teeth of the jaw together (teeth added later follow).
+  - **Advanced**: *Axis scaling* – drag a coloured handle (red along the arch, green buccal / lingual, blue height) to
+    scale the tooth along that axis; *Cusps* – the cusps (molars four, premolars two, canines the tip) and incisal edges
+    are blue dots: drag one to move that part, Shift to scale, Ctrl to rotate; *Freeform* (3D view) – drag to add
+    material, Ctrl to remove, Shift to smooth. *Anterior symmetry* mirrors every change to the other side (13 ↔ 23);
+    *1-to-1 mirroring* makes the tooth on the other side the exact mirror image of the one changed.
+  - **Chain**: the teeth of a row of neighbouring positions form a chain, shown in 3D as a tube through their contacts
+    with a disc at each end and a green control point beside every tooth and disc. *Chain*: a dragged tooth carries
+    the chain along, fading out towards pinned teeth (a rotation also towards the ends); *Single*: only the dragged
+    tooth changes and its neighbours slide along the tube to stay in contact; *Tube*: the teeth slide along the fixed
+    arch (red extensions). Click a control point to pin it (red) – pinned teeth and ends stay; drag a disc to move that
+    end of the chain (the other end stays, the teeth in between are spread). *Teeth scalable*: stretched or squeezed
+    chains scale their teeth; *Keep in contact*: neighbours stay in contact (switching it on again closes the
+    contacts); *Limit rotation to buccal / lingual tilt*; *Symmetry*; *Reset* (unpinned teeth, all teeth, or shapes too).
 - The waxup is worked on mainly in the **3D view**: opening the Waxup panel enlarges it (⤢ or M shows all views;
   leaving the panel restores the layout). In the 3D view a tooth can be grabbed from any panel (the Waxup panel then
   opens with it) – a drag on empty space still rotates the view, and an implant under the cursor comes first. In the
@@ -451,7 +463,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/ui/install.ts` | Install app and the Windows / Mac double-click helper |
 | `src/ui/reorientPanel.ts`, `curvePanel.ts`, `implantsPanel.ts`, `segmentsPanel.ts`, `nervesPanel.ts`, `scansPanel.ts` | One module per side panel: its controls and its refresh |
 | `src/ui/viewSettings.ts`, `settings.ts`, `patient.ts` | Settings inside the 3D / panoramic views, the ⚙ Settings popover (input, SpaceMouse), the patient chip |
-| `src/waxup/` | Waxup: tooth library loader, model (arch placement, chain mode, mirror), sculpting, panel state and setup |
+| `src/waxup/` | Waxup: tooth library loader, model (arch placement, mirror), chain (contacts, tube, chain / single / tube, pins, setup in contact), sculpting, panel state and setup |
 | `src/views/waxupEdit.ts`, `src/views/waxContours.ts` | Waxup editing with the mouse in every view, tooth outlines in the slices |
 | `src/history.ts`, `src/planHistory.ts` | Undo / redo: one history of the plan, split into channels (implants, curves, segments, nerves, scans, rulers) |
 | `src/ui/undoUi.ts`, `keyboard.ts` | Undo / redo buttons and keyboard shortcuts |

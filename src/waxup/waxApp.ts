@@ -7,23 +7,48 @@ import type { ArchCurve } from '../curve';
 import { Vec3, clamp, fromFrame } from '../math';
 import { IDENTITY } from '../register';
 import { Jaw, ToothLibrary, ensureLibrary, jawOf, jawOrder } from './library';
-import { JawPlacement, Waxup, curveMidline } from './waxup';
+import { JawPlacement, WaxTooth, Waxup, curveMidline } from './waxup';
+import { ChainMode, chainsOf, contacts, settleChain, toothAxes } from './chain';
 export type { Waxup };
+export type { ChainMode };
 
-export type WaxTool = 'position' | 'parts' | 'freeform';
+export type WaxTab = 'simple' | 'advanced' | 'chain';
+/** Simple tab: what a plain drag does (Ctrl = rotate, Shift = scale, Ctrl+Shift = scale in one direction) */
+export type WaxAction = 'move' | 'rotate' | 'scale';
+/** Simple tab: directions a change is limited to (tooth axes) */
+export type WaxLimit = 'all' | 'md' | 'bl' | 'oc' | 'mdbl';
+export type WaxAdvTool = 'axis' | 'cusps' | 'freeform';
 
 export class WaxState {
   readonly model = new Waxup();
   /** the Waxup panel is open: teeth react to the mouse */
   editing = false;
-  tool: WaxTool = 'position';
-  /** move single teeth or the whole jaw */
-  scope: 'tooth' | 'jaw' = 'tooth';
-  chain = true;
+  tab: WaxTab = 'simple';
+  action: WaxAction = 'move';
+  limit: WaxLimit = 'all';
+  /** Simple tab: all teeth of the jaw together */
+  moveAll = false;
+  advTool: WaxAdvTool = 'axis';
+  chainMode: ChainMode = 'chain';
+  /** chain: teeth scaled when the chain is stretched or squeezed */
+  scalable = true;
+  /** chain: neighbours stay in contact */
+  contact = true;
+  /** chain: tube, discs and control points in the 3D view */
+  showChain = true;
+  /** chain: rotations limited to a buccal / lingual tilt */
+  limitTilt = false;
+  /** changes mirrored to the other side (anterior symmetry) */
   mirror = false;
+  /** the tooth on the other side becomes the exact mirror image of the one changed (1-to-1) */
+  mirrorShape = false;
+  /** pinned teeth / chain ends (see chain.ts toothPin / discPin) */
+  pins = new Set<string>();
   selected: number | null = null;
   hover: number | null = null;
   hoverPart: { fdi: number; i: number } | null = null;
+  /** chain control / disc / axis handle under the mouse */
+  hoverCtl: string | null = null;
   brushRadius = 1.5;
   /** 0..1 */
   brushStrength = 0.5;
@@ -35,14 +60,33 @@ export class WaxState {
   /** open the Waxup panel (set by the interface); `grabbed`: a tooth is being dragged in a view */
   openPanel: (grabbed?: boolean) => void = () => {};
 
+  get cusps() {
+    return this.editing && this.tab === 'advanced' && this.advTool === 'cusps';
+  }
+  get freeform() {
+    return this.editing && this.tab === 'advanced' && this.advTool === 'freeform';
+  }
+  /** all teeth of the selected tooth's jaw are changed together */
+  get wholeJaw() {
+    return this.editing && this.tab === 'simple' && this.moveAll;
+  }
+
   /** Changes that affect drawing (views compare it). */
   key(): string {
     const m = this.model;
     return JSON.stringify([
       m.teeth.map((t) => [t.fdi, t.geo, t.ver ?? 0, t.T]),
-      this.selected, this.hover, this.hoverPart, this.editing && this.tool, this.scope,
-      this.color, this.opacity, this.visible, this.contours,
+      this.selected, this.hover, this.hoverPart, this.hoverCtl, this.editing && [this.tab, this.advTool, this.chainMode, this.showChain, this.moveAll],
+      [...this.pins], this.color, this.opacity, this.visible, this.contours,
     ]);
+  }
+
+  /** Contacts of a tooth with its neighbours and its axes (world) – tests and debugging. */
+  contacts(t: WaxTooth) {
+    return contacts(this.model, t);
+  }
+  axes(t: WaxTooth) {
+    return toothAxes(this.model, t);
   }
 
   /** Teeth that are drawn. */
@@ -56,6 +100,8 @@ export class WaxState {
     this.model.placement = {};
     this.selected = this.hover = null;
     this.hoverPart = null;
+    this.hoverCtl = null;
+    this.pins.clear();
   }
 }
 
@@ -214,6 +260,7 @@ export async function addTeeth(app: App, fdis: number[]): Promise<string | null>
   }
   const model = app.wax.model;
   model.lib = lib;
+  const before = new Set<WaxTooth>(model.teeth);
   for (const fdi of fdis) {
     const jaw = jawOf(fdi);
     if (!model.placement[jaw]) {
@@ -223,6 +270,9 @@ export async function addTeeth(app: App, fdis: number[]): Promise<string | null>
     }
     model.add(fdi);
   }
+  // new teeth are set up in contact with each other and with the teeth already there
+  for (const jaw of ['upper', 'lower'] as Jaw[])
+    for (const c of chainsOf(model, jaw)) if (c.some((t) => !before.has(t))) settleChain(model, c, before, app.wax.scalable);
   if (fdis.length) app.wax.selected = fdis[fdis.length - 1];
   app.changed();
   return null;
@@ -242,6 +292,7 @@ export function removeTooth(app: App, fdi: number) {
   m.remove(fdi);
   if (!m.teeth.some((t) => t.jaw === jawOf(fdi))) delete m.placement[jawOf(fdi)];
   if (app.wax.selected === fdi) app.wax.selected = null;
+  app.wax.pins.delete(`t${fdi}`);
   app.changed();
 }
 

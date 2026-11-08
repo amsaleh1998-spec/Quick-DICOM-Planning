@@ -180,13 +180,17 @@ export class Waxup {
     if (!t || !pl || !this.lib) return;
     const tpl = this.template(fdi);
     t.pos = tpl.pos;
+    t.idx = tpl.idx;
     t.geo = 0;
     t.T = archPose(this.lib, pl, fdi);
   }
 
   /** Current tips of a tooth's parts (library coordinates): the vertices nearest the template's tips. */
   partTips(t: WaxTooth): Vec3[] {
-    return partVertices(this.template(t.fdi)).map((i) => [t.pos[i * 3], t.pos[i * 3 + 1], t.pos[i * 3 + 2]] as Vec3);
+    const tpl = this.template(t.fdi);
+    // mirrored from the other side (1-to-1): its own vertices nearest the template's tips
+    const vi = t.idx === tpl.idx ? partVertices(tpl) : partVerticesOf(t, tpl);
+    return vi.map((i) => [t.pos[i * 3], t.pos[i * 3 + 1], t.pos[i * 3 + 2]] as Vec3);
   }
 
   /** Centre of a tooth (world): its library centroid. */
@@ -251,6 +255,24 @@ export function partVertices(tpl: ToothTemplate): number[] {
   return v;
 }
 
+const ownPartCache = new WeakMap<Uint32Array, number[]>();
+/** Part vertices of a tooth whose mesh is not the template's (mirrored from the other side). */
+function partVerticesOf(t: WaxTooth, tpl: ToothTemplate): number[] {
+  let v = ownPartCache.get(t.idx);
+  if (!v) {
+    v = tpl.parts.map((tip) => {
+      let best = 0, bd = Infinity;
+      for (let i = 0; i < t.pos.length; i += 3) {
+        const d = (t.pos[i] - tip[0]) ** 2 + (t.pos[i + 1] - tip[1]) ** 2 + (t.pos[i + 2] - tip[2]) ** 2;
+        if (d < bd) [bd, best] = [d, i / 3];
+      }
+      return best;
+    });
+    ownPartCache.set(t.idx, v);
+  }
+  return v;
+}
+
 export function det3(m: Affine): number {
   return m[0] * (m[5] * m[10] - m[6] * m[9]) - m[1] * (m[4] * m[10] - m[6] * m[8]) + m[2] * (m[4] * m[9] - m[5] * m[8]);
 }
@@ -307,66 +329,6 @@ export function toothWorld(t: WaxTooth): WorldMesh {
   const out = { key, pos, nrm: vertexNormals(pos, t.idx), min, max };
   worldCache.set(t, out);
   return out;
-}
-
-// ---- chain mode -----------------------------------------------------------------------
-
-export interface ChainLink {
-  a: WaxTooth;
-  b: WaxTooth;
-  /** horizontal unit direction from a to b (world) */
-  u: Vec3;
-  /** gap along u to keep (negative = overlap) */
-  gap: number;
-}
-
-function extremes(t: WaxTooth, u: Vec3): { min: number; max: number } {
-  const p = toothWorld(t).pos;
-  let mn = Infinity, mx = -Infinity;
-  for (let i = 0; i < p.length; i += 3) {
-    const d = p[i] * u[0] + p[i + 1] * u[1] + p[i + 2] * u[2];
-    if (d < mn) mn = d;
-    if (d > mx) mx = d;
-  }
-  return { min: mn, max: mx };
-}
-
-/** Gap between two teeth along u (negative = overlap). */
-export const gapAlong = (a: WaxTooth, b: WaxTooth, u: Vec3) => extremes(b, u).min - extremes(a, u).max;
-
-/** Links between neighbouring teeth of a jaw with the gaps they have now (`up`: world superior). */
-export function chainLinks(w: Waxup, jaw: Jaw, up: Vec3): ChainLink[] {
-  const ts = w.jawTeeth(jaw);
-  const links: ChainLink[] = [];
-  for (let i = 0; i + 1 < ts.length; i++) {
-    const ca = w.center(ts[i]), cb = w.center(ts[i + 1]);
-    let d: Vec3 = [cb[0] - ca[0], cb[1] - ca[1], cb[2] - ca[2]];
-    const h = dot(d, up);
-    d = [d[0] - up[0] * h, d[1] - up[1] * h, d[2] - up[2] * h];
-    const u = normalize(d);
-    links.push({ a: ts[i], b: ts[i + 1], u, gap: gapAlong(ts[i], ts[i + 1], u) });
-  }
-  return links;
-}
-
-/**
- * Chain mode: after `anchor` changed, slide its neighbours (and theirs, outwards) along the links so
- * every gap is what it was when the links were taken – contacts stay closed.
- */
-export function repackChain(links: ChainLink[], anchor: WaxTooth) {
-  const k = links.findIndex((l) => l.a === anchor || l.b === anchor);
-  if (k < 0) return;
-  const start = links[k].a === anchor ? k : k + 1; // index of the first link distal of the anchor
-  for (let i = start; i < links.length; i++) {
-    const l = links[i];
-    const s = l.gap - gapAlong(l.a, l.b, l.u);
-    if (Math.abs(s) > 1e-6) l.b.T = compose(translation([l.u[0] * s, l.u[1] * s, l.u[2] * s]), l.b.T);
-  }
-  for (let i = start - 1; i >= 0; i--) {
-    const l = links[i];
-    const s = l.gap - gapAlong(l.a, l.b, l.u);
-    if (Math.abs(s) > 1e-6) l.a.T = compose(translation([-l.u[0] * s, -l.u[1] * s, -l.u[2] * s]), l.a.T);
-  }
 }
 
 // ---- library <-> world -------------------------------------------------------------------
