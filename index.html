@@ -286,10 +286,15 @@
             </div>
             <label class="check small"><input id="seg-show-unseg" type="checkbox" checked /> 3D: show bone that is not segmented</label>
             <label class="check small"><input id="seg-show-2d" type="checkbox" checked /> Show segments in the slices</label>
-            <details class="sub" id="seg-manual">
-              <summary>Segment by threshold, separation cuts</summary>
+            <div id="seg-manual" class="seg-manual">
+              <h3 class="sub-h">Manual – by threshold</h3>
+              <div class="thr-row" title="Lowest value that counts as bone: for new clicks and the 3D surface (the same as the bar in the 3D view)">
+                <label for="seg-thr" class="small">Lower threshold</label>
+                <input id="seg-thr" type="range" />
+                <input id="seg-thr-num" type="number" />
+              </div>
               <ol class="help steps">
-                <li>Set the 3D thresholds (3D view header) so the structures are separated.</li>
+                <li>Set the lower threshold so the structures are separated.</li>
                 <li>Add a segment, then click the structure in the 3D view or in any slice.</li>
                 <li>Still touching? Draw a <b>cut</b> through the contact.</li>
               </ol>
@@ -313,7 +318,7 @@
                 </label>
               </div>
               <ul id="cut-list" class="obj-list"></ul>
-            </details>
+            </div>
           </section>
 
           <section id="panel-nerves" class="panel" data-panel="nerves">
@@ -396,6 +401,15 @@
           </div>
           <div id="loading" class="hidden"><div class="box"><div id="loading-text">Loading…</div><div class="bar"><div id="loading-bar"></div></div></div></div>
         </section>
+        <aside id="objects" aria-label="Objects">
+          <div id="obj-resize" class="obj-resize" title="Drag to make the list wider or narrower"></div>
+          <header class="obj-head">
+            <h3>Objects</h3>
+            <button id="obj-toggle" class="icon-btn" title="Hide the objects list">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          </header>
+          <div id="obj-groups" class="obj-groups"></div>
+        </aside>
       </div>
       <footer id="status"><span id="status-hint"></span><span id="status-msg"></span><span id="status-cursor"></span></footer>
     </div>
@@ -464,6 +478,11 @@
     <div id="v3d-tools" class="view-tools">
       <button id="btn-vr-menu" title="Rendering mode and thresholds">Surface ▾</button>
       <button id="btn-3dview-menu" title="View direction">View ▾</button>
+    </div>
+    <div id="v3d-thr" class="view-thr" title="Lower threshold of the 3D surface – also used when clicking new segments">
+      <label for="v3d-thr-range">Threshold</label>
+      <input id="v3d-thr-range" type="range" />
+      <input id="v3d-thr-num" type="number" />
     </div>
     <div id="pano-tools" class="view-tools">
       <div class="seg small" id="pano-mode">

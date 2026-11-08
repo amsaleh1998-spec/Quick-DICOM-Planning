@@ -2,6 +2,7 @@
 // and cuts.
 
 import { showDentalSegmentator } from '../ai/dentalSegmentator';
+import { bindLowerThreshold } from './viewSettings';
 import { $, app, escapeHtml, fromHex, rgbCss, setList, setStatus, toHex } from './shell';
 
 document.querySelectorAll<HTMLButtonElement>('[data-seg-preset]').forEach(
@@ -55,6 +56,7 @@ $('btn-seg-grow').onclick = () => app.setSegTool(app.segTool === 'grow' ? null :
 $('btn-seg-regrow').onclick = () => app.activeSegId !== null && app.regrowSegment(app.activeSegId);
 $('btn-seg-clear').onclick = () => app.activeSegId !== null && app.clearSegment(app.activeSegId);
 $('btn-seg-delete').onclick = () => app.activeSegId !== null && app.deleteSegment(app.activeSegId);
+bindLowerThreshold($<HTMLInputElement>('seg-thr'), $<HTMLInputElement>('seg-thr-num'));
 const segShowUnseg = $<HTMLInputElement>('seg-show-unseg');
 const segShow2d = $<HTMLInputElement>('seg-show-2d');
 segShowUnseg.onchange = () => {

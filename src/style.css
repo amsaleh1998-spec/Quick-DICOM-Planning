@@ -243,7 +243,7 @@ button.open {
 
 #main {
   display: grid;
-  grid-template-columns: 48px auto 1fr;
+  grid-template-columns: 48px auto 1fr auto;
   min-height: 0;
 }
 
@@ -1975,4 +1975,219 @@ a.btn-link {
 }
 .wax-help dd {
   margin: 0;
+}
+
+/* ---- manual segmentation, lower threshold ---- */
+.seg-manual {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.sub-h {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.thr-row {
+  display: grid;
+  grid-template-columns: auto 1fr 64px;
+  gap: 8px;
+  align-items: center;
+}
+.thr-row input[type='range'],
+.view-thr input[type='range'] {
+  min-width: 0;
+  width: 100%;
+}
+.thr-row input[type='number'],
+.view-thr input[type='number'] {
+  width: 100%;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+/* the bar along the bottom of the 3D view */
+.view-thr {
+  display: none;
+}
+.view-thr.in-view {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 140px));
+  display: grid;
+  grid-template-columns: auto 1fr 64px;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(20, 28, 42, 0.85);
+  border: 1px solid rgba(60, 76, 104, 0.9);
+  font-size: 11px;
+  color: var(--text);
+}
+.view-thr.in-view.hidden {
+  display: none;
+}
+.view-thr input[type='number'] {
+  height: 20px;
+  font-size: 11px;
+  padding: 0 4px;
+}
+
+/* ---- objects list (right) ---- */
+#objects {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+}
+#objects.collapsed {
+  width: 30px;
+  cursor: pointer;
+}
+#objects.collapsed .obj-head h3,
+#objects.collapsed .obj-groups,
+#objects.collapsed .obj-resize {
+  display: none;
+}
+#objects.collapsed .obj-head {
+  flex-direction: column;
+  padding: 8px 0;
+}
+#objects.collapsed #obj-toggle svg {
+  transform: scaleX(-1);
+}
+#objects.collapsed::after {
+  content: 'Objects';
+  writing-mode: vertical-rl;
+  margin: 6px auto;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.obj-resize {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 4;
+}
+.obj-resize:hover,
+#objects.resizing .obj-resize {
+  background: var(--accent);
+  opacity: 0.5;
+}
+.obj-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 8px 6px 12px;
+}
+.obj-head h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.obj-groups {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.obj-group ul {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+}
+.obj-gh,
+.obj-group li {
+  display: grid;
+  grid-template-columns: 24px auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+.obj-gh {
+  grid-template-columns: 24px 1fr auto;
+  font-size: 12px;
+}
+.obj-group li {
+  padding-left: 10px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.obj-group li:hover {
+  background: var(--panel-2);
+}
+.obj-group li.off .nm,
+.obj-group li.off .swatch {
+  opacity: 0.45;
+}
+.obj-group .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.obj-group .nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.obj-group .nm[data-sel]:not([data-sel='']) {
+  cursor: pointer;
+}
+.obj-group .dim,
+.obj-gh .dim {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.obj-groups .vis-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+}
+.obj-groups .vis-btn.off {
+  color: var(--muted);
+}
+/* small 3D view (the Plan layout's tile): just the slider */
+.view:has(.view-thr.in-view) {
+  container-type: inline-size;
+}
+@container (max-width: 360px) {
+  .view-thr.in-view {
+    grid-template-columns: 1fr;
+    width: calc(100% - 90px);
+    left: 70px;
+    transform: none;
+  }
+  .view-thr.in-view label,
+  .view-thr.in-view input[type='number'] {
+    display: none;
+  }
 }

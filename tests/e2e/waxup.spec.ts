@@ -221,7 +221,6 @@ test('tools left on in other panels do not block the waxup', async ({ page }) =>
   await page.keyboard.press('Enter');
   // a segment's "Click to add" left on, then nerve tracing left on
   await page.click('[data-panel="segments"]');
-  await page.click('#seg-manual summary');
   await page.click('[data-seg-preset="1"]');
   expect(await page.evaluate(() => window.app.segTool)).toBe('grow');
   await page.click('[data-panel="nerves"]');

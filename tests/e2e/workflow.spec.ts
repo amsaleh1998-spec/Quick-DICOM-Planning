@@ -61,7 +61,6 @@ test('plans implants, segments, imports a scan, exports, saves and reopens the p
 
   // segment from a preset + opacity
   await page.click('[data-panel="segments"]');
-  await page.click('#seg-manual summary');
   await page.click('[data-seg-preset="1"]');
   expect(await page.evaluate(() => window.app.seg.segments.length)).toBe(1);
   await page.$eval('#seg-opacity', (e: HTMLInputElement) => ((e.value = '0.5'), e.dispatchEvent(new Event('input'))));

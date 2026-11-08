@@ -35,12 +35,29 @@ const vrLo = $<HTMLInputElement>('vr-lo');
 const vrHi = $<HTMLInputElement>('vr-hi');
 const vrLoNum = $<HTMLInputElement>('vr-lo-num');
 const vrHiNum = $<HTMLInputElement>('vr-hi-num');
-const setLo = (v: number) => {
+/** The lower threshold (3D surface, new segment clicks) – set from the menu, the 3D bar and the Segments panel. */
+export const setLo = (v: number) => {
   if (!Number.isFinite(v)) return;
-  app.vr.lo = v;
+  app.vr.lo = Math.round(v);
   if (app.vr.hi < v) app.vr.hi = v;
   app.changed();
 };
+
+/** Lower-threshold controls (a range and a number) kept in step with the app. */
+const loControls: { range: HTMLInputElement; num: HTMLInputElement; typing: boolean }[] = [];
+export function bindLowerThreshold(range: HTMLInputElement, num: HTMLInputElement) {
+  const c = { range, num, typing: false };
+  range.oninput = () => setLo(Number(range.value));
+  // a typed value applies on Enter / leaving the field; meanwhile it is not overwritten
+  num.oninput = () => (c.typing = true);
+  num.onchange = () => {
+    c.typing = false;
+    setLo(Number(num.value));
+  };
+  num.onblur = () => (c.typing = false);
+  loControls.push(c);
+}
+bindLowerThreshold($<HTMLInputElement>('v3d-thr-range'), $<HTMLInputElement>('v3d-thr-num'));
 const setHi = (v: number) => {
   if (!Number.isFinite(v)) return;
   app.vr.hi = v;
@@ -89,6 +106,17 @@ export function refreshViewSettings() {
       r.step = String(Math.max(1, Math.round((vol.max - vol.min) / 500)));
     }
   }
+  for (const { range, num, typing } of loControls) {
+    if (vol) {
+      range.min = num.min = String(vol.min);
+      range.max = num.max = String(vol.max);
+      range.step = String(Math.max(1, Math.round((vol.max - vol.min) / 500)));
+    }
+    if (document.activeElement !== range) range.value = String(app.vr.lo);
+    if (!typing) num.value = String(Math.round(app.vr.lo));
+  }
+  // the bar is for surfaces (MIP uses window / level)
+  $('v3d-thr').classList.toggle('hidden', !vol || app.vr.mode === 'mip');
   if (document.activeElement !== vrLo) vrLo.value = String(app.vr.lo);
   if (document.activeElement !== vrHi) vrHi.value = String(app.vr.hi);
   if (document.activeElement !== vrLoNum) vrLoNum.value = String(Math.round(app.vr.lo));

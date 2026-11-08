@@ -19,6 +19,7 @@ import { refreshNervesPanel } from './ui/nervesPanel';
 import { refreshScanUi } from './ui/scansPanel';
 import { refreshViewSettings } from './ui/viewSettings';
 import { refreshUndo } from './ui/undoUi';
+import { refreshObjects } from './ui/objectsPanel';
 import './ui/keyboard';
 
 // ---- top bar -------------------------------------------------------------------
@@ -69,6 +70,7 @@ function refreshUi() {
   refreshSegmentsPanel();
   refreshNervesPanel();
   refreshScanUi();
+  refreshObjects();
 }
 app.onStateChange = refreshUi;
 
