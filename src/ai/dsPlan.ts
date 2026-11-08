@@ -209,3 +209,98 @@ export function contextBox(lo: Vec3, hi: Vec3, scanLo: Vec3, scanHi: Vec3, axes:
   }
   return { lo: L, hi: H };
 }
+
+/**
+ * Where the jaws meet, as a world coordinate along axis `a`, inside [lo, hi]: the middle of the
+ * band of the brightest voxels (enamel, restorations), weighted by how many there are per slice;
+ * without teeth, the emptiest slice between the two ridges.
+ */
+export function occlusalSplit(data: Int16Array, dims: [number, number, number], spacing: Vec3, lo: Vec3, hi: Vec3, a: number, bone: number): number {
+  const i0 = [0, 1, 2].map((k) => Math.max(0, Math.ceil(lo[k] / spacing[k])));
+  const i1 = [0, 1, 2].map((k) => Math.min(dims[k] - 1, Math.floor(hi[k] / spacing[k])));
+  const [b1, b2] = [0, 1, 2].filter((k) => k !== a);
+  const n = i1[a] - i0[a] + 1;
+  const at = (idx: number[]) => data[idx[0] + idx[1] * dims[0] + idx[2] * dims[0] * dims[1]];
+  // the brightest few per cent of what is bone or brighter: enamel, metal
+  const hist = new Map<number, number>();
+  let total = 0;
+  const idx = [0, 0, 0];
+  const stride = 2;
+  for (idx[a] = i0[a]; idx[a] <= i1[a]; idx[a] += stride)
+    for (idx[b1] = i0[b1]; idx[b1] <= i1[b1]; idx[b1] += stride)
+      for (idx[b2] = i0[b2]; idx[b2] <= i1[b2]; idx[b2] += stride) {
+        const v = at(idx);
+        if (v < bone) continue;
+        const bin = Math.floor(v / 16);
+        hist.set(bin, (hist.get(bin) ?? 0) + 1);
+        total++;
+      }
+  let enamel = bone * 2;
+  let acc = 0;
+  const bins = [...hist.keys()].sort((x, y) => y - x);
+  for (const bin of bins) {
+    acc += hist.get(bin)!;
+    if (acc >= total * 0.03) {
+      enamel = Math.max(bone + 1, bin * 16);
+      break;
+    }
+  }
+  // typical bone: the median of what is bone or brighter
+  let median = bone;
+  acc = 0;
+  for (const bin of bins) {
+    acc += hist.get(bin)!;
+    if (acc >= total * 0.5) {
+      median = bin * 16;
+      break;
+    }
+  }
+  const bright = new Float64Array(n), boneN = new Float64Array(n);
+  for (let t = 0; t < n; t++) {
+    idx[a] = i0[a] + t;
+    for (idx[b1] = i0[b1]; idx[b1] <= i1[b1]; idx[b1] += stride)
+      for (idx[b2] = i0[b2]; idx[b2] <= i1[b2]; idx[b2] += stride) {
+        const v = at(idx);
+        if (v >= bone) boneN[t]++;
+        if (v >= enamel) bright[t]++;
+      }
+  }
+  const smooth = (p: Float64Array, r: number) => p.map((_, t) => {
+    let s = 0, c = 0;
+    for (let u = Math.max(0, t - r); u <= Math.min(n - 1, t + r); u++) (s += p[u]), c++;
+    return s / c;
+  });
+  const r = Math.max(1, Math.round(1.5 / spacing[a]));
+  const B = smooth(bright, r);
+  let peak = 0;
+  for (let t = 1; t < n; t++) if (B[t] > B[peak]) peak = t;
+  const world = (t: number) => (i0[a] + t) * spacing[a];
+  // crowns only when there is something distinctly brighter than bone (enamel, metal)
+  if (enamel >= median * 1.6 && B[peak] >= 40) {
+    // the band of crowns around the peak, its weighted middle
+    let s0 = peak, s1 = peak;
+    while (s0 > 0 && B[s0 - 1] >= B[peak] * 0.3) s0--;
+    while (s1 < n - 1 && B[s1 + 1] >= B[peak] * 0.3) s1++;
+    let sw = 0, st = 0;
+    for (let t = s0; t <= s1; t++) (sw += B[t]), (st += B[t] * t);
+    return world(st / sw);
+  }
+  // no teeth: the emptiest slice between the two ridges
+  const S = smooth(boneN, Math.max(2, Math.round(3 / spacing[a])));
+  const m0 = Math.floor(n * 0.15), m1 = Math.ceil(n * 0.85);
+  let low = Infinity;
+  for (let t = m0; t <= m1; t++) low = Math.min(low, S[t]);
+  // the middle of the emptiest stretch
+  let best = Math.round(n / 2), bestLen = 0;
+  for (let t = m0; t <= m1; ) {
+    if (S[t] > low + 1e-9) {
+      t++;
+      continue;
+    }
+    let u = t;
+    while (u + 1 <= m1 && S[u + 1] <= low + 1e-9) u++;
+    if (u - t + 1 > bestLen) [bestLen, best] = [u - t + 1, (t + u) / 2];
+    t = u + 1;
+  }
+  return world(best);
+}

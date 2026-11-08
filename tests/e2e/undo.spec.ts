@@ -179,3 +179,32 @@ test('a new scan starts a new history', async ({ page }) => {
   await page.click('#btn-demo');
   await expect.poll(() => page.evaluate(() => [window.app.undoCount, window.app.redoCount])).toEqual([0, 0]);
 });
+
+test('automatic segmentation of one jaw keeps the other jaw from an earlier run', async ({ page }) => {
+  await openDemo(page);
+  const r = await page.evaluate(() => {
+    const a = window.app;
+    const g = a.seg;
+    const n = g.nx * g.ny * g.nz;
+    const half = Math.floor(n / 2);
+    // first run, maxilla only: maxilla in the upper half (and a stray mandible label, ignored)
+    let cls = new Uint8Array(n);
+    for (let i = half; i < n; i += 5) cls[i] = 1;
+    for (let i = 0; i < half; i += 50) cls[i] = 2;
+    a.applyAiSegmentation({ cls, margin: new Uint8Array(n).fill(200), counts: [] }, 'test', [1, 3]);
+    const first = g.segments.map((s: { ai?: { cls: number } }) => s.ai?.cls).sort();
+    // second run, mandible only: mandible in the lower half
+    cls = new Uint8Array(n);
+    for (let i = 0; i < half; i += 5) cls[i] = 2;
+    a.applyAiSegmentation({ cls, margin: new Uint8Array(n).fill(200), counts: [] }, 'test', [2, 4, 5]);
+    const both = g.segments.map((s: { ai?: { cls: number } }) => s.ai?.cls).sort();
+    const merged = g.aiLabels().cls;
+    let up = 0, low = 0;
+    for (let i = 0; i < n; i++) {
+      if (merged[i] === 1) up++;
+      if (merged[i] === 2) low++;
+    }
+    return { first, both, up: up > 0, low: low > 0, upperKept: merged[half] === 1 };
+  });
+  expect(r).toEqual({ first: [1], both: [1, 2], up: true, low: true, upperKept: true });
+});

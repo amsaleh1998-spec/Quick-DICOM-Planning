@@ -245,6 +245,11 @@ export class Segmentation {
     this.aiMargin = null;
   }
 
+  /** The stored automatic result on the current label grid (classes and margins), if any. */
+  aiLabels(): { cls: Uint8Array; margin: Uint8Array } | null {
+    return this.aiOnGrid();
+  }
+
   /** AI classes and margins on the label grid (resampled when the grids differ). */
   private aiOnGrid(): { cls: Uint8Array; margin: Uint8Array } | null {
     const A = this.ai;
