@@ -210,6 +210,37 @@ test('in 3D a tooth is grabbed from any panel; leaving the panel restores the la
   expect(dist(await center(page, 46), m0)).toBeGreaterThan(1);
 });
 
+test('tools left on in other panels do not block the waxup', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openDemo(page);
+  await page.keyboard.press('2');
+  for (const [x, y] of [[0.22, 0.72], [0.27, 0.45], [0.38, 0.3], [0.5, 0.26], [0.62, 0.3], [0.73, 0.45], [0.78, 0.72]]) {
+    await clickView(page, 'planAxial', x, y);
+    await page.waitForTimeout(60);
+  }
+  await page.keyboard.press('Enter');
+  // a segment's "Click to add" left on, then nerve tracing left on
+  await page.click('[data-panel="segments"]');
+  await page.click('#seg-manual summary');
+  await page.click('[data-seg-preset="1"]');
+  expect(await page.evaluate(() => window.app.segTool)).toBe('grow');
+  await page.click('[data-panel="nerves"]');
+  await page.click('#btn-nerve-right');
+  expect(await page.evaluate(() => window.app.segTool)).toBe('nerve');
+  await page.click('[data-panel="waxup"]');
+  expect(await page.evaluate(() => window.app.segTool)).toBeNull();
+  await page.click('#wax-all-lower');
+  await expect.poll(() => page.evaluate(() => window.app.wax.model.teeth.length), { timeout: 20_000 }).toBe(14);
+  await topView(page);
+  const q = await in3d(page, 36);
+  const c0 = await center(page, 36);
+  await page.mouse.move(q[0], q[1]);
+  await page.mouse.down();
+  await page.mouse.move(q[0] + 30, q[1], { steps: 5 });
+  await page.mouse.up();
+  expect(dist(await center(page, 36), c0)).toBeGreaterThan(1);
+});
+
 test('mirror mode changes the other side too', async ({ page }) => {
   test.setTimeout(300_000);
   await curveAndLowerArch(page);
