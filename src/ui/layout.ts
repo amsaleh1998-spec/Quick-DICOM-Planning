@@ -82,6 +82,12 @@ rail.onChange = () => {
   const on = app.mode === 'plan' && rail.current === 'waxup' && rail.open;
   if (app.wax.editing === on) return;
   app.wax.editing = on;
+  if (on) {
+    // tools of other panels would take the clicks (segment clicks, cuts, nerve tracing, ruler, implant placing)
+    if (app.segTool) app.setSegTool(null);
+    if (app.ruler) app.setRuler(false);
+    app.placing = null;
+  }
   if (on && !grabbing && app.vol && !v3dMax()) {
     app.toggleMaximize(app.view3d);
     enlarged = true;

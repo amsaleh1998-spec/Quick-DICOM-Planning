@@ -640,7 +640,14 @@ export abstract class View {
       const wax = this.app.wax;
       if (button === 2) this.drag = 'right';
       // waxup panel open: a press on a tooth goes to the waxup first (Shift = scale, Ctrl = rotate)
-      else if (button === 0 && this.waxEditor && (wax.editing || this.waxAnyPanel(p)) && !this.app.segTool && !this.app.ruler && this.waxEditor.start(p, e)) this.drag = 'wax';
+      else if (
+        button === 0 &&
+        this.waxEditor &&
+        !this.app.ruler &&
+        (wax.editing || (!this.app.segTool && this.waxAnyPanel(p))) &&
+        this.waxEditor.start(p, e)
+      )
+        this.drag = 'wax';
       else if (button === 1 || (button === 0 && ((e.shiftKey && this.shiftPans) || (e.altKey && !e.ctrlKey && !e.metaKey)))) this.drag = 'pan';
       else if (button === 0 && this.app.segTool && this.supportsTool(this.app.segTool)) this.drag = this.toolDown(p) ? 'nerve' : 'none';
       else if (button === 0 && this.app.ruler && this.measureKind) this.drag = this.rulerClick(p) ? 'ruler' : 'none';
