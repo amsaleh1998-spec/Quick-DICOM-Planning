@@ -43,7 +43,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
     title: '② Plan · Waxup',
     rows: [
       ['Tooth chart', 'Click a position to add the tooth (set up along the curve) · click again to select · once more to remove'],
-      ['Drag a tooth', 'Move it in the view plane (3D view, slices or panoramic)'],
+      ['Drag a tooth', 'Move it in the view plane – 3D view (from any panel), slices and panoramic (Waxup panel open)'],
       ['Shift + drag', 'Scale it · Ctrl + drag: rotate it around the view axis'],
       ['Chain mode', 'Neighbours slide along the arch and keep their contacts'],
       ['Mirror', 'The same change on the other side (13 → 23)'],
