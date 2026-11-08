@@ -16,7 +16,7 @@ const SELECTED: [number, number, number] = [255, 190, 90];
 
 function colorOf(app: App, t: WaxTooth): [number, number, number] {
   const w = app.wax;
-  const jawSel = w.scope === 'jaw' && w.selected !== null ? w.model.tooth(w.selected)?.jaw : null;
+  const jawSel = w.wholeJaw && w.selected !== null ? w.model.tooth(w.selected)?.jaw : null;
   if (t.fdi === w.selected || t.jaw === jawSel) return SELECTED;
   if (t.fdi === w.hover) return [255, 245, 225];
   return w.color;

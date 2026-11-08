@@ -1293,7 +1293,7 @@ export class View3D extends View {
         mg.draw(s, mvp, camPos, { color: s.color, opacity: s.opacity, vertexColors: s.vertexColors });
       },
     }));
-    const jawSel = wax.scope === 'jaw' && wax.selected !== null ? wax.model.tooth(wax.selected)?.jaw : null;
+    const jawSel = wax.wholeJaw && wax.selected !== null ? wax.model.tooth(wax.selected)?.jaw : null;
     for (const t of teeth) {
       items.push({
         opacity: wax.opacity,
@@ -1310,7 +1310,7 @@ export class View3D extends View {
           const base = wax.color;
           const color: [number, number, number] = sel ? [255, 214, 150] : hov ? [186, 220, 255] : base;
           // the region a part would move: shaded on the tooth while its handle is hovered
-          const hp = wax.editing && wax.tool === 'parts' && wax.hoverPart?.fdi === t.fdi ? wax.hoverPart : null;
+          const hp = wax.cusps && wax.hoverPart?.fdi === t.fdi ? wax.hoverPart : null;
           let vc = false;
           if (hp) {
             const pk = `${key}|${hp.i}`;
