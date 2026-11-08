@@ -197,7 +197,7 @@ export class ImplantEditor {
 
   /** A library implant becomes the size of its system nearest to (d, L). */
   private snapModel(imp: Implant, m: NonNullable<ReturnType<typeof findModel>>, d: number, L: number, change: 'd' | 'L') {
-    const z = nearestSize(m.system, d, L, change);
+    const z = nearestSize(m.system, d, L, change, m.size);
     const id = modelId(m.brand.name, m.system.name, z.label);
     if (id !== imp.lib?.id) this.app.applyModel(imp, id);
   }
@@ -259,6 +259,12 @@ export class ImplantEditor {
   private renderBadgeText() {
     const st = this.badgeState;
     if (!st || !this.badge || st.editing) return;
+    // a library implant: its size as the manufacturer names it (diameter × length from the file name)
+    const m = st.imp.lib ? findModel(st.imp.lib.id) : null;
+    if (m) {
+      this.badge.textContent = `${m.system.name} ${m.size.label}`;
+      return;
+    }
     this.badge.textContent =
       st.kind === 'diameter'
         ? `Ø ${st.imp.diameter.toFixed(1)} mm${isTapered(st.imp) ? ' (platform)' : ''}`
@@ -279,7 +285,10 @@ export class ImplantEditor {
     input.step = isDia ? '0.1' : '0.5';
     input.min = st.kind === 'diameter' ? '2.5' : st.kind === 'apicalDiameter' ? '1.5' : '4';
     input.max = st.kind === 'diameter' ? '9' : st.kind === 'apicalDiameter' ? String(st.imp.diameter) : String(MAX_IMPLANT_LENGTH);
-    input.value = (st.kind === 'diameter' ? st.imp.diameter : st.kind === 'apicalDiameter' ? apicalDiameterOf(st.imp) : st.imp.length).toFixed(1);
+    const model = st.imp.lib ? findModel(st.imp.lib.id) : null;
+    input.value = model
+      ? String(st.kind === 'length' ? model.size.L : model.size.d)
+      : (st.kind === 'diameter' ? st.imp.diameter : st.kind === 'apicalDiameter' ? apicalDiameterOf(st.imp) : st.imp.length).toFixed(1);
     b.textContent = st.kind === 'diameter' ? 'Ø ' : st.kind === 'apicalDiameter' ? 'Ø apex ' : 'L ';
     b.append(input, document.createTextNode(' mm'));
     b.classList.add('editing');
@@ -289,7 +298,12 @@ export class ImplantEditor {
       done = true;
       b.classList.remove('editing');
       const v = Number(input.value);
-      if (apply && input.value !== '' && Number.isFinite(v)) {
+      if (apply && input.value !== '' && Number.isFinite(v) && model) {
+        // a typed size of a library implant: the system's nearest one
+        if (st.kind === 'length') this.snapModel(st.imp, model, model.size.d, v, 'L');
+        else this.snapModel(st.imp, model, v, model.size.L, 'd');
+        this.app.implantChanged(st.imp, true);
+      } else if (apply && input.value !== '' && Number.isFinite(v)) {
         if (st.kind === 'diameter') setCoronalDiameter(st.imp, clamp(Math.round(v * 10) / 10, 2.5, 9));
         else if (st.kind === 'apicalDiameter') setApicalDiameter(st.imp, Math.round(v * 10) / 10);
         else setImplantLength(st.imp, clamp(Math.round(v * 10) / 10, 4, MAX_IMPLANT_LENGTH));
@@ -339,20 +353,22 @@ export class ImplantEditor {
       py = -py;
     }
     const rpx = imp.diameter / 2 / this.ad.scale();
+    // clear of the implant and its handles, however wide the text (library sizes are longer)
+    const gap = Math.max(40, (b.offsetWidth || 80) / 2 + 14);
     const mx = (a.x + c.x) / 2;
     const my = (a.y + c.y) / 2;
     let x: number, y: number;
     if (st.kind === 'diameter') {
       // beside the coronal half
-      x = (mx + a.x) / 2 + px * (rpx + 44);
-      y = (my + a.y) / 2 + py * (rpx + 44);
+      x = (mx + a.x) / 2 + px * (rpx + gap);
+      y = (my + a.y) / 2 + py * (rpx + gap);
     } else if (st.kind === 'apicalDiameter') {
       // beside the apical half
-      x = (mx + c.x) / 2 + px * (rpx + 44);
-      y = (my + c.y) / 2 + py * (rpx + 44);
+      x = (mx + c.x) / 2 + px * (rpx + gap);
+      y = (my + c.y) / 2 + py * (rpx + gap);
     } else {
-      x = c.x - px * (rpx + 40) - dx * 4;
-      y = c.y - py * (rpx + 40) - dy * 4;
+      x = c.x - px * (rpx + gap) - dx * 4;
+      y = c.y - py * (rpx + gap) - dy * 4;
     }
     b.style.left = `${Math.round(x)}px`;
     b.style.top = `${Math.round(y)}px`;

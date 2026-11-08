@@ -63,6 +63,11 @@ describe('implant library', () => {
     expect([z.d, z.L]).toEqual([4.5, 12]);
     // changing the length keeps the diameter, and the other way round
     expect(nearestSize(blx, 4.5, 15.5, 'L').d).toBe(4.5);
+    // from the 4 × 10: longer / shorter keeps Ø4 (sizes named in the files)
+    const z410 = blx.sizes.find((s) => s.d === 4 && s.L === 10)!;
+    expect(nearestSize(blx, 4, 11.2, 'L', z410).label).toBe('4 × 12 mm');
+    expect(nearestSize(blx, 4, 8.8, 'L', z410).label).toBe('4 × 8 mm');
+    expect(nearestSize(blx, 4.6, 10, 'd', z410).label).toBe('4.5 × 10 mm');
     expect(nearestSize(blx, 5.4, 12, 'd').L).toBe(12);
     const id = modelId('Straumann', 'BLX SLActive', z.label);
     expect(findModel(id)!.size).toBe(z);
