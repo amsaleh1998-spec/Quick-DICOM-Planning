@@ -184,6 +184,32 @@
                     <button id="wax-one" title="The tooth on the other side becomes the exact mirror image of the tooth you change (shape and position)" aria-pressed="false"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18" stroke-dasharray="2 2.2"/><rect x="3.5" y="6" width="6" height="9" rx="2.5"/><rect x="14.5" y="6" width="6" height="9" rx="2.5"/><path d="M6.5 18.5h11M15.5 17l2 1.5-2 1.5"/></svg><span>1-to-1 mirroring</span></button>
                   </div>
                 </fieldset>
+                <fieldset class="wax-box">
+                  <legend>Antagonist</legend>
+                  <div class="ant-row">
+                    <span>Upper jaw</span>
+                    <button data-cut="upper" aria-pressed="false" title="Cut the upper teeth where they reach into the antagonist whenever you move, rotate or scale them"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.4 20 17M8.2 16.6 20 7M13 12h.01"/></svg> Cut</button>
+                    <button data-cut-all="upper" title="Cut every upper tooth now where it reaches into the antagonist">Apply to all</button>
+                  </div>
+                  <div class="ant-src muted small" data-ant-src="upper"></div>
+                  <div class="ant-row">
+                    <span>Lower jaw</span>
+                    <button data-cut="lower" aria-pressed="false" title="Cut the lower teeth where they reach into the antagonist whenever you move, rotate or scale them"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.4 20 17M8.2 16.6 20 7M13 12h.01"/></svg> Cut</button>
+                    <button data-cut-all="lower" title="Cut every lower tooth now where it reaches into the antagonist">Apply to all</button>
+                  </div>
+                  <div class="ant-src muted small" data-ant-src="lower"></div>
+                  <label class="small ant-gap" title="Distance kept to the antagonist when cutting (negative: the teeth may reach into it)">Distance to the antagonist
+                    <span><input type="number" id="wax-cut-gap" min="-0.3" max="1" step="0.05" value="0" /> mm</span></label>
+                </fieldset>
+                <fieldset class="wax-box">
+                  <legend>Abrasion</legend>
+                  <div class="seg small" id="wax-abr-group">
+                    <button data-ag="anterior" title="Front teeth: incisors and canines">Anterior</button>
+                    <button data-ag="posterior" title="Back teeth: premolars and molars">Posterior</button>
+                  </div>
+                  <input type="range" id="wax-abr" min="-1" max="1" step="0.05" value="0" title="Middle: library shape · left: more pointed cusps · right: worn flat" />
+                  <div class="abr-scale small"><span>Pointed</span><span id="wax-abr-val" class="dim"></span><span>Flat</span></div>
+                </fieldset>
               </div>
               <div class="wax-page" data-page="chain">
                 <div class="wax-big" id="wax-cmode">

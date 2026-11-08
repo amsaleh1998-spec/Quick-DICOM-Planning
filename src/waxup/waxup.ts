@@ -10,6 +10,7 @@ import { Frame, Vec2, Vec3, dot, normalize } from '../math';
 import { vertexNormals } from '../meshio';
 import { Affine, applyV, compose, invert } from '../register';
 import { Jaw, ToothLibrary, ToothTemplate, contralateral, jawOrder } from './library';
+import { RELIEF, ToothGroup, abrade, groupOf, reliefScale } from './occlusion';
 
 export interface WaxTooth {
   fdi: number;
@@ -141,6 +142,15 @@ export class Waxup {
   placement: Partial<Record<Jaw, JawPlacement>> = {};
   /** templates the unsculpted teeth share */
   lib: ToothLibrary | null = null;
+  /** -1 pointed … 0 library … 1 flat, for the front teeth (13–23, 33–43) and the back teeth */
+  abrasion: Record<ToothGroup, number> = { anterior: 0, posterior: 0 };
+
+  /** Library shape of a tooth with its group's abrasion (own vertices when abraded). */
+  private libraryShape(tpl: ToothTemplate): { pos: Float32Array; geo: number } {
+    const g = groupOf(tpl.fdi);
+    const v = this.abrasion[g];
+    return v ? { pos: abrade(tpl.pos, tpl.jaw, reliefScale(v), RELIEF[g]), geo: newGeo() } : { pos: tpl.pos, geo: 0 };
+  }
 
   tooth(fdi: number | null): WaxTooth | null {
     return this.teeth.find((t) => t.fdi === fdi) ?? null;
@@ -164,7 +174,8 @@ export class Waxup {
     const tpl = this.template(fdi);
     const pl = this.placement[tpl.jaw];
     if (!pl || !this.lib) throw new Error('Set up the arch first');
-    const t: WaxTooth = { fdi, jaw: tpl.jaw, pos: tpl.pos, idx: tpl.idx, T: archPose(this.lib, pl, fdi), geo: 0 };
+    const sh = this.libraryShape(tpl);
+    const t: WaxTooth = { fdi, jaw: tpl.jaw, pos: sh.pos, idx: tpl.idx, T: archPose(this.lib, pl, fdi), geo: sh.geo };
     this.teeth.push(t);
     return t;
   }
@@ -179,9 +190,10 @@ export class Waxup {
     const pl = t && this.placement[t.jaw];
     if (!t || !pl || !this.lib) return;
     const tpl = this.template(fdi);
-    t.pos = tpl.pos;
+    const sh = this.libraryShape(tpl);
+    t.pos = sh.pos;
     t.idx = tpl.idx;
-    t.geo = 0;
+    t.geo = sh.geo;
     t.T = archPose(this.lib, pl, fdi);
   }
 

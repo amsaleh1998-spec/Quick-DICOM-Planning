@@ -2328,3 +2328,43 @@ a.btn-link {
 .wax-undo button {
   flex: 1;
 }
+.ant-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 4px;
+}
+.ant-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.ant-row button.active {
+  color: #ffae73;
+  background: rgba(255, 155, 90, 0.1);
+  border-color: rgba(255, 155, 90, 0.45);
+}
+.ant-src {
+  margin: -2px 0 2px;
+}
+.wax-box label.ant-gap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 2px;
+}
+.ant-gap input {
+  width: 64px;
+}
+.abr-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+}
+#wax-abr-group {
+  align-self: flex-start;
+}

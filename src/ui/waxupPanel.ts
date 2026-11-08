@@ -4,8 +4,9 @@
 // the selected tooth and the display.
 
 import { jawOrder, type Jaw } from '../waxup/library';
-import { Waxup } from '../waxup/waxup';
-import { addTeeth, refitJaw, removeTooth, type ChainMode, type WaxAction, type WaxAdvTool, type WaxLimit, type WaxTab } from '../waxup/waxApp';
+import { Waxup, newGeo, type WaxTooth } from '../waxup/waxup';
+import { addTeeth, antagonistsOf, buildCutter, refitJaw, removeTooth, type ChainMode, type WaxAction, type WaxAdvTool, type WaxLimit, type WaxTab } from '../waxup/waxApp';
+import { RELIEF, abrade, cutTooth, groupOf, reliefScale, type ToothGroup } from '../waxup/occlusion';
 import { chainsOf, resetPositions, settleChain, toothPin } from '../waxup/chain';
 import { $, app, fromHex, hideLoading, setStatus, showLoading, toHex } from './shell';
 import { undoRedo } from './undoUi';
@@ -120,6 +121,7 @@ resetMenu.addEventListener('click', (e) => {
   if (how === 'cancel' || !m.teeth.length) return;
   app.commitHistory();
   if (how === 'global') {
+    m.abrasion = { anterior: 0, posterior: 0 };
     for (const t of m.teeth) m.reset(t.fdi);
     resetPositions(m, () => true, wax.scalable);
   } else resetPositions(m, (t) => how === 'all' || !wax.pins.has(toothPin(t.fdi)), wax.scalable);
@@ -134,6 +136,80 @@ document.addEventListener('pointerdown', (e) => {
 });
 $('wax-undo').onclick = () => undoRedo(false);
 $('wax-redo').onclick = () => undoRedo(true);
+
+// ---- antagonist cutting ---------------------------------------------------------------------
+
+const cutButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-cut]'));
+cutButtons.forEach(
+  (b) =>
+    (b.onclick = () => {
+      const jaw = b.dataset.cut as Jaw;
+      wax.cut[jaw] = !wax.cut[jaw];
+      setStatus(
+        wax.cut[jaw]
+          ? `The ${jaw} teeth are cut where they reach into the antagonist whenever you move, rotate or scale them (Apply to all: every ${jaw} tooth now).`
+          : `Antagonist cutting off for the ${jaw} teeth.`,
+      );
+      app.changed();
+    }),
+);
+const cutAllButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-cut-all]'));
+cutAllButtons.forEach(
+  (b) =>
+    (b.onclick = () => {
+      const jaw = b.dataset.cutAll as Jaw;
+      const hf = buildCutter(app, jaw);
+      if (!hf) {
+        setStatus(`No antagonist for the ${jaw} teeth – place the scan of the opposing jaw or set up its teeth.`, true);
+        return;
+      }
+      app.commitHistory();
+      let n = 0;
+      for (const t of wax.model.teeth) {
+        if (t.jaw !== jaw) continue;
+        const cut = cutTooth(hf, t.T, t.pos, wax.cutGap);
+        if (!cut) continue;
+        t.pos = cut;
+        t.geo = newGeo();
+        t.ver = (t.ver ?? 0) + 1;
+        n++;
+      }
+      setStatus(n ? `${n} ${jaw} teeth cut where they reached into the antagonist – Ctrl+Z undoes it.` : `No ${jaw} tooth reaches into the antagonist.`);
+      app.changed();
+    }),
+);
+const cutGap = $<HTMLInputElement>('wax-cut-gap');
+cutGap.onchange = () => {
+  const v = Number(cutGap.value);
+  if (Number.isFinite(v)) wax.cutGap = Math.min(1, Math.max(-0.3, v));
+  app.changed();
+};
+
+// ---- abrasion: the slider reshapes the front or back teeth from their shape when it was grabbed ----
+
+const abrGroup = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-ag]'));
+abrGroup.forEach((b) => (b.onclick = () => ((wax.abrasionGroup = b.dataset.ag as ToothGroup), app.changed())));
+const abr = $<HTMLInputElement>('wax-abr');
+let abrStart: { group: ToothGroup; v0: number; base: Map<WaxTooth, Float32Array> } | null = null;
+abr.addEventListener('input', () => {
+  const g = wax.abrasionGroup;
+  const m = wax.model;
+  if (!abrStart || abrStart.group !== g) abrStart = { group: g, v0: m.abrasion[g], base: new Map(m.teeth.filter((t) => groupOf(t.fdi) === g).map((t) => [t, t.pos])) };
+  const v = Number(abr.value);
+  m.abrasion[g] = v;
+  const k0 = reliefScale(abrStart.v0);
+  for (const [t, base] of abrStart.base) {
+    if (!m.teeth.includes(t)) continue;
+    t.pos = abrade(base, t.jaw, reliefScale(v) / k0, RELIEF[g] * k0);
+    t.geo = newGeo();
+    t.ver = (t.ver ?? 0) + 1;
+  }
+  app.changed();
+});
+abr.addEventListener('change', () => {
+  abrStart = null;
+  app.commitHistory();
+});
 
 const radius = $<HTMLInputElement>('wax-radius');
 const strength = $<HTMLInputElement>('wax-strength');
@@ -238,6 +314,31 @@ export function refreshWaxupPanel() {
   $('wax-strength-val').textContent = `${Math.round(wax.brushStrength * 100)} %`;
   if (document.activeElement !== radius) radius.value = String(wax.brushRadius);
   if (document.activeElement !== strength) strength.value = String(wax.brushStrength);
+  if (wax.tab === 'advanced') {
+    for (const jaw of ['upper', 'lower'] as Jaw[]) {
+      const has = m.teeth.some((t) => t.jaw === jaw);
+      const ant = has ? antagonistsOf(app, jaw) : { scans: [], teeth: [] };
+      const other = jaw === 'upper' ? 'lower' : 'upper';
+      const names = [...ant.scans.map((sc) => sc.name), ...(ant.teeth.length ? [`${other} waxup teeth`] : [])];
+      const ok = names.length > 0;
+      const b = cutButtons.find((x) => x.dataset.cut === jaw)!;
+      b.disabled = !ok;
+      b.classList.toggle('active', ok && wax.cut[jaw]);
+      b.setAttribute('aria-pressed', String(ok && wax.cut[jaw]));
+      cutAllButtons.find((x) => x.dataset.cutAll === jaw)!.disabled = !ok;
+      $(`panel-waxup`).querySelector<HTMLElement>(`[data-ant-src="${jaw}"]`)!.textContent = !has
+        ? `No ${jaw} teeth yet`
+        : ok
+          ? `Against: ${names.join(', ')}`
+          : `No antagonist – place or show the scan of the ${other} jaw, or set up or show its teeth`;
+    }
+    if (document.activeElement !== cutGap) cutGap.value = String(wax.cutGap);
+    abrGroup.forEach((b) => b.classList.toggle('active', b.dataset.ag === wax.abrasionGroup));
+    const av = m.abrasion[wax.abrasionGroup];
+    if (document.activeElement !== abr) abr.value = String(av);
+    $('wax-abr-val').textContent = Math.abs(av) < 1e-9 ? 'library' : `${av < 0 ? 'pointed' : 'flat'} ${Math.round(Math.abs(av) * 100)} %`;
+    abr.disabled = !m.teeth.length;
+  }
   const h = help();
   const helpEl = $('wax-help');
   const hk = JSON.stringify(h);
