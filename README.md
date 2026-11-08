@@ -23,6 +23,13 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   or the demo then asks *Save the plan first?* (*Save… / Don't save / Cancel*); closing the window or tab makes the
   browser ask whether to leave (browsers only allow their own Leave / Cancel question there – Cancel, then Ctrl+S).
   The demo volume never asks.
+- **Objects** (right): every surface of the scene – bone, segments, intraoral scans, waxup, implants, abutments,
+  prosthetic axes, nerves – with an eye to show / hide it (and one per group); a click on a name selects it. The
+  list can be hidden to a thin strip (›) and made wider or narrower by dragging its left edge (double-click resets).
+- **Lower threshold** of the 3D surface (also used for new segment clicks): the bar along the bottom of the 3D view,
+  the Segments panel, or the 3D header menu – all in step.
+- **Implants, abutments and prosthetic axes are always visible in 3D**, drawn over any bone, segment, scan or waxup in
+  front of them.
 - **View settings in the views**: the 3D view's header has the rendering mode and thresholds (*Surface 796+ ▾*) and the
   view direction (*View ▾*); the panoramic's header has *Slab / Slice* and the thickness, slice position and
   cross-section spacing (*12 mm · sections 2 mm ▾*).

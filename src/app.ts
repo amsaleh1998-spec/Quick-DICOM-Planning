@@ -280,6 +280,7 @@ export class App {
     this.nerves = [];
     this.scans = [];
     this.wax.clear();
+    this.showUnsegmented = true;
     this.activeSegId = null;
     this.activeNerveId = null;
     this.segTool = null;

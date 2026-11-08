@@ -108,12 +108,13 @@ export type Cut = PlaneCut | PanoCut;
 /** A cut before it has been given an id. */
 export type NewCut = Omit<PlaneCut, 'id'> | Omit<PanoCut, 'id'>;
 
-/** the jaws are slightly see-through by default, so teeth roots, canals and implants show */
+/** automatic jaws are slightly see-through by default, so teeth roots, canals and implants show */
 export const JAW_OPACITY = 0.7;
 
+/** manual segments start opaque */
 export const SEGMENT_PRESETS: { name: string; color: RGB; opacity?: number }[] = [
-  { name: 'Maxilla', color: [236, 178, 112], opacity: JAW_OPACITY },
-  { name: 'Mandible', color: [104, 178, 240], opacity: JAW_OPACITY },
+  { name: 'Maxilla', color: [236, 178, 112] },
+  { name: 'Mandible', color: [104, 178, 240] },
   { name: 'Tooth', color: [248, 244, 222] },
   { name: 'Implant', color: [178, 186, 202] },
   { name: 'Segment', color: [140, 220, 150] },

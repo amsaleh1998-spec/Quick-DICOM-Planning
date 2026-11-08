@@ -204,6 +204,10 @@ void main() {
       if (h.x < tGuide) { tGuide = h.x; nGuide = h.yzw; cGuide = C.rgb; }
     } else if (h.x < tImp) { tImp = h.x; nImp = h.yzw; cImp = C.rgb; }
   }
+  // implants / abutments on their own (tImp may become a nerve below)
+  float tCyl = tImp;
+  vec3 nCyl = nImp;
+  vec3 cCyl = cImp;
   // nerve canals: opaque in front, shown through the bone when hidden
   float tNerve = 1e20;
   vec3 nNerve = vec3(0.0);
@@ -282,7 +286,7 @@ void main() {
                 }
               }
             }
-          } else if (v >= uLo && v <= uHi) { hit = true; break; }
+          } else if (uShowUnseg == 1 && v >= uLo && v <= uHi) { hit = true; break; }
           first = false;
           t += uStep;
         }
@@ -343,7 +347,7 @@ void main() {
             tint = si.rgb;
             lo = segAi(l) ? uLo : segLo(l);
           }
-        }
+        } else if (uShowUnseg == 0) { t += uStep; continue; }
         float a = clamp((v - lo) / max(1.0, uHi - lo), 0.0, 1.0);
         if (a > 0.0 && (tint.x >= 0.0 || v <= uHi * 1.0001 + 1.0)) {
           vec3 g = grad(p);
@@ -366,7 +370,7 @@ void main() {
         if (uSegOn == 1) {
           uint l = labAt(p);
           if (l == 0u ? uShowUnseg == 0 : segInfo(l).w < 0.5) continue;
-        }
+        } else if (uShowUnseg == 0) continue;
         m = max(m, vol(p));
       }
       float g = clamp((m - (uWC - uWW * 0.5)) / uWW, 0.0, 1.0);
@@ -380,17 +384,16 @@ void main() {
     if (tImp < 1e19) tail = shade(cImp, nImp, rd, L, 0.45);
     col += rem * tail;
   }
-  // prosthetic axis guides: translucent, in front of whatever they cover
-  if (tGuide < min(tImp, tSurf)) col = mix(col, shade(cGuide, nGuide, rd, L, 0.3), 0.42);
   // nerve hidden behind opaque bone: still visible as a ghost
   if (tNerve < 1e19 && tNerve > tOpaque) col = mix(col, shade(uNerveCol, nNerve, rd, L, 0.3), 0.45);
+  float tS = 1e20; // nearest scan / waxup surface
   if (uScanOn == 1) {
     vec2 uv = gl_FragCoord.xy / uRes;
     vec4 sc = texture(uScanCol, uv);
     if (sc.a > 0.0) {
       float zn = texture(uScanDepth, uv).r * 2.0 - 1.0;
       float ze = 2.0 * uNear * uFar / (uFar + uNear - zn * (uFar - uNear));
-      float tS = ze / dot(rd, uFwd);
+      tS = ze / dot(rd, uFwd);
       // a scan lying on the bone/teeth surface wins the tie (0.2 mm)
       if (tS < min(tImp, tSurf + 0.2)) col = mix(col, sc.rgb, sc.a);
       else if (tS < min(tImp, tOpaque + 0.2)) {
@@ -401,6 +404,13 @@ void main() {
       }
     }
   }
+  // implants and abutments are always visible: drawn over any bone, segment, scan or waxup in front
+  if (tCyl < 1e19) {
+    bool covered = tCyl > tSurf + 0.05 || tS < tCyl - 0.05 || (uMode != 0 && acc.a > 0.3);
+    if (covered) col = mix(col, shade(cCyl, nCyl, rd, L, 0.45), 0.8);
+  }
+  // prosthetic axes: always visible, over everything
+  if (tGuide < 1e19) col = mix(col, shade(cGuide, nGuide, rd, L, 0.3), 0.42);
   outColor = vec4(col, 1.0);
 }`;
 

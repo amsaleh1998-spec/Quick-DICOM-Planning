@@ -772,7 +772,8 @@ export class PanoView extends View {
 
   override render() {
     for (const b of Array.from(this.modeSeg.children) as HTMLButtonElement[]) b.classList.toggle('active', b.dataset.mode === this.app.panoMode);
-    this.modeSeg.style.display = this.app.curve ? '' : 'none';
+    // the desktop layout has the switch in the view's header (view tools)
+    this.modeSeg.style.display = this.app.curve && !this.el.querySelector('.view-tools.in-view') ? '' : 'none';
     super.render();
   }
 

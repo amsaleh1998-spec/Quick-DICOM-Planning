@@ -88,7 +88,6 @@ test('every kind of change is undone and redone, one step each', async ({ page }
 
   // segment: new, opacity, click to grow (rebuilds on undo)
   await page.click('[data-panel="segments"]');
-  await page.click('#seg-manual summary');
   await page.click('[data-seg-preset="1"]');
   await page.waitForTimeout(500);
   await page.$eval('#seg-opacity', (e: HTMLInputElement) => ((e.value = '0.3'), e.dispatchEvent(new Event('input'))));

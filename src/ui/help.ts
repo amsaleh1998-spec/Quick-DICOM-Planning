@@ -61,6 +61,8 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['Alt / Shift / middle drag', 'Pan'],
       ['Middle-click', 'Rotation centre at that surface point'],
       ['Double-click or ⟲', 'Reset the view'],
+      ['Bar at the bottom', 'Lower threshold of the surface (also for new segment clicks)'],
+      ['Objects (right)', 'Show / hide every surface; drag its left edge to resize, › to hide it'],
       ['Drag an implant', 'Move it (C / A handles rotate)'],
     ],
   },
