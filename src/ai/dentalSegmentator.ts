@@ -6,7 +6,7 @@
 
 import type { App } from '../app';
 import { Vec3, fromFrame } from '../math';
-import { DS_CREDIT, DS_MODEL, contextBox, modelAxes, modelGrid, patchCount } from './dsPlan';
+import { DS_CREDIT, DS_MODEL, contextBox, modelAxes, modelGrid, occlusalSplit, patchCount } from './dsPlan';
 import { nonzeroBox } from './dsEngine';
 import { dedicatedGpuHelp, findGpu, gpuBuffersTooSmall, inEdge } from './gpu';
 import type { StartMsg, WorkerMsg } from './dsWorker';
@@ -15,15 +15,60 @@ export interface AiHooks {
   setStatus(text: string, error?: boolean): void;
 }
 
+export type AiJaw = 'both' | 'upper' | 'lower';
+/** DentalSegmentator classes of each jaw: maxilla & upper teeth / mandible, lower teeth, canals */
+export const JAW_CLASSES: Record<'upper' | 'lower', number[]> = { upper: [1, 3], lower: [2, 4, 5] };
+/** how far a single jaw's region reaches past the occlusal plane (its crowns, cusps interlocking) */
+const JAW_OVERLAP = 6;
+
+/** The world axis closest to the patient's superior direction, and its sign. */
+function superiorAxis(app: App): { a: number; s: 1 | -1 } {
+  const up = app.frame[2];
+  let a = 0;
+  for (let k = 1; k < 3; k++) if (Math.abs(up[k]) > Math.abs(up[a])) a = k;
+  return { a, s: up[a] >= 0 ? 1 : -1 };
+}
+
+const splitCache = new WeakMap<object, Map<string, number>>();
 /**
- * World boxes (CT voxel centres) for a run: `out` = where labels are written (whole scan or crop
- * box), `lo` / `hi` = what the network sees (the crop box with real context around it).
+ * World boxes (CT voxel centres) for a run: `out` = where labels are written (whole scan, crop
+ * box, and for one jaw its side of the occlusal plane plus a small overlap), `lo` / `hi` = what the
+ * network sees (that with real context around it).
  */
-function regionBox(app: App, region: 'all' | 'crop'): { lo: Vec3; hi: Vec3; out: { lo: Vec3; hi: Vec3 } | null } {
+function regionBox(app: App, region: 'all' | 'crop', jaw: AiJaw = 'both'): { lo: Vec3; hi: Vec3; out: { lo: Vec3; hi: Vec3 } | null } {
   const vol = app.vol!;
   const scan = { lo: [0, 0, 0] as Vec3, hi: [(vol.nx - 1) * vol.spacing[0], (vol.ny - 1) * vol.spacing[1], (vol.nz - 1) * vol.spacing[2]] as Vec3 };
-  if (region === 'all') return { ...scan, out: null };
-  const out = cropBox(app);
+  if (region === 'all' && jaw === 'both') return { ...scan, out: null };
+  const base = region === 'crop' ? cropBox(app) : scan;
+  const out = { lo: [...base.lo] as Vec3, hi: [...base.hi] as Vec3 };
+  if (jaw !== 'both') {
+    const { a, s } = superiorAxis(app);
+    let c = splitCache.get(vol);
+    if (!c) splitCache.set(vol, (c = new Map()));
+    const key = JSON.stringify([region, base, a]);
+    let level = c.get(key);
+    if (level === undefined) {
+      level = occlusalSplit(vol.data, vol.dims, vol.spacing, base.lo, base.hi, a, vol.boneThreshold());
+      c.set(key, level);
+    }
+    // the maxilla lies on the superior side
+    const towardsPlus = (jaw === 'upper') === (s > 0);
+    if (towardsPlus) out.lo[a] = Math.max(out.lo[a], level - JAW_OVERLAP);
+    else out.hi[a] = Math.min(out.hi[a], level + JAW_OVERLAP);
+    const box = contextBox(out.lo, out.hi, scan.lo, scan.hi, modelAxes(vol.info.patientAffine));
+    // across the occlusal plane the overlap is context enough: no extra margin there (fewer tiles),
+    // as long as the region stays one tile deep
+    const k = modelAxes(vol.info.patientAffine).ax.indexOf(a);
+    const tile = DS_MODEL.patch[k] * DS_MODEL.spacing[k] - 2 * vol.spacing[a];
+    if (towardsPlus) box.lo[a] = Math.max(box.lo[a], Math.min(out.lo[a], box.hi[a] - tile));
+    else box.hi[a] = Math.min(box.hi[a], Math.max(out.hi[a], box.lo[a] + tile));
+    // a jaw that fits in one tile's height: exactly one row of tiles (the context beyond it trimmed)
+    if (out.hi[a] - out.lo[a] <= tile && box.hi[a] - box.lo[a] > tile) {
+      if (towardsPlus) box.hi[a] = Math.max(out.hi[a], box.lo[a] + tile);
+      else box.lo[a] = Math.min(out.lo[a], box.hi[a] - tile);
+    }
+    return { ...box, out };
+  }
   return { ...contextBox(out.lo, out.hi, scan.lo, scan.hi, modelAxes(vol.info.patientAffine)), out };
 }
 
@@ -50,9 +95,9 @@ function cropBox(app: App): { lo: Vec3; hi: Vec3 } {
 }
 
 /** Tiles to compute for a region at the standard (0.5) and fast (1) step. */
-function tileCounts(app: App, region: 'all' | 'crop'): [number, number] {
+function tileCounts(app: App, region: 'all' | 'crop', jaw: AiJaw = 'both'): [number, number] {
   const vol = app.vol!;
-  const r = regionBox(app, region);
+  const r = regionBox(app, region, jaw);
   const b = nonzeroBox(vol.data, vol.dims, vol.spacing, r.lo, r.hi);
   const axes = modelAxes(vol.info.patientAffine);
   return [patchCount(modelGrid(b.lo, b.hi, vol.spacing, axes, 0.5)), patchCount(modelGrid(b.lo, b.hi, vol.spacing, axes, 1))];
@@ -79,7 +124,13 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
     return;
   }
   const cropped = !app.cropIsFull();
-  const counts = { all: tileCounts(app, 'all'), crop: cropped ? tileCounts(app, 'crop') : [0, 0] };
+  const countCache = new Map<string, [number, number]>();
+  const countsFor = (region: 'all' | 'crop', jaw: AiJaw) => {
+    const k = `${region}|${jaw}`;
+    let c = countCache.get(k);
+    if (!c) countCache.set(k, (c = tileCounts(app, region, jaw)));
+    return c;
+  };
   const hasAi = app.seg.segments.some((g) => g.ai);
   modal?.remove();
   const m = document.createElement('div');
@@ -98,12 +149,18 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
         <h4>Region</h4>
         <label class="check"><input type="radio" name="ai-region" value="all" ${cropped ? '' : 'checked'} /> Whole scan</label>
         <label class="check ${cropped ? '' : 'disabled'}"><input type="radio" name="ai-region" value="crop" ${cropped ? 'checked' : 'disabled'} /> Inside the crop box ${cropped ? '(faster)' : '(no crop box set)'}</label>
+        <h4>Jaws</h4>
+        <label class="check"><input type="radio" name="ai-jaw" value="both" checked /> Both jaws</label>
+        <label class="check"><input type="radio" name="ai-jaw" value="upper" /> Maxilla only – maxilla &amp; upper teeth</label>
+        <label class="check"><input type="radio" name="ai-jaw" value="lower" /> Mandible only – mandible, lower teeth &amp; canals</label>
+        <p class="muted small">One jaw: the scan is split at the occlusal plane (found automatically) and only that side is computed – faster.
+          ${hasAi ? 'The other jaw’s automatic segments are kept.' : 'The other jaw can be added later.'}</p>
         <h4>Quality</h4>
         <label class="check"><input type="radio" name="ai-step" value="0.5" checked /> Standard – overlapping tiles, as the original model</label>
         <label class="check"><input type="radio" name="ai-step" value="1" /> Fast – about 4× quicker, slightly less accurate at the tile borders</label>
         <p class="muted small" id="ai-est"></p>
         <div class="ai-gpu small" id="ai-gpu">Checking the graphics card…</div>
-        ${hasAi ? '<p class="muted small">The automatic segments from the previous run are replaced.</p>' : ''}
+        ${hasAi ? '<p class="muted small">The automatic segments from the previous run are replaced (for one jaw: only that jaw’s).</p>' : ''}
         <p class="muted small">The first run downloads the model (62 MB), later runs use the saved copy. A graphics card (WebGPU, Chrome / Edge) makes it many times faster than the CPU.</p>
       </div>
       <div class="ai-run hidden">
@@ -135,10 +192,11 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
   const opt = () => ({
     region: (m.querySelector<HTMLInputElement>('input[name="ai-region"]:checked')?.value ?? 'all') as 'all' | 'crop',
     step: Number(m.querySelector<HTMLInputElement>('input[name="ai-step"]:checked')?.value ?? 0.5),
+    jaw: (m.querySelector<HTMLInputElement>('input[name="ai-jaw"]:checked')?.value ?? 'both') as AiJaw,
   });
   const updateEst = () => {
     const o = opt();
-    const n = counts[o.region][o.step === 1 ? 1 : 0];
+    const n = countsFor(o.region, o.jaw)[o.step === 1 ? 1 : 0];
     $('#ai-est').textContent = `${n} tile${n === 1 ? '' : 's'} of ${TILE_MM} mm to compute – roughly ${fmtTime(n * 1)}–${fmtTime(n * 5)} with a graphics card, ${fmtTime(
       n * 10,
     )}–${fmtTime(n * 40)} on the CPU.`;
@@ -195,7 +253,7 @@ async function showGpu(el: HTMLDivElement) {
   }
 }
 
-function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' | 'crop'; step: number }, onEnd: () => void) {
+function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' | 'crop'; step: number; jaw: AiJaw }, onEnd: () => void) {
   const vol = app.vol!;
   const seg = app.seg;
   const $ = <T extends HTMLElement>(sel: string) => m.querySelector<T>(sel)!;
@@ -207,7 +265,7 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' |
   const phase = $('#ai-phase'), fill = $('#ai-bar-fill'), detail = $('#ai-detail'), notes = $('#ai-notes'), foot = $('#ai-foot');
 
   // only the region (plus one voxel for interpolation) goes to the worker
-  const r = regionBox(app, o.region);
+  const r = regionBox(app, o.region, o.jaw);
   const i0 = [0, 1, 2].map((a) => Math.max(0, Math.floor(r.lo[a] / vol.spacing[a]) - 1));
   const i1 = [0, 1, 2].map((a) => Math.min(vol.dims[a] - 1, Math.ceil(r.hi[a] / vol.spacing[a]) + 1));
   const full = [0, 1, 2].map((a) => i1[a] - i0[a] + 1);
@@ -321,7 +379,7 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' |
         finish('The scan changed while the automatic segmentation was running – please run it again.', true);
         return;
       }
-      const added = app.applyAiSegmentation({ cls: d.cls, margin: d.margin, counts: d.counts }, 'DentalSegmentator');
+      const added = app.applyAiSegmentation({ cls: d.cls, margin: d.margin, counts: d.counts }, 'DentalSegmentator', o.jaw === 'both' ? null : JAW_CLASSES[o.jaw]);
       const secs = (performance.now() - t0) / 1000;
       finish(
         added.length

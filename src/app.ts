@@ -1260,20 +1260,49 @@ export class App {
    * Result of the automatic segmentation (classes + margins on the current label grid): replaces
    * earlier automatic segments and adds one segment per structure found.
    */
-  applyAiSegmentation(res: { cls: Uint8Array; margin: Uint8Array; counts: number[] }, model: string): Segment[] {
+  /**
+   * Show an automatic segmentation. `only`: the classes computed (one jaw) – the others keep what an
+   * earlier run found; null = the whole result replaces the earlier one.
+   */
+  applyAiSegmentation(res: { cls: Uint8Array; margin: Uint8Array; counts: number[] }, model: string, only: number[] | null = null): Segment[] {
     const seg = this.seg;
-    for (const s of seg.segments.filter((g) => g.ai)) seg.removeSegment(s.id);
-    seg.setAi({ model, created: new Date().toISOString(), nx: seg.nx, ny: seg.ny, nz: seg.nz, gs: [...seg.gs], cls: res.cls, margin: res.margin, toWorld: null });
+    let { cls, margin, counts } = res;
+    const old = only ? seg.aiLabels() : null;
+    if (only) {
+      // this jaw from the new run, the other jaw from the earlier one
+      const mine = new Uint8Array(256);
+      for (const c of only) mine[c] = 1;
+      cls = new Uint8Array(res.cls.length);
+      margin = new Uint8Array(res.cls.length);
+      counts = new Array(256).fill(0);
+      for (let i = 0; i < cls.length; i++) {
+        const n = res.cls[i];
+        const o = old ? old.cls[i] : 0;
+        if (mine[n]) {
+          cls[i] = n;
+          margin[i] = res.margin[i];
+        } else if (o && !mine[o]) {
+          cls[i] = o;
+          margin[i] = old!.margin[i];
+        } else margin[i] = res.margin[i];
+        counts[cls[i]]++;
+      }
+    }
+    const keep = (g: Segment) => !!only && !!g.ai && !only.includes(g.ai.cls);
+    for (const s of seg.segments.filter((g) => g.ai && !keep(g))) seg.removeSegment(s.id);
+    seg.setAi({ model, created: new Date().toISOString(), nx: seg.nx, ny: seg.ny, nz: seg.nz, gs: [...seg.gs], cls, margin, toWorld: null });
     const added: Segment[] = [];
     for (const l of DS_LABELS) {
-      if ((res.counts[l.cls] ?? 0) < 20) continue; // nothing (or only noise) found
+      if (only && !only.includes(l.cls)) continue;
+      if (seg.segments.some((g) => g.ai?.cls === l.cls)) continue;
+      if ((counts[l.cls] ?? 0) < 20) continue; // nothing (or only noise) found
       const g = seg.addSegment(l.name, l.color, l.opacity);
       if (!g) break;
       g.color = [...l.color];
       g.ai = { cls: l.cls, model };
       added.push(g);
     }
-    if (!added.length) seg.setAi(null);
+    if (!seg.segments.some((g) => g.ai)) seg.setAi(null);
     // the AI segments cover the jaws: hide the remaining (unsegmented) bone in 3D
     else this.showUnsegmented = false;
     this.activeSegId = null;

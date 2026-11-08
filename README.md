@@ -231,6 +231,11 @@ runs work offline.
 
 - **Region**: the whole scan or the crop box (faster; the network still sees 10 mm of context around the box and
   writes labels only inside it).
+- **Jaws**: both, or only the *maxilla* (maxilla & upper teeth) or only the *mandible* (mandible, lower teeth and
+  canals). For one jaw the scan is split at the occlusal plane – found automatically from the enamel of the crowns,
+  or from the gap between the ridges without teeth – and only that side (plus 6 mm past the plane) is computed: on a
+  usual field of view about a third of the tiles. The other jaw's automatic segments from an earlier run are kept,
+  so the jaws can be segmented one after the other.
 - **Quality**: *Standard* uses overlapping tiles exactly like nnU-Net (tile step 0.5); *Fast* uses non-overlapping
   tiles (about 4× quicker; on a test CBCT the result agreed with Standard at Dice 0.94–0.98).
 - The run happens in a background worker with progress, time estimate and *Cancel*; *Run in background* lets you keep
