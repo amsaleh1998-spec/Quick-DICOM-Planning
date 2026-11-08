@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseLibrary, unpackLibrary } from '../../src/waxup/library';
 import { JawPlacement, Waxup, toothWorld } from '../../src/waxup/waxup';
-import { HeightField, abrade, cutTooth, jawFrame, reliefScale } from '../../src/waxup/occlusion';
+import { HeightField, abrade, adaptTooth, cutTooth, jawFrame, reliefScale } from '../../src/waxup/occlusion';
 import { IDENTITY } from '../../src/register';
 import type { Frame, Vec2 } from '../../src/math';
 
@@ -76,6 +76,49 @@ describe('antagonist cutting', () => {
     const high = plane(45);
     far.add(high.pos, high.idx);
     expect(cutTooth(far, w.tooth(36)!.T, lib.teeth.get(36)!.pos, 0)).toBeNull();
+  });
+});
+
+describe('adapting to the antagonist', () => {
+  const field = (w: Waxup, z: number) => {
+    const hf = new HeightField(jawFrame(w.placement.upper!), true, -100, -100, 100, 100, 20, 60);
+    const p = plane(z);
+    hf.add(p.pos, p.idx);
+    return hf;
+  };
+  it('draws the closest cusps onto an antagonist below, leaving the cervical part alone', () => {
+    const w = waxup();
+    const t = w.add(16);
+    const before = zs(toothWorld(t).pos);
+    const lowest = Math.min(...before);
+    const hf = field(w, lowest - 0.8);
+    const out = adaptTooth(hf, t.T, t.pos, t.idx, 'upper', 0)!;
+    expect(out).not.toBeNull();
+    t.pos = out;
+    t.ver = 1;
+    const after = zs(toothWorld(t).pos);
+    // contact: the lowest point reaches the antagonist, nothing goes through it
+    expect(Math.min(...after)).toBeCloseTo(lowest - 0.8, 1);
+    expect(Math.min(...after)).toBeGreaterThan(lowest - 0.8 - 1e-3);
+    // only the occlusal part changed
+    after.forEach((z, i) => {
+      if (before[i] > lowest + 3.5) expect(z).toBeCloseTo(before[i], 4);
+    });
+    // a contact area, not the whole occlusal surface pulled down
+    const touching = after.filter((z) => z < lowest - 0.75).length;
+    expect(touching).toBeGreaterThan(3);
+    expect(touching).toBeLessThan(after.length * 0.25);
+  });
+
+  it('leaves a tooth far from the antagonist alone, and pushes one that reaches into it out', () => {
+    const w = waxup();
+    const t = w.add(16);
+    const lowest = Math.min(...zs(toothWorld(t).pos));
+    expect(adaptTooth(field(w, lowest - 3), t.T, t.pos, t.idx, 'upper', 0)).toBeNull();
+    const out = adaptTooth(field(w, lowest + 0.5), t.T, t.pos, t.idx, 'upper', 0)!;
+    t.pos = out;
+    t.ver = 1;
+    expect(Math.min(...zs(toothWorld(t).pos))).toBeGreaterThan(lowest + 0.5 - 1e-3);
   });
 });
 

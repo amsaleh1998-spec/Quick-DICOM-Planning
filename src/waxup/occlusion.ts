@@ -13,6 +13,7 @@ import { Vec3, add, dot, normalize, scale, sub } from '../math';
 import { Affine, applyV, invert, rotV } from '../register';
 import type { Jaw } from './library';
 import type { JawPlacement } from './waxup';
+import { adjacency } from './sculpt';
 
 /** A jaw's frame in the world (follows whole-jaw moves): ax patient left, ay posterior, az superior. */
 export interface JawFrame {
@@ -139,6 +140,81 @@ export function cutTooth(hf: HeightField, T: Affine, base: Float32Array, gap: nu
     out[i + 2] += dl[2] * d;
   }
   return out;
+}
+
+/**
+ * Adapt a tooth to the antagonist (shape modification): what reaches into it is pushed back (as
+ * when cutting), and the occlusal surface where it comes closest – the cusps facing the antagonist
+ * – is drawn onto it, so the tooth gets contact areas there. Only the occlusal relief (its top 3 mm)
+ * changes, smoothly; a tooth more than `reach` mm away is only cut. Returns the new vertices, or
+ * null when nothing changes.
+ */
+export function adaptTooth(hf: HeightField, T: Affine, base: Float32Array, idx: Uint32Array, jaw: Jaw, gap: number, reach = 1.5): Float32Array | null {
+  const f = hf.f;
+  const n = base.length / 3;
+  const dl = rotV(invert(T), f.az);
+  // clearance to the antagonist along the vertical (negative: reaching into it)
+  const q = new Float32Array(n).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
+    const wx = T[0] * x + T[1] * y + T[2] * z + T[3] - f.O[0];
+    const wy = T[4] * x + T[5] * y + T[6] * z + T[7] - f.O[1];
+    const wz = T[8] * x + T[9] * y + T[10] * z + T[11] - f.O[2];
+    const c = wx * f.az[0] + wy * f.az[1] + wz * f.az[2];
+    const H = hf.at(wx * f.ax[0] + wy * f.ax[1] + wz * f.ax[2], wx * f.ay[0] + wy * f.ay[1] + wz * f.ay[2]);
+    if (H === H) q[i] = hf.top ? c - (H + gap) : H - gap - c;
+  }
+  // occlusal relief: weight 1 in the top 1.5 mm of the tooth, fading out by 3 mm
+  const s = jaw === 'upper' ? -1 : 1;
+  let top = -Infinity;
+  for (let i = 0; i < n; i++) top = Math.max(top, s * base[i * 3 + 2]);
+  const occl = (i: number) => {
+    const h = top - s * base[i * 3 + 2];
+    if (h <= 1.5) return 1;
+    if (h >= 3) return 0;
+    const x = (3 - h) / 1.5;
+    return x * x * (3 - 2 * x);
+  };
+  let m = Infinity;
+  for (let i = 0; i < n; i++) if (q[i] === q[i] && occl(i) > 0.5) m = Math.min(m, q[i]);
+  const near = Math.max(0, m);
+  const dir = hf.top ? -1 : 1; // world vertical direction towards the antagonist
+  let disp = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const qi = q[i];
+    if (qi !== qi) continue;
+    if (qi < 0) disp[i] = dir * qi; // out of the antagonist
+    else if (near <= reach) {
+      // the parts that come closest (within 0.25 mm of the nearest) touch it, fading out over 0.5 mm
+      const a = Math.min(1, Math.max(0, 1 - (qi - near - 0.25) / 0.5)) * occl(i);
+      disp[i] = dir * qi * a;
+    }
+  }
+  // smooth contact patches
+  const adj = adjacency(n, idx);
+  for (let it = 0; it < 3; it++) {
+    const next = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      const a = adj.start[i], b = adj.start[i + 1];
+      for (let k = a; k < b; k++) sum += disp[adj.nb[k]];
+      next[i] = b > a ? 0.5 * disp[i] + (0.5 * sum) / (b - a) : disp[i];
+    }
+    disp = next;
+  }
+  let moved = false;
+  const out = base.slice();
+  for (let i = 0; i < n; i++) {
+    const d = disp[i];
+    if (Math.abs(d) < 1e-5) continue;
+    moved = true;
+    out[i * 3] += dl[0] * d;
+    out[i * 3 + 1] += dl[1] * d;
+    out[i * 3 + 2] += dl[2] * d;
+  }
+  // smoothing may leave a little inside the antagonist: cut that
+  const cut = cutTooth(hf, T, out, gap);
+  return cut ?? (moved ? out : null);
 }
 
 // ---- abrasion ---------------------------------------------------------------------------------
