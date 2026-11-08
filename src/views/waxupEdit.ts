@@ -133,26 +133,15 @@ export class WaxupEditor {
     this.app.onStatus(`Tooth ${fdi}: ${how}`);
   }
 
-  /** A click on a tooth while the Waxup panel is closed: open the panel with that tooth selected. */
-  clickToEdit(p: Pt): boolean {
-    const hit = this.ad.pick(p);
-    if (!hit) return false;
-    this.w.selected = hit.fdi;
-    this.w.openPanel();
-    this.hint(hit.fdi);
-    this.app.changed();
-    return true;
-  }
-
-  /** Mouse over a tooth while the Waxup panel is closed: highlight it, a click opens the panel. */
+  /** Mouse over a tooth while the Waxup panel is closed (3D view): highlight it, it can be grabbed. */
   peek(p: Pt): string | null {
     const fdi = this.ad.pick(p)?.fdi ?? null;
     if (fdi !== this.w.hover) {
       this.w.hover = fdi;
-      if (fdi !== null) this.app.onStatus(`Tooth ${fdi}: click it to edit the waxup (Waxup panel)`);
+      if (fdi !== null) this.app.onStatus(`Tooth ${fdi}: drag to move · Shift+drag: scale · Ctrl+drag: rotate`);
       this.app.requestRender();
     }
-    return fdi !== null ? 'pointer' : null;
+    return fdi !== null ? 'move' : null;
   }
 
   leave() {
@@ -186,6 +175,8 @@ export class WaxupEditor {
     }
     const hit = this.ad.pick(p);
     if (!hit) return false;
+    // grabbed with another panel open (3D view): the Waxup panel opens with this tooth
+    if (!w.editing) w.openPanel(true);
     const t = this.m.tooth(hit.fdi)!;
     w.selected = t.fdi;
     if (w.tool === 'freeform') {

@@ -931,7 +931,7 @@ export class View3D extends View {
     return (2 * z * Math.tan(FOV / 2)) / Math.max(1, this.h);
   }
 
-  /** In ② Plan a tooth can be grabbed in 3D from any panel – unless an implant is under the cursor. */
+  /** In ② Plan a tooth is grabbed in 3D whatever panel is open – unless an implant is under the cursor. */
   protected override waxAnyPanel(p: Pt): boolean {
     const app = this.app;
     return app.mode === 'plan' && app.wax.model.teeth.length > 0 && !this.editor.hoverCursor(p);
@@ -1053,8 +1053,6 @@ export class View3D extends View {
     }
     this.orbiting = false;
     this.app.requestRender();
-    // a click on a waxup tooth with another panel open: edit the waxup
-    if (!moved && !app.segTool && !app.ruler && this.waxAnyPanel(p) && this.waxEditor?.clickToEdit(p)) return;
     if (moved || app.segTool !== 'grow') return;
     const w = this.pickSurface(p);
     if (w) app.growAt(w);
@@ -1300,7 +1298,7 @@ export class View3D extends View {
           const sel = t.fdi === wax.selected || t.jaw === jawSel;
           const hov = t.fdi === wax.hover;
           const base = wax.color;
-          const color: [number, number, number] = sel ? [255, 214, 150] : hov ? [Math.min(255, base[0] + 12), Math.min(255, base[1] + 18), 255] : base;
+          const color: [number, number, number] = sel ? [255, 214, 150] : hov ? [186, 220, 255] : base;
           // the region a part would move: shaded on the tooth while its handle is hovered
           const hp = wax.editing && wax.tool === 'parts' && wax.hoverPart?.fdi === t.fdi ? wax.hoverPart : null;
           let vc = false;
