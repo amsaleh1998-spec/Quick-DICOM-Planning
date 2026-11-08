@@ -32,8 +32,8 @@ export class WaxState {
   visible: Record<Jaw, boolean> = { upper: true, lower: true };
   /** outlines in the slices */
   contours = true;
-  /** open the Waxup panel (set by the interface) */
-  openPanel: () => void = () => {};
+  /** open the Waxup panel (set by the interface); `grabbed`: a tooth is being dragged in a view */
+  openPanel: (grabbed?: boolean) => void = () => {};
 
   /** Changes that affect drawing (views compare it). */
   key(): string {

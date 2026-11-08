@@ -3,6 +3,9 @@
 import { type Page } from '@playwright/test';
 import { clickView, expect, openDemo, test } from './fixtures';
 
+// a smaller window: the 3D view is rendered in software in CI
+test.use({ viewport: { width: 1200, height: 760 } });
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => ((window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = undefined));
 });
@@ -16,6 +19,8 @@ async function curveAndLowerArch(page: Page) {
   }
   await page.keyboard.press('Enter');
   await page.click('[data-panel="waxup"]');
+  // the waxup is worked on in 3D: its panel enlarges the 3D view
+  expect(await page.evaluate(() => window.app.view3d.el.classList.contains('max'))).toBe(true);
   await page.click('#wax-all-lower');
   await expect.poll(() => page.evaluate(() => window.app.wax.model.teeth.length), { timeout: 20_000 }).toBe(14);
 }
@@ -37,20 +42,27 @@ const inPano = (page: Page, fdi: number) =>
   }, fdi);
 const center = (page: Page, fdi: number) => page.evaluate((fdi) => window.app.wax.model.center(window.app.wax.model.tooth(fdi)), fdi);
 const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+/** 3D view enlarged (true) or all views shown (false) */
+const maximize3d = (page: Page, on: boolean) =>
+  page.evaluate((on) => {
+    const a = window.app;
+    if (a.view3d.el.classList.contains('max') !== on) a.toggleMaximize(a.view3d);
+    a.changed();
+  }, on);
+const topView = async (page: Page) => {
+  await page.evaluate(() => (window.app.view3d.setPreset('top'), window.app.changed()));
+  await page.waitForTimeout(600);
+};
 
 test('teeth are set up on the arch and edited like in a dental CAD', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   await curveAndLowerArch(page);
   expect(await page.evaluate(() => window.app.wax.editing)).toBe(true);
   await expect(page.locator('[data-panel="waxup"] .rail-badge')).toHaveText('14');
   await expect(page.locator('#wax-chart button.on')).toHaveCount(14);
 
-  await page.evaluate(() => {
-    window.app.toggleMaximize(window.app.view3d);
-    window.app.view3d.setPreset('top');
-    window.app.changed();
-  });
-  await page.waitForTimeout(800);
+  await maximize3d(page, true);
+  await topView(page);
 
   // drag = move
   let q = await in3d(page, 36);
@@ -119,9 +131,13 @@ test('teeth are set up on the arch and edited like in a dental CAD', async ({ pa
   await page.mouse.up();
   expect(await page.evaluate(() => window.app.wax.model.tooth(46).geo)).toBeGreaterThan(0);
 
+});
+
+test('teeth are moved in the panoramic, deleted, and moved as a whole jaw', async ({ page }) => {
+  test.setTimeout(300_000);
+  await curveAndLowerArch(page);
   // panoramic: drag 43 upwards
-  await page.click('[data-wt="position"]');
-  await page.evaluate(() => (window.app.toggleMaximize(window.app.view3d), window.app.changed()));
+  await maximize3d(page, false);
   await page.waitForTimeout(400);
   const p43 = await inPano(page, 43);
   const z0 = (await center(page, 43))[2];
@@ -145,39 +161,45 @@ test('teeth are set up on the arch and edited like in a dental CAD', async ({ pa
   await page.mouse.up();
   expect(j0[2] - (await center(page, 31))[2]).toBeGreaterThan(1);
 
-  // another panel: the teeth no longer react
+  // another panel: the panel's own tools are off (the 3D view still lets teeth be grabbed)
   await page.click('[data-panel="implants"]');
   expect(await page.evaluate(() => window.app.wax.editing)).toBe(false);
 });
 
-test('a click on a tooth in 3D opens the waxup; parts mode still moves a tooth by its body', async ({ page }) => {
+test('in 3D a tooth is grabbed from any panel; leaving the panel restores the layout', async ({ page }) => {
+  test.setTimeout(300_000);
   await curveAndLowerArch(page);
+  // leaving the Waxup panel shows all views again
   await page.click('[data-panel="implants"]');
-  expect(await page.evaluate(() => window.app.wax.editing)).toBe(false);
-  await page.evaluate(() => {
-    window.app.toggleMaximize(window.app.view3d);
-    window.app.view3d.setPreset('top');
-    window.app.changed();
-  });
-  await page.waitForTimeout(600);
-  // a drag across the teeth (another panel open) rotates the view, the tooth stays
+  expect(await page.evaluate(() => [window.app.wax.editing, window.app.view3d.el.classList.contains('max')])).toEqual([false, false]);
+  await maximize3d(page, true);
+  await topView(page);
+  // a drag that starts on a tooth moves it, and opens the Waxup panel with it
   let q = await in3d(page, 36);
   const c0 = await center(page, 36);
   await page.mouse.move(q[0], q[1]);
+  await expect(page.locator('#status-msg')).toContainText('Tooth 36');
   await page.mouse.down();
-  await page.mouse.move(q[0] + 40, q[1], { steps: 4 });
+  await page.mouse.move(q[0] + 30, q[1], { steps: 5 });
   await page.mouse.up();
-  expect(dist(await center(page, 36), c0)).toBeLessThan(1e-6);
-  expect(await page.evaluate(() => window.app.wax.editing)).toBe(false);
-  // a click opens the waxup panel with the tooth selected
-  await page.evaluate(() => (window.app.view3d.setPreset('top'), window.app.changed()));
-  await page.waitForTimeout(400);
-  q = await in3d(page, 36);
-  await page.mouse.click(q[0], q[1]);
+  expect(dist(await center(page, 36), c0)).toBeGreaterThan(1);
   await expect(page.locator('#panel-waxup')).toBeVisible();
   expect(await page.evaluate(() => [window.app.wax.editing, window.app.wax.selected])).toEqual([true, 36]);
-  await expect(page.locator('#status-msg')).toContainText('Tooth 36');
+  // a drag on empty space rotates the view, the teeth stay
+  const before = await page.evaluate(() => window.app.wax.model.teeth.map((t: { T: number[] }) => t.T.join()).join('|'));
+  const fwd0 = await page.evaluate(() => window.app.view3d.fwd.slice());
+  const r = await page.evaluate(() => {
+    const e = window.app.view3d.el.getBoundingClientRect();
+    return [e.x + 30, e.y + e.height - 40];
+  });
+  await page.mouse.move(r[0], r[1]);
+  await page.mouse.down();
+  await page.mouse.move(r[0] + 60, r[1] - 20, { steps: 5 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.app.wax.model.teeth.map((t: { T: number[] }) => t.T.join()).join('|'))).toBe(before);
+  expect(await page.evaluate(() => window.app.view3d.fwd)).not.toEqual(fwd0);
   // parts tool: dragging the body (not a dot) moves the tooth
+  await topView(page);
   await page.click('[data-wt="parts"]');
   q = await in3d(page, 46);
   const m0 = await center(page, 46);
@@ -189,9 +211,12 @@ test('a click on a tooth in 3D opens the waxup; parts mode still moves a tooth b
 });
 
 test('mirror mode changes the other side too', async ({ page }) => {
+  test.setTimeout(300_000);
   await curveAndLowerArch(page);
   await page.check('#wax-mirror');
   await page.uncheck('#wax-chain');
+  await maximize3d(page, false);
+  await page.waitForTimeout(300);
   const a0 = await center(page, 33);
   const b0 = await center(page, 43);
   const p = await inPano(page, 33);
@@ -206,16 +231,12 @@ test('mirror mode changes the other side too', async ({ page }) => {
 });
 
 test('the waxup is saved with the project and exported as STL', async ({ page }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(300_000);
   await curveAndLowerArch(page);
   // shape one tooth
   await page.click('[data-wt="freeform"]');
-  await page.evaluate(() => {
-    window.app.toggleMaximize(window.app.view3d);
-    window.app.view3d.setPreset('top');
-    window.app.changed();
-  });
-  await page.waitForTimeout(600);
+  await maximize3d(page, true);
+  await topView(page);
   const q = await in3d(page, 36);
   await page.mouse.move(q[0], q[1]);
   await page.mouse.down();

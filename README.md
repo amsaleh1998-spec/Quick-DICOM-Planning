@@ -280,8 +280,10 @@ the future teeth.
   that part of the tooth, Shift+drag to scale it, Ctrl+drag to rotate it; the region it moves is shaded while hovered.
 - **Freeform** (3D view): drag over a tooth to add material, **Ctrl** to remove, **Shift** to smooth; brush radius and
   strength in the panel.
-- Teeth react to the mouse only while the Waxup panel is open, so they never get in the way of implant planning;
-  their outlines stay in every slice. Undo / redo, projects and *Export ▾ → STL* (one file per jaw, DICOM patient
+- The waxup is worked on mainly in the **3D view**: opening the Waxup panel enlarges it (⤢ or M shows all views;
+  leaving the panel restores the layout). In the 3D view a tooth can be grabbed from any panel (the Waxup panel then
+  opens with it) – a drag on empty space still rotates the view, and an implant under the cursor comes first. In the
+  slices the teeth react while the Waxup panel is open; their outlines stay in every slice. Undo / redo, projects and *Export ▾ → STL* (one file per jaw, DICOM patient
   coordinates) include the waxup.
 - The library (`public/library/teeth-generic.json`, 32 crowns) is built from a generic exocad tooth set by
   `scripts/make-tooth-library.py` (split into teeth, FDI numbers, decimated to ~0.35 mm edges, cusp tips).

@@ -67,12 +67,29 @@ app.onCurveDrawn = () => rail.select('implants');
 
 // teeth of the waxup react to the mouse only while its panel is open (so they never get in the
 // way of implant planning, where their outlines overlap the implant heads)
-app.wax.openPanel = () => rail.select('waxup');
+// The waxup is worked on mainly in 3D: opening its panel enlarges the 3D view (⤢ or M shows all
+// views), leaving it restores the layout. Not when the panel opens because a tooth was grabbed in
+// the 3D view: the view must not change size under the mouse.
+let grabbing = false;
+let enlarged = false;
+app.wax.openPanel = (grabbed = false) => {
+  grabbing = grabbed;
+  rail.select('waxup');
+  grabbing = false;
+};
+const v3dMax = () => app.view3d.el.classList.contains('max');
 rail.onChange = () => {
   const on = app.mode === 'plan' && rail.current === 'waxup' && rail.open;
   if (app.wax.editing === on) return;
   app.wax.editing = on;
-  if (!on) app.wax.hover = null;
+  if (on && !grabbing && app.vol && !v3dMax()) {
+    app.toggleMaximize(app.view3d);
+    enlarged = true;
+  } else if (!on) {
+    app.wax.hover = null;
+    if (enlarged && v3dMax()) app.toggleMaximize(app.view3d);
+    enlarged = false;
+  }
   app.changed();
 };
 
