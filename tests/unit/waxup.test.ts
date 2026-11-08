@@ -2,9 +2,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { contralateral, jawOrder, parseLibrary, unpackLibrary } from '../../src/waxup/library';
-import { JawPlacement, Waxup, chainLinks, gapAlong, repackChain, rotateScaleAbout, toothWorld, translation } from '../../src/waxup/waxup';
+import { JawPlacement, Waxup, mirrorPlane, reflection, rotateScaleAbout, toothWorld, translation } from '../../src/waxup/waxup';
+import { applyChain, chainOf, chainsOf, contacts, discPin, flipped, mirroredVertices, settleChain, snapshot, toothAxes, toothPin } from '../../src/waxup/chain';
 import { applyPart, brush, startPart } from '../../src/waxup/sculpt';
-import { IDENTITY, applyV } from '../../src/register';
+import { IDENTITY, applyV, compose } from '../../src/register';
 import type { Frame, Vec2, Vec3 } from '../../src/math';
 
 const lib = parseLibrary(await unpackLibrary(JSON.parse(readFileSync('public/library/teeth-generic.json', 'utf8'))));
@@ -84,7 +85,11 @@ describe('placement on the arch', () => {
         expect(nearest).toBeLessThan(6);
       }
       // neighbours: overlap along the arch below 1.5 mm
-      for (const l of chainLinks(w, jaw, [0, 0, 1])) expect(l.gap).toBeGreaterThan(-1.5);
+      for (let i = 0; i + 1 < ts.length; i++) {
+        const md = toothAxes(w, ts[i]).md;
+        const gap = (a: Vec3, b: Vec3) => (b[0] - a[0]) * md[0] + (b[1] - a[1]) * md[1] + (b[2] - a[2]) * md[2];
+        expect(gap(contacts(w, ts[i]).b, contacts(w, ts[i + 1]).a)).toBeGreaterThan(-1.5);
+      }
     }
     // occlusal plane at 40: upper crowns above, lower below
     for (const t of w.teeth) {
@@ -109,25 +114,117 @@ describe('placement on the arch', () => {
   });
 });
 
-describe('chain mode and mirror', () => {
-  it('keeps every contact when one tooth grows or moves', () => {
+const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+/** largest distance between the touching contacts of neighbours */
+const worstContact = (w: Waxup, ts: ReturnType<Waxup['jawTeeth']>) =>
+  Math.max(...ts.slice(1).map((t, i) => dist(contacts(w, ts[i]).b, contacts(w, t).a)));
+/** a lower arch set up in contact */
+function lowerArch() {
+  const w = waxup();
+  for (const f of jawOrder('lower')) w.add(f);
+  for (const c of chainsOf(w, 'lower')) settleChain(w, c, new Set(), true);
+  return w;
+}
+
+describe('chain mode', () => {
+  it('knows the axes and contacts of a tooth', () => {
     const w = waxup();
-    for (const f of jawOrder('lower')) w.add(f);
-    const up: Vec3 = [0, 0, 1];
-    const links = chainLinks(w, 'lower', up);
-    const before = links.map((l) => l.gap);
-    const t = w.tooth(44)!;
-    // scale 44 by 20 % and move it 1 mm buccally
-    w.transformTooth(t, rotateScaleAbout(w.center(t), up, 0, 1.2));
-    w.transformTooth(t, translation([-1, 0, 0]));
-    repackChain(links, t);
-    // the gaps along the links (as they were when the drag started) are unchanged
-    const after = links.map((l) => gapAlong(l.a, l.b, l.u));
-    for (let i = 0; i < before.length; i++) expect(after[i]).toBeCloseTo(before[i], 3);
-    // 45 was pushed distally
-    expect(w.center(w.tooth(45)!)[1]).toBeGreaterThan(w.center(w.tooth(44)!)[1]);
+    for (const f of [35, 36, 37]) w.add(f);
+    const t = w.tooth(36)!;
+    const ax = toothAxes(w, t);
+    expect(ax.oc[2]).toBeGreaterThan(0.95); // lower tooth: occlusal = up
+    const c = contacts(w, t);
+    // a = towards the previous tooth in arch order (35), b = towards the next (37)
+    expect(dist(c.a, w.center(w.tooth(35)!))).toBeLessThan(dist(c.b, w.center(w.tooth(35)!)));
+    expect(dist(c.a, c.b)).toBeGreaterThan(8);
+    expect(chainOf(w, t).map((x) => x.fdi)).toEqual([35, 36, 37]);
   });
 
+  it('sets the arch up in contact, the midline staying', () => {
+    const w = waxup();
+    for (const f of jawOrder('lower')) w.add(f);
+    const mid0 = contacts(w, w.tooth(41)!).b;
+    for (const c of chainsOf(w, 'lower')) settleChain(w, c, new Set(), true);
+    const ts = w.jawTeeth('lower');
+    expect(worstContact(w, ts)).toBeLessThan(0.1);
+    expect(dist(contacts(w, w.tooth(41)!).b, mid0)).toBeLessThan(1);
+    for (const t of ts) expect(Waxup.scaleOf(t)).toBeCloseTo(1, 3);
+  });
+
+  it('chain: moves the whole chain, or bends it towards a pinned tooth', () => {
+    let w = lowerArch();
+    let ts = w.jawTeeth('lower');
+    let c0 = ts.map((t) => w.center(t));
+    applyChain(snapshot(w, ts), { tooth: ts.indexOf(w.tooth(36)!) }, { kind: 'move', d: [0, 0, 2] }, { mode: 'chain', scalable: true, contact: true });
+    ts.forEach((t, i) => expect(w.center(t)[2] - c0[i][2]).toBeCloseTo(2, 3));
+
+    w = lowerArch();
+    ts = w.jawTeeth('lower');
+    c0 = ts.map((t) => w.center(t));
+    const pinned = w.tooth(33)!;
+    const T33 = pinned.T.slice();
+    applyChain(snapshot(w, ts, new Set([toothPin(33)])), { tooth: ts.indexOf(w.tooth(36)!) }, { kind: 'move', d: [2, 0, 0] }, { mode: 'chain', scalable: true, contact: true });
+    expect(pinned.T).toEqual(T33);
+    const moved = (fdi: number) => dist(w.center(w.tooth(fdi)!), c0[ts.indexOf(w.tooth(fdi)!)]);
+    expect(moved(36)).toBeCloseTo(2, 3);
+    expect(moved(37)).toBeCloseTo(2, 1);
+    expect(moved(34)).toBeGreaterThan(0.05);
+    expect(moved(34)).toBeLessThan(moved(35));
+    expect(moved(42)).toBeLessThan(1e-6); // beyond the pin
+    expect(worstContact(w, ts)).toBeLessThan(0.05);
+  });
+
+  it('single: a grown tooth pushes its neighbours along the tube; against a pin they are squeezed', () => {
+    let w = lowerArch();
+    let ts = w.jawTeeth('lower');
+    const t44 = w.tooth(44)!;
+    const y45 = w.center(w.tooth(45)!)[1];
+    applyChain(snapshot(w, ts), { tooth: ts.indexOf(t44) }, { kind: 'set', T: compose(rotateScaleAbout(w.center(t44), [0, 0, 1], 0, 1.2), t44.T) }, { mode: 'single', scalable: true, contact: true });
+    expect(worstContact(w, ts)).toBeLessThan(0.1);
+    expect(w.center(w.tooth(45)!)[1]).toBeGreaterThan(y45 + 0.3); // pushed distally
+    expect(Waxup.scaleOf(w.tooth(45)!)).toBeCloseTo(1, 2);
+
+    w = lowerArch();
+    ts = w.jawTeeth('lower');
+    const a44 = w.tooth(44)!;
+    const T46 = w.tooth(46)!.T.slice();
+    applyChain(snapshot(w, ts, new Set([toothPin(46)])), { tooth: ts.indexOf(a44) }, { kind: 'set', T: compose(rotateScaleAbout(w.center(a44), [0, 0, 1], 0, 1.2), a44.T) }, { mode: 'single', scalable: true, contact: true });
+    expect(w.tooth(46)!.T).toEqual(T46);
+    expect(Waxup.scaleOf(w.tooth(45)!)).toBeLessThan(0.97);
+  });
+
+  it('tube: the teeth slide along the arch', () => {
+    const w = lowerArch();
+    const ts = w.jawTeeth('lower');
+    const snap = snapshot(w, ts);
+    const c0 = ts.map((t) => w.center(t));
+    applyChain(snap, { tooth: ts.indexOf(w.tooth(31)!) }, { kind: 'slide', ds: 3 }, { mode: 'tube', scalable: true, contact: true });
+    ts.forEach((t, i) => expect(dist(w.center(t), c0[i])).toBeGreaterThan(2));
+    // still on the tube, still in contact
+    for (const t of ts) {
+      const c = contacts(w, t);
+      expect(dist(c.a, snap.tube.at(snap.tube.closest(c.a)))).toBeLessThan(0.3);
+    }
+    expect(worstContact(w, ts)).toBeLessThan(0.1);
+  });
+
+  it('a disc moves its end of the chain; the teeth are stretched up to the other end', () => {
+    const w = waxup();
+    for (const f of [34, 35, 36]) w.add(f);
+    const ts = w.jawTeeth('lower');
+    settleChain(w, ts, new Set(), true);
+    const snap = snapshot(w, ts);
+    const aEnd = contacts(w, ts[0]).a;
+    const t = snap.tube.tangent(snap.S[3]);
+    applyChain(snap, { disc: 'b' }, { kind: 'move', d: [t[0] * 2, t[1] * 2, t[2] * 2] }, { mode: 'chain', scalable: true, contact: true });
+    expect(dist(contacts(w, ts[0]).a, aEnd)).toBeLessThan(0.01);
+    for (const x of ts) expect(Waxup.scaleOf(x)).toBeGreaterThan(1.03);
+    expect(worstContact(w, ts)).toBeLessThan(0.05);
+    expect(discPin(ts, 'a')).toBe('a34');
+  });
+});
+
+describe('mirroring', () => {
   it('mirrors a change to the other side', () => {
     const w = waxup();
     w.add(13);
@@ -139,6 +236,27 @@ describe('chain mode and mirror', () => {
     const cb2 = w.center(b);
     expect(cb2[0] - cb[0]).toBeCloseTo(1, 2);
     expect(Math.abs(cb2[1] - cb[1])).toBeLessThan(0.15);
+  });
+
+  it('1-to-1: the tooth on the other side becomes the exact mirror image', () => {
+    const w = waxup();
+    const a = w.add(13), b = w.add(23);
+    w.transformTooth(a, rotateScaleAbout(w.center(a), [0, 1, 0], 0.2, 1.1));
+    const M = (() => {
+      const { p, n } = mirrorPlane(w.placement.upper!);
+      return reflection(p, n);
+    })();
+    b.T = compose(compose(M, a.T), [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]);
+    b.pos = mirroredVertices(a, b, M);
+    b.idx = flipped(a.idx);
+    const wa = toothWorld(a).pos, wb = toothWorld(b).pos;
+    for (let i = 0; i < wa.length; i += 99) {
+      const m = applyV(M, [wa[i], wa[i + 1], wa[i + 2]]);
+      expect(dist(m, [wb[i], wb[i + 1], wb[i + 2]])).toBeLessThan(1e-3);
+    }
+    // its own place: near where its library tooth would be
+    expect(dist(w.center(b), w.center(waxup().add(23)))).toBeLessThan(2.5);
+    expect(flipped(flipped(a.idx))).toBe(a.idx);
   });
 
   it('moves the whole jaw, and teeth added later follow', () => {
