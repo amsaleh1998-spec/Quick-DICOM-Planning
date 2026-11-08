@@ -243,7 +243,7 @@ button.open {
 
 #main {
   display: grid;
-  grid-template-columns: 48px auto 1fr auto;
+  grid-template-columns: 64px auto 1fr auto;
   min-height: 0;
 }
 
@@ -259,11 +259,13 @@ button.open {
 }
 #rail button {
   position: relative;
-  width: 38px;
-  height: 38px;
+  width: 58px;
+  height: 46px;
   padding: 0;
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 3px;
   background: transparent;
   border-color: transparent;
   color: var(--muted);
@@ -283,7 +285,7 @@ button.open {
 }
 #rail .rail-badge {
   position: absolute;
-  right: 1px;
+  right: 6px;
   top: 1px;
   font-size: 9.5px;
   line-height: 13px;
@@ -297,8 +299,14 @@ button.open {
 #rail .rail-badge:empty {
   display: none;
 }
+#rail .rail-label {
+  font-size: 9.5px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
 #rail .rail-bottom {
   margin-top: auto;
+  height: 38px;
 }
 #rail .rail-bottom.flip svg {
   transform: scaleX(-1);
