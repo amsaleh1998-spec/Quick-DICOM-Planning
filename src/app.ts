@@ -1,5 +1,6 @@
 import { ArchCurve } from './curve';
-import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, setApicalDiameter, setImplantAxis, setImplantLength } from './implant';
+import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, platformOf, setApicalDiameter, setImplantAxis, setImplantLength } from './implant';
+import { findModel, meshOf } from './implantLibrary';
 import {
   Frame,
   Vec2,
@@ -19,6 +20,7 @@ import {
   scale,
   sub,
   toFrame,
+  addScaled,
 } from './math';
 import { Nerve, createNerve, implantNerveDistance, insertNervePoint } from './nerve';
 import { Scan, scansKey } from './scans';
@@ -140,6 +142,8 @@ export class App {
   /** new implants are tapered (apex 1 mm narrower than the platform) */
   defaultTapered = true;
   defaultLength = 10;
+  /** library model of new implants ("Brand / System / size"); null = generic (the values above) */
+  defaultModel: string | null = null;
   /** new implants copy the axis of the selected implant */
   placeParallel = true;
 
@@ -776,12 +780,38 @@ export class App {
     }
     const imp = createImplant(w, normalize(axis), this.defaultDiameter, this.defaultLength);
     if (this.defaultTapered) setApicalDiameter(imp, Math.round((imp.diameter - 1) * 10) / 10);
+    if (this.defaultModel && findModel(this.defaultModel)) {
+      // the default model, centred where the generic implant would be
+      this.applyModel(imp, this.defaultModel);
+      imp.center = w;
+    }
     if (sameJaw && ref?.abutment) imp.abutment = { ...ref.abutment };
     if (sameJaw && ref) imp.showProstheticAxis = ref.showProstheticAxis;
     this.implants.push(imp);
     this.placing = null;
     this.tangAngle = 0;
     this.selectImplant(imp.id, true);
+  }
+
+  /**
+   * Make an implant a library model (null: generic again, keeping its size). The platform stays
+   * where it is; diameter, apex and length become the model's measured ones.
+   */
+  applyModel(imp: Implant, id: string | null) {
+    if (!id) {
+      imp.lib = null;
+      return;
+    }
+    const f = findModel(id);
+    if (!f) return;
+    const p = platformOf(imp);
+    const sz = f.size;
+    imp.length = sz.len;
+    imp.diameter = sz.dia;
+    imp.apicalDiameter = sz.apex < sz.dia - 0.05 ? sz.apex : null;
+    imp.center = addScaled(p, imp.axis, sz.len / 2);
+    imp.lib = { id, top: sz.top };
+    meshOf(id); // start loading its mesh
   }
 
   selectImplant(id: number | null, snap: boolean) {

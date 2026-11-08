@@ -13,6 +13,7 @@ import {
   setImplantAxis,
   setImplantLength,
 } from '../implant';
+import { findModel, modelId, nearestSize } from '../implantLibrary';
 import { Vec3, add, addScaled, clamp, rotate, scale } from '../math';
 import type { Pt } from './View';
 
@@ -56,6 +57,8 @@ export class ImplantEditor {
     /** value and mouse measure at drag start (relative, damped dimension changes) */
     startValue: number;
     startMeasure: number;
+    /** library model at the start of a resize (sizes snap to the system) */
+    model: ReturnType<typeof findModel>;
   } | null = null;
   // live dimension badge
   private badge: HTMLDivElement | null = null;
@@ -105,7 +108,7 @@ export class ImplantEditor {
       if (Math.abs(h - hl) < tol && rad < rApex + tol) return { imp: sel, mode: 'length' };
       // side outline (follows the taper): apical half edits the apex of a tapered implant
       if (Math.abs(rad - implantRadiusAt(sel, h)) < tol && h > -hl && h < hl - tol * 0.5)
-        return { imp: sel, mode: isTapered(sel) && h > 0 ? 'apicalDiameter' : 'diameter' };
+        return { imp: sel, mode: isTapered(sel) && h > 0 && !sel.lib ? 'apicalDiameter' : 'diameter' };
     }
     const imp = this.ad.hitBody(p);
     return imp ? { imp, mode: 'move' } : null;
@@ -136,7 +139,7 @@ export class ImplantEditor {
       startMeasure = hit.mode === 'length' ? ra.h + imp.length / 2 : ra.rad;
       this.showBadge(imp, hit.mode);
     }
-    this.drag = { imp, mode: hit.mode, basis: this.ad.basis(imp), startValue, startMeasure };
+    this.drag = { imp, mode: hit.mode, basis: this.ad.basis(imp), startValue, startMeasure, model: imp.lib ? findModel(imp.lib.id) : null };
     this.app.selectImplant(imp.id, false);
     return true;
   }
@@ -169,7 +172,9 @@ export class ImplantEditor {
       case 'diameter': {
         const { rad } = this.ad.radialAxial(p, imp);
         const v = d.startValue + 2 * (rad - d.startMeasure) * DIM_GAIN;
-        setCoronalDiameter(imp, clamp(Math.round(v * 10) / 10, 2.5, 9));
+        // a library implant takes the system's size nearest to the dragged diameter
+        if (d.model) this.snapModel(imp, d.model, d.model.size.d + (v - d.startValue), d.model.size.L, 'd');
+        else setCoronalDiameter(imp, clamp(Math.round(v * 10) / 10, 2.5, 9));
         break;
       }
       case 'apicalDiameter': {
@@ -181,12 +186,20 @@ export class ImplantEditor {
       case 'length': {
         const { h } = this.ad.radialAxial(p, imp);
         const v = d.startValue + (h + imp.length / 2 - d.startMeasure) * DIM_GAIN;
-        setImplantLength(imp, clamp(Math.round(v * 2) / 2, 4, MAX_IMPLANT_LENGTH));
+        if (d.model) this.snapModel(imp, d.model, d.model.size.d, d.model.size.L + (v - d.startValue), 'L');
+        else setImplantLength(imp, clamp(Math.round(v * 2) / 2, 4, MAX_IMPLANT_LENGTH));
         break;
       }
     }
     this.app.implantChanged(imp);
     return true;
+  }
+
+  /** A library implant becomes the size of its system nearest to (d, L). */
+  private snapModel(imp: Implant, m: NonNullable<ReturnType<typeof findModel>>, d: number, L: number, change: 'd' | 'L') {
+    const z = nearestSize(m.system, d, L, change);
+    const id = modelId(m.brand.name, m.system.name, z.label);
+    if (id !== imp.lib?.id) this.app.applyModel(imp, id);
   }
 
   end(): boolean {

@@ -3,7 +3,8 @@
 
 import type { App } from './app';
 import { formatPatientName } from './dicomMeta';
-import { Implant, implantParts } from './implant';
+import { Implant, implantParts, platformOf } from './implant';
+import { meshOf, meshWorld } from './implantLibrary';
 import { addScaled, fromFrame, Vec3 } from './math';
 import { nervePath } from './nerve';
 import type { CropSpec } from './render';
@@ -113,6 +114,14 @@ async function surface(g: ScalarGrid | null, opts: BuildOpts, progress: (f: numb
 }
 
 function implantSolid(app: App, imp: Implant, kind: 'implant' | 'abutment'): Tris {
+  // a library implant: its own mesh
+  const m = kind === 'implant' && imp.lib ? meshOf(imp.lib.id) : null;
+  if (m) {
+    const pos = meshWorld(imp, m, platformOf(imp), imp.axis);
+    const out = new Float32Array(m.idx.length * 3);
+    for (let i = 0; i < m.idx.length; i++) out.set(pos.subarray(m.idx[i] * 3, m.idx[i] * 3 + 3), i * 3);
+    return out;
+  }
   const shown = { ...imp, hidden: false, abutmentHidden: false };
   const parts = implantParts(shown, app.abutmentDir(shown)).filter((p) => p.kind === kind);
   return concatTris(

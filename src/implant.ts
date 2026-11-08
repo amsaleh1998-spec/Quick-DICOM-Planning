@@ -1,4 +1,5 @@
 import { Vec3, addScaled, neg } from './math';
+import type { ImplantModel } from './implantLibrary';
 
 /** Generic multi-unit abutment (MUA). */
 export interface Abutment {
@@ -40,6 +41,8 @@ export interface Implant {
   hidden: boolean;
   /** hide only the abutment (MUA) */
   abutmentHidden: boolean;
+  /** manufacturer implant from the library (its measured dimensions are the ones above); null = generic */
+  lib?: ImplantModel | null;
 }
 
 export const MIN_APICAL_DIAMETER = 1.5;
@@ -118,7 +121,7 @@ export function reserveImplantIds(maxId: number) {
 
 export function createImplant(center: Vec3, axis: Vec3, diameter = 4, length = 10): Implant {
   const id = nextId++;
-  return { id, name: `Implant ${id}`, center, axis, diameter, apicalDiameter: null, length, abutment: null, showProstheticAxis: false, hidden: false, abutmentHidden: false };
+  return { id, name: `Implant ${id}`, center, axis, diameter, apicalDiameter: null, length, abutment: null, showProstheticAxis: false, hidden: false, abutmentHidden: false, lib: null };
 }
 
 /** Centre of the implant platform (coronal end). */
@@ -156,7 +159,8 @@ export function implantParts(imp: Implant, abutmentDir: Vec3 | null): Cylinder[]
     { center: imp.center, axis: imp.axis, radius: Math.max(r, ra), r0: r, r1: ra, half: imp.length / 2, kind: 'implant', implant: imp },
   ];
   const up = neg(imp.axis);
-  const p = platformOf(imp);
+  // the abutment sits on the connection: the platform, or the top of a tissue-level collar / head
+  const p = addScaled(platformOf(imp), up, imp.lib?.top ?? 0);
   // where the prosthetic axis starts and which way it points
   let axisStart = p;
   let axisDir = up;

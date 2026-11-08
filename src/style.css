@@ -2368,3 +2368,28 @@ a.btn-link {
 #wax-abr-group {
   align-self: flex-start;
 }
+
+/* ---- implant library pickers ---- */
+.imp-model {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0;
+}
+.imp-model label.small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.imp-model select {
+  flex: 1;
+  min-width: 0;
+}
+.imp-lib-row {
+  display: flex;
+  gap: 4px;
+}
+.imp-lib-row select {
+  flex: 1;
+  min-width: 0;
+}

@@ -269,6 +269,28 @@ Like any automatic method it can be wrong (metal artefacts, unusual anatomy, low
   doi:[10.1038/s41592-020-01008-z](https://doi.org/10.1038/s41592-020-01008-z)
 - The same model for 3D Slicer: [SlicerDentalSegmentator](https://github.com/gaudot/SlicerDentalSegmentator).
 
+## Implant libraries (② Plan → Implants panel)
+
+Besides the generic implant (any diameter, length and taper), the *Implant* selector offers manufacturer implants:
+14 brands, 64 systems, about 1,260 sizes (Anthogyr, BioHorizons, Biotech Dental, BTK, Dentsply Sirona, Global D,
+Hiossen, JDentalCare, Klockner, Megagen, Neodent, Nobel Biocare, Osstem, Straumann). Choose the brand, the system and
+the size: the implant keeps its platform where it is and takes the model's shape.
+
+- **Drawn as the real implant**: the 3D view shows its mesh (threads, collar, connection); where bone, a segment, a
+  scan or the waxup covers it, it is shown through them as before. The slices show the cut through the mesh, the
+  panoramic its outline across the arch.
+- **Sizes**: dragging the side or the apical end of the outline steps through the sizes of the same system (diameter
+  or length, keeping the other as close as possible).
+- **New implants** get the model chosen last (or the one set under *Defaults for new implants*); *Generic* goes back
+  to free sizes.
+- **Abutments** stay generic MUAs; they sit on the implant's connection (the platform, or the top of a tissue-level
+  collar).
+- Nerve distances, hit testing and the see-through view use a cone that encloses the implant's part in bone.
+- STL export writes the implant's mesh. Projects remember the model.
+- The library (`public/implants/`: a catalogue and one file per system, fetched when a system is first used) is built
+  from the manufacturers' implant STLs by `scripts/make-implant-library.py` (decimated to at most 5,000 triangles,
+  platform / apex / connection measured on the mesh).
+
 ## Waxup (② Plan → Waxup panel)
 
 A tooth library set up on the patient's arch, shaped the way a dental CAD does it, so implants can be planned under
@@ -471,6 +493,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/ui/install.ts` | Install app and the Windows / Mac double-click helper |
 | `src/ui/reorientPanel.ts`, `curvePanel.ts`, `implantsPanel.ts`, `segmentsPanel.ts`, `nervesPanel.ts`, `scansPanel.ts` | One module per side panel: its controls and its refresh |
 | `src/ui/viewSettings.ts`, `settings.ts`, `patient.ts` | Settings inside the 3D / panoramic views, the ⚙ Settings popover (input, SpaceMouse), the patient chip |
+| `src/implantLibrary.ts`, `src/views/implantSections.ts` | Implant library: catalogue, system meshes, sizes; library implants in the slices and the panoramic |
 | `src/waxup/` | Waxup: tooth library loader, model (arch placement, mirror), chain (contacts, tube, chain / single / tube, pins, setup in contact), sculpting, panel state and setup |
 | `src/views/waxupEdit.ts`, `src/views/waxContours.ts` | Waxup editing with the mouse in every view, tooth outlines in the slices |
 | `src/history.ts`, `src/planHistory.ts` | Undo / redo: one history of the plan, split into channels (implants, curves, segments, nerves, scans, rulers) |
