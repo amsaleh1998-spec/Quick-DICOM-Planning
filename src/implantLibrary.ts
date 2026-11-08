@@ -183,14 +183,24 @@ export function meshWorld(owner: object, m: LibMesh, platform: Vec3, axis: Vec3)
 // ---- sizes -----------------------------------------------------------------------------------
 
 /**
- * The size of a system nearest to a diameter and length (nominal). `change`: the dimension being
- * chosen (matched first; the other stays as close as it can).
+ * The size of a system nearest to a nominal diameter and length (as the manufacturer names them).
+ * `change`: the dimension being chosen, `from`: the current size. Changing the length keeps the
+ * diameter and platform line (NC / RC …) when the system has that length for them; changing the
+ * diameter keeps the length when it can.
  */
-export function nearestSize(system: LibSystem, d: number, L: number, change: 'd' | 'L' | null = null): LibSize {
+export function nearestSize(system: LibSystem, d: number, L: number, change: 'd' | 'L' | null = null, from?: LibSize): LibSize {
+  let pool = system.sizes;
+  if (change === 'L') {
+    const same = pool.filter((s) => s.d === (from?.d ?? d) && (!from || s.prefix === from.prefix));
+    if (same.length) pool = same;
+  } else if (change === 'd') {
+    const same = pool.filter((s) => s.L === (from?.L ?? L));
+    if (same.length) pool = same;
+  }
   const [wd, wl] = change === 'd' ? [1, 0.05] : change === 'L' ? [0.05, 1] : [3, 1];
-  let best = system.sizes[0];
+  let best = pool[0];
   let bs = Infinity;
-  for (const s of system.sizes) {
+  for (const s of pool) {
     const sc = Math.abs(s.d - d) * wd + Math.abs(s.L - L) * wl;
     if (sc < bs) [bs, best] = [sc, s];
   }
