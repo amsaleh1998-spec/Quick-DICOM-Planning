@@ -2330,15 +2330,15 @@ a.btn-link {
 }
 .ant-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   align-items: center;
   gap: 4px;
 }
 .ant-row button {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: 3px;
+  padding: 3px 6px;
   font-size: 12px;
 }
 .ant-row button.active {

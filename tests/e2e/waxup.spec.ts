@@ -619,6 +619,15 @@ test('antagonist cutting and abrasion', async ({ page }) => {
   await page.click('[data-cut-all="lower"]');
   await expect(page.locator('#status-msg')).toContainText(/lower tooth reaches into the antagonist|lower teeth cut/);
 
+  // adapt (instead of cut): the upper teeth get contacts with the lower ones
+  await page.click('[data-adapt="upper"]');
+  await expect(page.locator('[data-adapt="upper"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-cut="upper"]')).toHaveAttribute('aria-pressed', 'false');
+  const shaped0 = await page.evaluate(() => window.app.wax.model.teeth.filter((t: { jaw: string; geo: number }) => t.jaw === 'upper' && t.geo > 0).length);
+  await page.click('[data-cut-all="upper"]');
+  await expect(page.locator('#status-msg')).toContainText('upper teeth adapted to the antagonist');
+  expect(await page.evaluate(() => window.app.wax.model.teeth.filter((t: { jaw: string; geo: number }) => t.jaw === 'upper' && t.geo > 0).length)).toBeGreaterThan(shaped0);
+
   // abrasion: the back teeth worn flat, the front teeth unchanged; undo brings the library shape back
   await page.click('[data-ag="posterior"]');
   const top = (fdi: number) => page.evaluate((fdi) => Math.max(...Array.from(window.app.wax.model.tooth(fdi).pos as Float32Array).filter((_, i) => i % 3 === 2)), fdi);

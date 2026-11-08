@@ -44,8 +44,11 @@ export class WaxState {
   mirror = false;
   /** the tooth on the other side becomes the exact mirror image of the one changed (1-to-1) */
   mirrorShape = false;
-  /** cut the teeth of a jaw where they reach into the antagonist when they are moved / scaled */
-  cut: Record<Jaw, boolean> = { upper: false, lower: false };
+  /**
+   * instant shaping with the antagonist when teeth of a jaw are moved / scaled: cut where they reach
+   * into it, or adapt (cut and draw the closest cusps onto it for contacts)
+   */
+  cut: Record<Jaw, 'off' | 'cut' | 'adapt'> = { upper: 'off', lower: 'off' };
   /** distance kept to the antagonist when cutting (mm) */
   cutGap = 0;
   /** the abrasion slider changes the front or the back teeth */
