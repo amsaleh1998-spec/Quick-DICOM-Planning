@@ -6,7 +6,7 @@
 import { jawOrder, type Jaw } from '../waxup/library';
 import { Waxup, newGeo, type WaxTooth } from '../waxup/waxup';
 import { addTeeth, antagonistsOf, buildCutter, refitJaw, removeTooth, type ChainMode, type WaxAction, type WaxAdvTool, type WaxLimit, type WaxTab } from '../waxup/waxApp';
-import { RELIEF, abrade, cutTooth, groupOf, reliefScale, type ToothGroup } from '../waxup/occlusion';
+import { RELIEF, abrade, adaptTooth, cutTooth, groupOf, reliefScale, type ToothGroup } from '../waxup/occlusion';
 import { chainsOf, resetPositions, settleChain, toothPin } from '../waxup/chain';
 import { $, app, fromHex, hideLoading, setStatus, showLoading, toHex } from './shell';
 import { undoRedo } from './undoUi';
@@ -140,19 +140,20 @@ $('wax-redo').onclick = () => undoRedo(true);
 // ---- antagonist cutting ---------------------------------------------------------------------
 
 const cutButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-cut]'));
-cutButtons.forEach(
-  (b) =>
-    (b.onclick = () => {
-      const jaw = b.dataset.cut as Jaw;
-      wax.cut[jaw] = !wax.cut[jaw];
-      setStatus(
-        wax.cut[jaw]
-          ? `The ${jaw} teeth are cut where they reach into the antagonist whenever you move, rotate or scale them (Apply to all: every ${jaw} tooth now).`
-          : `Antagonist cutting off for the ${jaw} teeth.`,
-      );
-      app.changed();
-    }),
-);
+const adaptButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-adapt]'));
+function setCutMode(jaw: Jaw, mode: 'cut' | 'adapt') {
+  wax.cut[jaw] = wax.cut[jaw] === mode ? 'off' : mode;
+  setStatus(
+    wax.cut[jaw] === 'cut'
+      ? `The ${jaw} teeth are cut where they reach into the antagonist whenever you move, rotate or scale them (Apply to all: every ${jaw} tooth now).`
+      : wax.cut[jaw] === 'adapt'
+        ? `The ${jaw} teeth are adapted to the antagonist whenever you move, rotate or scale them: cut where they reach into it, the closest cusps drawn onto it for contacts.`
+        : `Instant shaping with the antagonist off for the ${jaw} teeth.`,
+  );
+  app.changed();
+}
+cutButtons.forEach((b) => (b.onclick = () => setCutMode(b.dataset.cut as Jaw, 'cut')));
+adaptButtons.forEach((b) => (b.onclick = () => setCutMode(b.dataset.adapt as Jaw, 'adapt')));
 const cutAllButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-cut-all]'));
 cutAllButtons.forEach(
   (b) =>
@@ -163,18 +164,25 @@ cutAllButtons.forEach(
         setStatus(`No antagonist for the ${jaw} teeth – place the scan of the opposing jaw or set up its teeth.`, true);
         return;
       }
+      const adapt = wax.cut[jaw] === 'adapt';
       app.commitHistory();
       let n = 0;
       for (const t of wax.model.teeth) {
         if (t.jaw !== jaw) continue;
-        const cut = cutTooth(hf, t.T, t.pos, wax.cutGap);
-        if (!cut) continue;
-        t.pos = cut;
+        const out = adapt ? adaptTooth(hf, t.T, t.pos, t.idx, t.jaw, wax.cutGap) : cutTooth(hf, t.T, t.pos, wax.cutGap);
+        if (!out) continue;
+        t.pos = out;
         t.geo = newGeo();
         t.ver = (t.ver ?? 0) + 1;
         n++;
       }
-      setStatus(n ? `${n} ${jaw} teeth cut where they reached into the antagonist – Ctrl+Z undoes it.` : `No ${jaw} tooth reaches into the antagonist.`);
+      setStatus(
+        n
+          ? `${n} ${jaw} teeth ${adapt ? 'adapted to' : 'cut where they reached into'} the antagonist – Ctrl+Z undoes it.`
+          : adapt
+            ? `No ${jaw} tooth is close enough to the antagonist (within 1.5 mm) to adapt.`
+            : `No ${jaw} tooth reaches into the antagonist.`,
+      );
       app.changed();
     }),
 );
@@ -323,8 +331,12 @@ export function refreshWaxupPanel() {
       const ok = names.length > 0;
       const b = cutButtons.find((x) => x.dataset.cut === jaw)!;
       b.disabled = !ok;
-      b.classList.toggle('active', ok && wax.cut[jaw]);
-      b.setAttribute('aria-pressed', String(ok && wax.cut[jaw]));
+      b.classList.toggle('active', ok && wax.cut[jaw] === 'cut');
+      b.setAttribute('aria-pressed', String(ok && wax.cut[jaw] === 'cut'));
+      const ab = adaptButtons.find((x) => x.dataset.adapt === jaw)!;
+      ab.disabled = !ok;
+      ab.classList.toggle('active', ok && wax.cut[jaw] === 'adapt');
+      ab.setAttribute('aria-pressed', String(ok && wax.cut[jaw] === 'adapt'));
       cutAllButtons.find((x) => x.dataset.cutAll === jaw)!.disabled = !ok;
       $(`panel-waxup`).querySelector<HTMLElement>(`[data-ant-src="${jaw}"]`)!.textContent = !has
         ? `No ${jaw} teeth yet`

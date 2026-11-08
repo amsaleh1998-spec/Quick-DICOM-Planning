@@ -48,7 +48,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['Simple', 'Move / Rotate / Scale for a plain drag · limit to mesial-distal, buccal-lingual or occlusal · move all teeth of the jaw'],
       ['Advanced', 'Axis scaling (drag a coloured handle) · Cusps (drag a blue dot) · Freeform (3D: drag = add, Ctrl = remove, Shift = smooth)'],
       ['Symmetry', 'Anterior symmetry mirrors every change to the other side · 1-to-1 makes that tooth the exact mirror image'],
-      ['Antagonist', 'Cut (per jaw): teeth you move, rotate or scale are cut where they reach into the opposing jaw (its scan or waxup teeth) · Apply to all: every tooth of the jaw now'],
+      ['Antagonist', 'Per jaw – Cut: teeth you move, rotate or scale are cut where they reach into the opposing jaw (its scan or waxup teeth) · Adapt: also drawn onto it where they come closest, for contacts · Apply to all: every tooth of the jaw now'],
       ['Abrasion', 'Front or back teeth: drag the slider towards Flat to wear the cusps down, towards Pointed to sharpen them; teeth added later follow'],
       ['Chain', 'Chain: the neighbours follow, fading towards pinned teeth · Single: neighbours slide to stay in contact · Tube: slide along the arch'],
       ['Chain controls (3D)', 'Click a green point to pin a tooth or chain end (red) · drag a disc to move that end · Reset puts teeth back on the arch'],

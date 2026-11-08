@@ -294,7 +294,9 @@ the future teeth.
     *Antagonist*: with *Cut* on for a jaw, a tooth that is moved, rotated or scaled is cut where it reaches into the
     opposing jaw – the visible, placed scans of that jaw (by their kind, or lying on the far side of the occlusal plane)
     and its visible waxup teeth – keeping the set distance; *Apply to all* cuts every tooth of the jaw at once. The
-    cut follows the antagonist's surface along the vertical. *Abrasion*: for the front (13–23, 33–43) or the back
+    cut follows the antagonist's surface along the vertical. *Adapt* (instead of *Cut*) also changes the shape for
+    contacts: the occlusal surface where the tooth comes closest to the antagonist (within 1.5 mm) is drawn onto it in
+    smooth contact areas, the rest of the tooth stays. *Abrasion*: for the front (13–23, 33–43) or the back
     teeth, the slider wears the cusps and incisal edges flat or makes them more pointed (the library shape in the
     middle); teeth added later get the same abrasion, and it is saved with the project.
   - **Chain**: the teeth of a row of neighbouring positions form a chain, shown in 3D as a tube through their contacts

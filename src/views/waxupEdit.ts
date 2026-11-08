@@ -45,7 +45,7 @@ import {
   toothScale,
 } from '../waxup/chain';
 import { Jaw, contralateral } from '../waxup/library';
-import { HeightField, cutTooth } from '../waxup/occlusion';
+import { HeightField, adaptTooth, cutTooth } from '../waxup/occlusion';
 import { buildCutter } from '../waxup/waxApp';
 import type { Pt } from './View';
 
@@ -162,7 +162,7 @@ export class WaxupEditor {
   private hoverAt: Vec3 | null = null;
   private ctlCache: { key: string; ctl: ChainControls[] } | null = null;
   /** antagonist cutting during a drag: the teeth's vertices when it started, and their cut copies */
-  private cutting: { hf: HeightField; gap: number; base: Map<WaxTooth, { pos: Float32Array; idx: Uint32Array; geo: number }>; own: Map<WaxTooth, number> } | null = null;
+  private cutting: { hf: HeightField; gap: number; adapt: boolean; base: Map<WaxTooth, { pos: Float32Array; idx: Uint32Array; geo: number }>; own: Map<WaxTooth, number> } | null = null;
 
   constructor(
     private app: App,
@@ -718,11 +718,11 @@ export class WaxupEditor {
   private startCut(jaw: Jaw) {
     this.cutting = null;
     const w = this.w;
-    if (!w.editing || !w.cut[jaw]) return;
+    if (!w.editing || w.cut[jaw] === 'off') return;
     const hf = buildCutter(this.app, jaw);
     if (!hf) return;
     const base = new Map(this.m.teeth.filter((t) => t.jaw === jaw).map((t) => [t, { pos: t.pos, idx: t.idx, geo: t.geo }]));
-    this.cutting = { hf, gap: w.cutGap, base, own: new Map() };
+    this.cutting = { hf, gap: w.cutGap, adapt: w.cut[jaw] === 'adapt', base, own: new Map() };
   }
 
   /** Teeth that moved are cut where they reach into the antagonist (from their shape at the start). */
@@ -732,7 +732,7 @@ export class WaxupEditor {
     for (const [t, b] of c.base) {
       const t0 = T0.get(t);
       const moved = !t0 || t.T.some((v, i) => v !== t0[i]);
-      const cut = moved ? cutTooth(c.hf, t.T, b.pos, c.gap) : null;
+      const cut = !moved ? null : c.adapt ? adaptTooth(c.hf, t.T, b.pos, b.idx, t.jaw, c.gap) : cutTooth(c.hf, t.T, b.pos, c.gap);
       if (cut) {
         let g = c.own.get(t);
         if (!g) c.own.set(t, (g = newGeo()));
@@ -875,7 +875,7 @@ export class WaxupEditor {
     const c = this.cutting;
     if (c)
       for (const o of copies) {
-        const cut = cutTooth(c.hf, o.T, o.pos, c.gap);
+        const cut = c.adapt ? adaptTooth(c.hf, o.T, o.pos, o.idx, o.jaw, c.gap) : cutTooth(c.hf, o.T, o.pos, c.gap);
         if (cut) {
           o.pos = cut;
           o.ver = (o.ver ?? 0) + 1;
