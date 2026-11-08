@@ -560,3 +560,83 @@ test('simple limits, scaling in one direction, axis handles and 1-to-1 mirroring
   // saved with the project as its own mesh
   expect(await page.evaluate(() => window.app.wax.model.tooth(46).idx !== window.app.wax.model.lib.teeth.get(46).idx)).toBe(true);
 });
+
+test('antagonist cutting and abrasion', async ({ page }) => {
+  test.setTimeout(300_000);
+  await curveAndLowerArch(page);
+  await page.click('#wax-all-upper');
+  await expect.poll(() => page.evaluate(() => window.app.wax.model.teeth.length), { timeout: 20_000 }).toBe(28);
+  await page.click('[data-wtab="advanced"]');
+  // the lower teeth are the upper teeth's antagonist (and the other way round)
+  await expect(page.locator('[data-ant-src="upper"]')).toHaveText('Against: lower waxup teeth');
+  await expect(page.locator('[data-ant-src="lower"]')).toHaveText('Against: upper waxup teeth');
+
+  // cut on for the upper jaw: 16 pushed down into the lower teeth is cut, and undo restores it
+  await page.click('[data-cut="upper"]');
+  await expect(page.locator('[data-cut="upper"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.click('[data-wtab="simple"]');
+  await page.check('input[name="wax-limit"][value="oc"]');
+  await maximize3d(page, true);
+  // seen from the patient's right side, where 16 is in front
+  for (const side of ['right', 'left']) {
+    await page.evaluate((side) => (window.app.view3d.setPreset(side), window.app.changed()), side);
+    await page.waitForTimeout(600);
+    const q = await in3d(page, 16);
+    const hit = await page.evaluate((q) => {
+      const r = window.app.view3d.el.getBoundingClientRect();
+      return window.app.view3d.toothAt([q[0] - r.x, q[1] - r.y])?.fdi;
+    }, q);
+    if (hit === 16) break;
+  }
+  // the lowest point of 16 (along the vertical) before and after
+  const lowest = () =>
+    page.evaluate(() => {
+      const w = window.app.wax;
+      const t = w.model.tooth(16);
+      const up = window.app.frame[2];
+      const T = t.T, p = t.pos;
+      let lo = Infinity;
+      for (let i = 0; i < p.length; i += 3) {
+        const v = [0, 1, 2].map((r) => T[r * 4] * p[i] + T[r * 4 + 1] * p[i + 1] + T[r * 4 + 2] * p[i + 2] + T[r * 4 + 3]);
+        lo = Math.min(lo, v[0] * up[0] + v[1] * up[1] + v[2] * up[2]);
+      }
+      return lo;
+    });
+  const lo0 = await lowest();
+  const q = await in3d(page, 16);
+  await page.mouse.move(q[0], q[1]);
+  await page.mouse.down();
+  await page.mouse.move(q[0], q[1] + 40, { steps: 6 });
+  await page.mouse.up();
+  const moved = await page.evaluate(() => window.app.wax.model.tooth(16).geo);
+  expect(moved).toBeGreaterThan(0);
+  expect(await lowest()).toBeLessThan(lo0);
+  await page.click('#wax-undo');
+  expect(await page.evaluate(() => window.app.wax.model.tooth(16).geo)).toBe(0);
+
+  // apply to all: the lower teeth against the upper ones
+  await page.click('[data-wtab="advanced"]');
+  await page.click('[data-cut-all="lower"]');
+  await expect(page.locator('#status-msg')).toContainText(/lower tooth reaches into the antagonist|lower teeth cut/);
+
+  // abrasion: the back teeth worn flat, the front teeth unchanged; undo brings the library shape back
+  await page.click('[data-ag="posterior"]');
+  const top = (fdi: number) => page.evaluate((fdi) => Math.max(...Array.from(window.app.wax.model.tooth(fdi).pos as Float32Array).filter((_, i) => i % 3 === 2)), fdi);
+  const top46 = await top(46), top41 = await top(41);
+  await page.evaluate(() => {
+    const s = document.getElementById('wax-abr') as HTMLInputElement;
+    s.value = '0.8';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+    s.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(page.locator('#wax-abr-val')).toHaveText('flat 80 %');
+  expect(await top(46)).toBeLessThan(top46 - 0.8);
+  expect(await top(41)).toBeCloseTo(top41, 5);
+  // teeth added later get the same abrasion
+  await page.click('#wax-chart button[data-fdi="48"]');
+  await expect.poll(() => page.evaluate(() => window.app.wax.model.tooth(48)?.geo ?? -1)).toBeGreaterThan(0);
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('#wax-abr-val')).toHaveText('library');
+  expect(await top(46)).toBeCloseTo(top46, 5);
+});
