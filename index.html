@@ -279,13 +279,22 @@
               <div class="row">
                 <label class="grow">Name <input id="imp-name" type="text" maxlength="40" placeholder="e.g. 36 or Molar left" /></label>
               </div>
-              <div class="row">
-                <label>Diameter <input id="imp-d" type="number" step="0.1" min="2" max="8" /> mm</label>
-                <label>Length <input id="imp-l" type="number" step="0.5" min="4" max="60" /> mm</label>
+              <div class="imp-model">
+                <label class="small">Implant <select id="imp-brand" title="Generic (any size) or a manufacturer's implant"></select></label>
+                <div class="row imp-lib-row" id="imp-lib-row">
+                  <select id="imp-system" title="System"></select>
+                  <select id="imp-size" title="Size (diameter × length)"></select>
+                </div>
               </div>
-              <div class="row">
-                <label class="check small" title="Give the implant a narrower apex"><input id="imp-tapered" type="checkbox" /> Tapered</label>
-                <label id="imp-ad-label">Apex Ø <input id="imp-ad" type="number" step="0.1" min="1.5" max="8" /> mm</label>
+              <div id="imp-generic">
+                <div class="row">
+                  <label>Diameter <input id="imp-d" type="number" step="0.1" min="2" max="8" /> mm</label>
+                  <label>Length <input id="imp-l" type="number" step="0.5" min="4" max="60" /> mm</label>
+                </div>
+                <div class="row">
+                  <label class="check small" title="Give the implant a narrower apex"><input id="imp-tapered" type="checkbox" /> Tapered</label>
+                  <label id="imp-ad-label">Apex Ø <input id="imp-ad" type="number" step="0.1" min="1.5" max="8" /> mm</label>
+                </div>
               </div>
               <div id="imp-info" class="muted small"></div>
               <div class="row">
@@ -328,11 +337,20 @@
             </details>
             <details class="sub">
               <summary>Defaults for new implants</summary>
-              <div class="row small">
-                <label>Ø <input id="def-d" type="number" step="0.1" min="2" max="8" /> mm</label>
-                <label>Length <input id="def-l" type="number" step="0.5" min="4" max="60" /> mm</label>
+              <div class="imp-model">
+                <label class="small">Implant <select id="def-brand" title="New implants: generic or this manufacturer's implant (choosing a model for an implant makes it the default)"></select></label>
+                <div class="row imp-lib-row" id="def-lib-row">
+                  <select id="def-system" title="System"></select>
+                  <select id="def-size" title="Size (diameter × length)"></select>
+                </div>
               </div>
-              <label class="check small" title="New implants get an apex 1 mm narrower than the platform (can be changed per implant)"><input id="def-tapered" type="checkbox" checked /> Tapered (apex 1 mm narrower)</label>
+              <div id="def-generic">
+                <div class="row small">
+                  <label>Ø <input id="def-d" type="number" step="0.1" min="2" max="8" /> mm</label>
+                  <label>Length <input id="def-l" type="number" step="0.5" min="4" max="60" /> mm</label>
+                </div>
+                <label class="check small" title="New implants get an apex 1 mm narrower than the platform (can be changed per implant)"><input id="def-tapered" type="checkbox" checked /> Tapered (apex 1 mm narrower)</label>
+              </div>
               <label class="check small"><input id="place-parallel" type="checkbox" checked /> Parallel to the selected implant</label>
             </details>
           </section>

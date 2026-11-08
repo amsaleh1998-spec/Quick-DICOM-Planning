@@ -10,7 +10,9 @@ import { Frame, Vec3, add, cross, dot, fromFrame, neg, normalize, reorthonormali
 import { Volume } from '../volume';
 import { Pt, View, drawLabel } from './View';
 import { ImplantEditor } from './implantEdit';
-import { Implant, implantParts } from '../implant';
+import { Implant, implantParts, platformOf } from '../implant';
+import { vertexNormals } from '../meshio';
+import { meshOf, meshWorld } from '../implantLibrary';
 
 const MAX_CYL = 48;
 const MAX_NERVE_SEG = 1024;
@@ -192,22 +194,30 @@ void main() {
   float tGuide = 1e20;
   vec3 nGuide = vec3(0.0);
   vec3 cGuide = vec3(0.0);
+  // library implants are drawn as meshes (with the scans); their envelope (C.w < 0) only shows
+  // them where something covers them
+  float tEnv = 1e20;
+  vec3 nEnv = vec3(0.0);
+  vec3 cEnv = vec3(0.0);
   for (int i = 0; i < ${MAX_CYL}; i++) {
     if (i >= uNumCyl) break;
     vec4 A = uCyl[i * 3];
     vec4 B = uCyl[i * 3 + 1];
     vec4 C = uCyl[i * 3 + 2];
     float half_ = abs(B.w);
-    vec4 h = coneHit(ro, rd, A.xyz - B.xyz * half_, A.xyz + B.xyz * half_, A.w, C.w);
+    vec4 h = coneHit(ro, rd, A.xyz - B.xyz * half_, A.xyz + B.xyz * half_, A.w, abs(C.w));
     if (h.x <= 0.0) continue;
     if (B.w < 0.0) {
       if (h.x < tGuide) { tGuide = h.x; nGuide = h.yzw; cGuide = C.rgb; }
+    } else if (C.w < 0.0) {
+      if (h.x < tEnv) { tEnv = h.x; nEnv = h.yzw; cEnv = C.rgb; }
     } else if (h.x < tImp) { tImp = h.x; nImp = h.yzw; cImp = C.rgb; }
   }
   // implants / abutments on their own (tImp may become a nerve below)
   float tCyl = tImp;
   vec3 nCyl = nImp;
   vec3 cCyl = cImp;
+  if (tEnv < tCyl) { tCyl = tEnv; nCyl = nEnv; cCyl = cEnv; }
   // nerve canals: opaque in front, shown through the bone when hidden
   float tNerve = 1e20;
   vec3 nNerve = vec3(0.0);
@@ -1229,7 +1239,9 @@ export class View3D extends View {
               ? ABUTMENT_SELECTED_COLOR
               : ABUTMENT_COLOR;
       const half = c.kind === 'prosthetic' ? -c.half : c.half; // sign marks translucent guides
-      cyl.set([...c.center, c.r0, ...c.axis, half, col[0] / 255, col[1] / 255, col[2] / 255, c.r1], i * 12);
+      // a library implant whose mesh is drawn: its cone only for the view through what covers it
+      const meshed = c.kind === 'implant' && !!c.implant.lib && !!meshOf(c.implant.lib.id);
+      cyl.set([...c.center, c.r0, ...c.axis, half, col[0] / 255, col[1] / 255, col[2] / 255, meshed ? -Math.max(c.r1, 1e-3) : c.r1], i * 12);
     });
     gl.uniform1i(u.uNumCyl, parts.length);
     gl.uniform4fv(u.uCyl, cyl);
@@ -1259,8 +1271,9 @@ export class View3D extends View {
     const wax = app.wax;
     const teeth = wax.shown();
     if (!mg || !this.scanFbo) return false;
-    mg.prune(new Set<unknown>([...app.scans, ...wax.model.teeth]));
-    if (!scans.length && !teeth.length) return false;
+    const libImps = app.implants.filter((imp) => !imp.hidden && imp.lib && meshOf(imp.lib.id));
+    mg.prune(new Set<unknown>([...app.scans, ...wax.model.teeth, ...libImps]));
+    if (!scans.length && !teeth.length && !libImps.length) return false;
     const size = `${W}x${H}`;
     if (size !== this.scanFboSize) {
       gl.bindTexture(gl.TEXTURE_2D, this.scanColTex);
@@ -1321,6 +1334,24 @@ export class View3D extends View {
             vc = true;
           }
           mg.draw(t, mvp, camPos, { color, opacity: wax.opacity, vertexColors: vc });
+        },
+      });
+    }
+    // library implants: their meshes, in the implant colours
+    for (const imp of libImps) {
+      items.push({
+        opacity: 1,
+        draw: () => {
+          const m = meshOf(imp.lib!.id)!;
+          const p = platformOf(imp);
+          const key = `${imp.lib!.id}|${p.join(',')}|${imp.axis.join(',')}`;
+          if (this.uploaded.get(imp) !== key || !mg.has(imp)) {
+            const pos = meshWorld(imp, m, p, imp.axis);
+            mg.upload(imp, pos, vertexNormals(pos, m.idx), m.idx, null);
+            this.uploaded.set(imp, key);
+          }
+          const col = imp.id === app.selectedId ? IMPLANT_SELECTED_COLOR : IMPLANT_COLOR;
+          mg.draw(imp, mvp, camPos, { color: col, opacity: 1, vertexColors: false });
         },
       });
     }

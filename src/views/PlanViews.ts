@@ -8,6 +8,8 @@ import { ImplantEditor, projectedRadialAxial } from './implantEdit';
 import { composeSegmentation, drawNervesProjected } from './overlays';
 import { drawPanoScans } from './scanContours';
 import { drawPanoWax, waxAt } from './waxContours';
+import { silhouette, sideOf } from './implantSections';
+import { meshOf } from '../implantLibrary';
 import { WaxupEditor, intoScreen } from './waxupEdit';
 
 const CURVE_COLOR = '#4fb3ff';
@@ -1119,10 +1121,23 @@ export class PanoView extends View {
       const ra = part.r1 / this.vs.scale;
       const rb = part.r0 / this.vs.scale;
       o.beginPath();
-      o.moveTo(a.x + nx * ra, a.y + ny * ra);
-      o.lineTo(b.x + nx * rb, b.y + ny * rb);
-      o.lineTo(b.x - nx * rb, b.y - ny * rb);
-      o.lineTo(a.x - nx * ra, a.y - ny * ra);
+      const mesh = isImp && imp.lib && app.curve ? meshOf(imp.lib.id) : null;
+      if (mesh) {
+        // library implant: its silhouette across the panoramic (threads and all)
+        const cp = app.curve!.at(this.project(imp.center).s);
+        const F = app.frame;
+        const into: Vec3 = [F[0][0] * cp.n[0] + F[1][0] * cp.n[1], F[0][1] * cp.n[0] + F[1][1] * cp.n[1], F[0][2] * cp.n[0] + F[1][2] * cp.n[1]];
+        silhouette(imp, mesh, sideOf(imp.axis, into)).forEach((w, i) => {
+          const q = this.project(w);
+          if (i) o.lineTo(q.x, q.y);
+          else o.moveTo(q.x, q.y);
+        });
+      } else {
+        o.moveTo(a.x + nx * ra, a.y + ny * ra);
+        o.lineTo(b.x + nx * rb, b.y + ny * rb);
+        o.lineTo(b.x - nx * rb, b.y - ny * rb);
+        o.lineTo(a.x - nx * ra, a.y - ny * ra);
+      }
       o.closePath();
       o.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${isImp ? 0.35 : isGuide ? 0.1 : 0.5})`;
       o.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${isGuide ? 0.8 : 1})`;

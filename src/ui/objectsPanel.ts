@@ -167,7 +167,7 @@ function collect(): Group[] {
     const items: Item[] = app.implants.map((imp) => ({
       key: `imp${imp.id}`,
       name: imp.name,
-      info: `Ø${imp.diameter.toFixed(1)} × ${imp.length.toFixed(1)}`,
+      info: imp.lib ? imp.lib.id.split(' / ').slice(1).join(' ') : `Ø${imp.diameter.toFixed(1)} × ${imp.length.toFixed(1)}`,
       color: [64, 214, 128],
       visible: !imp.hidden,
       set: (v) => (imp.hidden = !v),

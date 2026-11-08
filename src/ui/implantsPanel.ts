@@ -4,6 +4,7 @@
 import type { Jaw } from '../app';
 import { MAX_IMPLANT_LENGTH, MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronalDiameter } from '../implant';
 import { NERVE_SAFETY_MM } from '../nerve';
+import { LibSystem, findModel, implantIndex, loadImplantIndex, modelId, nearestSize, setOnMeshesLoaded } from '../implantLibrary';
 import { $, EYE, EYE_OFF, app, clampNum, escapeHtml } from './shell';
 
 const placeButton = (jaw: Jaw) => () => {
@@ -67,6 +68,125 @@ impL.oninput = () => {
   const imp = app.selectedImplant();
   if (imp && impL.value) app.setLength(imp.id, clampNum(impL.value, 2, MAX_IMPLANT_LENGTH, imp.length));
 };
+
+// ---- implant library: brand / system / size ----------------------------------------------------
+
+const MODEL_KEY = 'qdp.implantModel';
+/** Three selects choosing Generic or a library model; `dims`: the nominal size to stay close to. */
+function modelPicker(prefix: 'imp' | 'def', dims: () => { d: number; L: number }, apply: (id: string | null) => void) {
+  const brandSel = $<HTMLSelectElement>(`${prefix}-brand`);
+  const systemSel = $<HTMLSelectElement>(`${prefix}-system`);
+  const sizeSel = $<HTMLSelectElement>(`${prefix}-size`);
+  const row = $(`${prefix}-lib-row`);
+  let shown = '\u0000';
+  const systemOf = () => implantIndex()?.brands.find((b) => b.name === brandSel.value)?.systems.find((s) => s.name === systemSel.value) ?? null;
+  const fillSystems = () => {
+    const b = implantIndex()?.brands.find((x) => x.name === brandSel.value);
+    systemSel.innerHTML = (b?.systems ?? []).map((s) => `<option>${escapeHtml(s.name)}</option>`).join('');
+  };
+  const fillSizes = (sys: LibSystem | null) => {
+    if (!sys) return (sizeSel.innerHTML = '');
+    // grouped by platform / line (NC, RC …) when the system has several
+    const groups = [...new Set(sys.sizes.map((z) => z.prefix))];
+    const opt = (z: LibSystem['sizes'][number]) => `<option value="${escapeHtml(z.label)}">${escapeHtml(groups.length > 1 ? z.label.replace(z.prefix + ' ', '') : z.label)}</option>`;
+    sizeSel.innerHTML =
+      groups.length > 1
+        ? groups.map((g) => `<optgroup label="${escapeHtml(g || 'Standard')}">${sys.sizes.filter((z) => z.prefix === g).map(opt).join('')}</optgroup>`).join('')
+        : sys.sizes.map(opt).join('');
+  };
+  const pick = () => {
+    const sys = systemOf();
+    if (!sys) return apply(null);
+    apply(modelId(brandSel.value, sys.name, sizeSel.value));
+  };
+  brandSel.onchange = () => {
+    if (!brandSel.value) return apply(null);
+    fillSystems();
+    const sys = systemOf();
+    fillSizes(sys);
+    if (sys) sizeSel.value = nearestSize(sys, dims().d, dims().L).label;
+    pick();
+  };
+  systemSel.onchange = () => {
+    const sys = systemOf();
+    fillSizes(sys);
+    if (sys) sizeSel.value = nearestSize(sys, dims().d, dims().L).label;
+    pick();
+  };
+  sizeSel.onchange = pick;
+  return {
+    /** show a model (or generic) */
+    set(id: string | null) {
+      const ix = implantIndex();
+      const key = `${id}|${!!ix}`;
+      row.classList.toggle('hidden', !id);
+      if (key === shown) return;
+      shown = key;
+      brandSel.innerHTML = `<option value="">Generic</option>` + (ix?.brands ?? []).map((b) => `<option>${escapeHtml(b.name)}</option>`).join('');
+      const f = id ? findModel(id) : null;
+      brandSel.value = f ? f.brand.name : '';
+      if (f) {
+        fillSystems();
+        systemSel.value = f.system.name;
+        fillSizes(f.system);
+        sizeSel.value = f.size.label;
+      }
+    },
+  };
+}
+
+const nominal = (id: string | null | undefined) => (id ? findModel(id)?.size : null);
+const impPicker = modelPicker(
+  'imp',
+  () => {
+    const imp = app.selectedImplant();
+    const n = nominal(imp?.lib?.id);
+    return n ? { d: n.d, L: n.L } : { d: imp?.diameter ?? 4, L: imp?.length ?? 10 };
+  },
+  (id) => {
+    const imp = app.selectedImplant();
+    if (!imp) return;
+    app.applyModel(imp, id);
+    // the model chosen last is the one new implants get
+    setDefaultModel(id);
+    app.implantChanged(imp, true);
+  },
+);
+const defPicker = modelPicker(
+  'def',
+  () => {
+    const n = nominal(app.defaultModel);
+    return n ? { d: n.d, L: n.L } : { d: app.defaultDiameter, L: app.defaultLength };
+  },
+  (id) => {
+    setDefaultModel(id);
+    app.changed();
+  },
+);
+function setDefaultModel(id: string | null) {
+  app.defaultModel = id;
+  try {
+    if (id) localStorage.setItem(MODEL_KEY, id);
+    else localStorage.removeItem(MODEL_KEY);
+  } catch {
+    /* not remembered */
+  }
+}
+try {
+  app.defaultModel = localStorage.getItem(MODEL_KEY);
+} catch {
+  /* none */
+}
+setOnMeshesLoaded(() => app.changed());
+loadImplantIndex()
+  .then(() => {
+    // implants of an opened project start loading their meshes
+    for (const imp of app.implants) if (imp.lib) app.applyModel(imp, imp.lib.id);
+    app.changed();
+  })
+  .catch(() => {
+    /* offline: generic implants only */
+  });
 
 // parallel placement
 const placeParallel = $<HTMLInputElement>('place-parallel');
@@ -187,7 +307,8 @@ export function refreshImplantsPanel() {
     const muaBtn = imp.abutment
       ? `<button class="vis-btn mua${imp.abutmentHidden ? ' off' : ''}" data-id="${imp.id}" data-kind="ab" title="${imp.abutmentHidden ? 'Show' : 'Hide'} the abutment (MUA)">MUA</button>`
       : '';
-    const html = `<span class="vis">${eye}${muaBtn}</span><span class="nm">${escapeHtml(imp.name)}${warn}</span><span class="dim">${dia} × ${imp.length.toFixed(1)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
+    const size = imp.lib ? imp.lib.id.split(' / ').slice(1).join(' ') : `${dia} × ${imp.length.toFixed(1)}`;
+    const html = `<span class="vis">${eye}${muaBtn}</span><span class="nm">${escapeHtml(imp.name)}${warn}</span><span class="dim">${escapeHtml(size)} · ${app.implantTilt(imp).toFixed(0)}°${ab}</span>`;
     if (li.innerHTML !== html) li.innerHTML = html;
     li.className = (imp.id === app.selectedId ? 'sel' : '') + (imp.hidden ? ' hidden-imp' : '');
     if (implantList.children[idx] !== li) implantList.insertBefore(li, implantList.children[idx] ?? null);
@@ -201,7 +322,11 @@ export function refreshImplantsPanel() {
   }
   const sel = app.selectedImplant();
   $('implant-edit').classList.toggle('hidden', !sel);
+  defPicker.set(app.defaultModel && findModel(app.defaultModel) ? app.defaultModel : null);
+  $('def-generic').classList.toggle('hidden', !!(app.defaultModel && findModel(app.defaultModel)));
   if (sel) {
+    impPicker.set(sel.lib?.id ?? null);
+    $('imp-generic').classList.toggle('hidden', !!sel.lib);
     if (document.activeElement !== impName) impName.value = sel.name;
     if (document.activeElement !== impD) impD.value = sel.diameter.toFixed(1);
     const tapered = sel.apicalDiameter !== null;
@@ -213,6 +338,10 @@ export function refreshImplantsPanel() {
     if (document.activeElement !== impL) impL.value = sel.length.toFixed(1);
     const others = app.implants.filter((i) => i !== sel);
     const lines = [`Inclination ${app.implantTilt(sel).toFixed(1)}° from vertical`];
+    if (sel.lib) {
+      const ap = isTapered(sel) ? ` → apex Ø${apicalDiameterOf(sel).toFixed(2)}` : '';
+      lines.unshift(`Body Ø${sel.diameter.toFixed(2)}${ap} · ${sel.length.toFixed(2)} mm in bone${sel.lib.top > 0.05 ? ` + ${sel.lib.top.toFixed(1)} mm above the platform` : ''}`);
+    }
     if (sel.abutment) {
       const d = app.prostheticAxis(sel);
       const t = (Math.acos(Math.min(1, Math.abs(d[0] * app.frame[2][0] + d[1] * app.frame[2][1] + d[2] * app.frame[2][2]))) * 180) / Math.PI;
