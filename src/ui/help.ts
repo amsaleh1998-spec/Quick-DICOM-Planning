@@ -74,6 +74,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
     rows: [
       ['Ctrl+O', 'Open a CBCT'],
       ['Ctrl+S', 'Save the project'],
+      ['Export → Planning report', 'PDF: overview, implant list, one page per implant'],
       ['Drop', 'DICOM files / folder / ZIP / project, or STL / PLY / OBJ scans'],
     ],
   },

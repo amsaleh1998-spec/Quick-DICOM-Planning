@@ -296,6 +296,20 @@ the size: the implant keeps its platform where it is and takes the model's shape
   from the manufacturers' implant STLs by `scripts/make-implant-library.py` (decimated to at most 5,000 triangles,
   platform / apex / connection measured on the mesh).
 
+## Planning report (Export → Planning report (PDF))
+
+A PDF for the patient file or the surgeon, A4 landscape, with the patient data and the scan in every header:
+
+- **Overview**: the planning layout as it is on screen (axial, panoramic, cross-sections, tangential, 3D).
+- **Implant list**: position, manufacturer, system / model, size, length, diameters, abutment and inclination of
+  every implant.
+- **One page per implant**: its details (implant, measured length / diameters for library models, abutment, jaw,
+  inclination, abutment axis, angles to its neighbours, distance to the nerves with a warning under 2 mm) next to
+  the three cross-sections, the axial and tangential slices, the 3D view and the panoramic, each enlarged while it
+  is captured and cut around the implant.
+
+Hidden implants are left out. There is no drill protocol or article numbers (the app has no sleeve / drill data).
+
 ## Waxup (② Plan → Waxup panel)
 
 A tooth library set up on the patient's arch, shaped the way a dental CAD does it, so implants can be planned under

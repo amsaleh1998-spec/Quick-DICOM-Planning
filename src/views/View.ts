@@ -547,6 +547,32 @@ export abstract class View {
 
   // ---- rendering ----------------------------------------------------------
 
+  /** Screen position (CSS pixels in the view) of a world point, for reports; null when off the view. */
+  screenPoint(_w: Vec3): [number, number] | null {
+    return null;
+  }
+
+  /** The canvas holding the view's image (under the overlay). */
+  protected baseCanvas(): HTMLCanvasElement {
+    return this.imgCanvas;
+  }
+
+  /** The view as it looks now (image and overlay), drawn afresh – for reports. Null when hidden. */
+  capture(): HTMLCanvasElement | null {
+    if (!this.visible) return null;
+    this.render();
+    const c = document.createElement('canvas');
+    c.width = this.ovCanvas.width;
+    c.height = this.ovCanvas.height;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, c.width, c.height);
+    // straight after render: a WebGL image is still there to copy
+    g.drawImage(this.baseCanvas(), 0, 0, c.width, c.height);
+    g.drawImage(this.ovCanvas, 0, 0);
+    return c;
+  }
+
   render() {
     if (!this.visible) return;
     if (!this.vs.fitted && this.app.vol) {
@@ -1173,6 +1199,11 @@ export abstract class PlaneView extends View {
   }
 
   /** World -> [x, y, signed distance from plane in mm]. */
+  override screenPoint(w: Vec3): [number, number] | null {
+    const s = this.worldToScreen(w);
+    return s ? [s[0], s[1]] : null;
+  }
+
   worldToScreen(w: Vec3, pl = this.currentPlane()): [number, number, number] | null {
     if (!pl) return null;
     const q = sub(w, pl.center);
