@@ -286,15 +286,15 @@ export class MprView extends PlaneView {
 
     // orientation letters
     const lbl = (d: Vec3) => orientationLabel(d);
-    drawLabel(o, lbl(u), this.w - 8, this.h / 2 + 4, '#9fb0c8', 'right');
-    drawLabel(o, lbl(neg(u)), 8, this.h / 2 + 4, '#9fb0c8');
-    drawLabel(o, lbl(neg(v)), this.w / 2, 34, '#9fb0c8', 'center');
-    drawLabel(o, lbl(v), this.w / 2, this.h - 8, '#9fb0c8', 'center');
+    drawLabel(o, lbl(u), this.w - 8, this.h / 2 + 4, '#ababb2', 'right');
+    drawLabel(o, lbl(neg(u)), 8, this.h / 2 + 4, '#ababb2');
+    drawLabel(o, lbl(neg(v)), this.w / 2, 34, '#ababb2', 'center');
+    drawLabel(o, lbl(v), this.w / 2, this.h - 8, '#ababb2', 'center');
 
     const fx = toFrame(X, app.O, app.frame);
     const na = NORMAL_AXIS[this.orient];
-    drawLabel(o, `${fx[na].toFixed(1)} mm`, 8, this.h - 8, '#9fb0c8');
+    drawLabel(o, `${fx[na].toFixed(1)} mm`, 8, this.h - 8, '#ababb2');
     const angle = app.viewTiltDeg(this.orient);
-    if (angle > 0.05) drawLabel(o, `tilt ${angle.toFixed(1)}°`, this.w - 8, this.h - 8, '#9fb0c8', 'right');
+    if (angle > 0.05) drawLabel(o, `tilt ${angle.toFixed(1)}°`, this.w - 8, this.h - 8, '#ababb2', 'right');
   }
 }

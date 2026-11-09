@@ -621,7 +621,7 @@ export abstract class View {
     if (key === null) {
       const msg = this.emptyMessage();
       if (msg) {
-        o.fillStyle = '#8a94a6';
+        o.fillStyle = '#a1a1a8';
         o.font = '13px system-ui, sans-serif';
         o.textAlign = 'center';
         wrapText(o, msg, this.w / 2, this.h / 2, this.w - 30, 18);
@@ -638,10 +638,65 @@ export abstract class View {
     this.updateScrollbar();
   }
 
+  /**
+   * Short status beside the title (slice level, position, angle …): one text, or several from
+   * the longest to the shortest – the first that fits is shown.
+   */
+  protected subtitle(): string | string[] | null {
+    return null;
+  }
+
+  /** Controls along the top of the view: where the first row's free space ends and the second's begins. */
+  private headerSpace(): { end1: number; start2: number; end2: number } {
+    const box = this.el.getBoundingClientRect();
+    let end1 = this.w - 32; // maximize button
+    let start2 = 8;
+    let end2 = this.w - 12;
+    for (const c of Array.from(this.el.children) as HTMLElement[]) {
+      if (c instanceof HTMLCanvasElement || c === this.sbar || c.offsetParent === null) continue;
+      const r = c.getBoundingClientRect();
+      const top = r.top - box.top, left = r.left - box.left, right = r.right - box.left;
+      if (r.width === 0) continue;
+      if (top < 18 && left > 40) end1 = Math.min(end1, left);
+      else if (top >= 18 && top < 44) {
+        if (left < 60) start2 = Math.max(start2, right + 6);
+        else end2 = Math.min(end2, left);
+      }
+    }
+    return { end1, start2, end2 };
+  }
+
+  /** Title in the view's colour, then its status in grey – on the title's line or under it, never under other controls. */
   protected drawTitle(o: CanvasRenderingContext2D) {
-    o.font = '600 12px system-ui, sans-serif';
+    o.save();
+    // legible over bright anatomy as well
+    o.shadowColor = 'rgba(0,0,0,0.9)';
+    o.shadowBlur = 3;
+    o.textAlign = 'left';
+    o.font = `600 12px ${UI_FONT}`;
     o.fillStyle = this.color;
     o.fillText(this.title, 8, 16);
+    this.drawSubtitle(o);
+    o.restore();
+  }
+
+  private drawSubtitle(o: CanvasRenderingContext2D) {
+    const sub = this.subtitle();
+    if (!sub) return;
+    const options = typeof sub === 'string' ? [sub] : sub;
+    const x1 = 8 + o.measureText(this.title).width + 8;
+    const sp = this.headerSpace();
+    o.font = `12px ${UI_FONT}`;
+    o.fillStyle = LABEL_COLOR;
+    for (const [x, y, end] of [
+      [x1, 16, sp.end1],
+      [sp.start2, 33, sp.end2],
+    ])
+      for (const t of options)
+        if (o.measureText(t).width <= end - 6 - x) {
+          o.fillText(t, x, y);
+          return;
+        }
   }
 
   /** Drop cached samples (e.g. after the volume changed). */
@@ -1443,8 +1498,13 @@ export function orientationLabel(d: Vec3): string {
   return letters[i][d[i] >= 0 ? 1 : 0];
 }
 
-export function drawLabel(o: CanvasRenderingContext2D, text: string, x: number, y: number, color = '#cfd6e4', align: CanvasTextAlign = 'left') {
-  o.font = '12px system-ui, sans-serif';
+/** Font of text drawn in the views (the interface's own). */
+export const UI_FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+/** Secondary text drawn over images (8.2:1 on black). */
+export const LABEL_COLOR = '#ababb2';
+
+export function drawLabel(o: CanvasRenderingContext2D, text: string, x: number, y: number, color = '#d9d9de', align: CanvasTextAlign = 'left') {
+  o.font = `12px ${UI_FONT}`;
   o.textAlign = align;
   o.fillStyle = 'rgba(0,0,0,0.55)';
   const w = o.measureText(text).width;
