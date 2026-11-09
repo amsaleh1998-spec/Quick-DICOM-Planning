@@ -128,7 +128,7 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - Panoramic reconstruction along the curve, switchable between a thick **slab** and a thin **slice** (separate adjustable
   thicknesses; switch in the panoramic view's header). The mouse wheel in the panoramic moves the slice
   position buccal (up) / lingual (down); Alt+wheel moves the cross-sections along the curve. *Center* puts it back on the curve.
-- Three cross-sections perpendicular to the curve (adjustable spacing); each wheel notch moves them exactly 1 mm along
+- Three cross-sections perpendicular to the curve, or along the selected implant's axis (adjustable spacing); each wheel notch moves them exactly 1 mm along
   the curve. The *Curve* button in the axial view shows / hides the blue curve there (curve points can only be
   edited while it is shown); the *Curve* button in the cross-sections shows / hides their blue guide lines (hidden by default).
 - Tangential view: a plane tangential to the curve that rotates 360° on mouse wheel.
@@ -156,8 +156,10 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   brings everything back. Visibility is saved with the project and is not part of the undo history.
 - Implants can be renamed (name field, or double-click a name in the implant list); names appear in the views,
   the angle table and saved projects.
-- While an implant is selected, the cross-sections follow it: moving, tilting or resizing it re-centres the middle
-  cross-section on the implant (scrolling to neighbouring sections stays free).
+- While an implant is selected, the cross-sections follow it: they are tilted to its axis (bucco-lingually and
+  mesio-distally), so the implant stands upright in them, and moving, tilting or resizing it re-centres the middle
+  cross-section on it (scrolling to neighbouring sections stays free). Deselect it for sections perpendicular to the
+  curve again. The planning report uses the same sections.
 - New implants can be placed parallel to the selected one, and any implant can be made parallel to another.
 - Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.
 

@@ -713,6 +713,39 @@ export class App {
     return this.s + (k - 1) * this.crossSpacing;
   }
 
+  /**
+   * Plane of cross-section k: across the curve at crossS(k), at the axial level. With an implant
+   * selected, the cross-sections follow its axis: they are tilted (bucco-lingually and
+   * mesio-distally) so that the implant's axis lies in them, and the one at the implant's position
+   * goes through it. u: buccal -> lingual, v: down the screen.
+   */
+  crossPlane(k: number): { center: Vec3; u: Vec3; v: Vec3 } | null {
+    const curve = this.curve;
+    if (!curve) return null;
+    const F = this.frame;
+    const cpW = (c: { p: [number, number] }) => fromFrame([c.p[0], c.p[1], this.focusC], this.O, F);
+    const horiz = (d: [number, number]) => add(scale(F[0], d[0]), scale(F[1], d[1]));
+    const cp = curve.at(this.crossS(k));
+    const nW = horiz(cp.n);
+    const sel = this.selectedImplant();
+    if (!sel || sel.hidden) return { center: cpW(cp), u: neg(nW), v: neg(F[2]) };
+    const A = dot(sel.axis, F[2]) >= 0 ? sel.axis : neg(sel.axis);
+    // normal of a plane containing the axis, as close as possible to the curve's direction
+    const across = (t: Vec3) => {
+      const T = sub(t, scale(A, dot(t, A)));
+      return Math.hypot(T[0], T[1], T[2]) < 1e-3 ? null : normalize(T);
+    };
+    const Tk = across(horiz(cp.t));
+    if (!Tk) return { center: cpW(cp), u: neg(nW), v: neg(F[2]) };
+    const N = normalize(sub(sub(nW, scale(A, dot(nW, A))), scale(Tk, dot(nW, Tk))));
+    // through the implant where the curve passes it (and parallel to that offset elsewhere)
+    const f = toFrame(sel.center, this.O, F);
+    const ci = curve.at(curve.nearest(f[0], f[1]).s);
+    const Ti = across(horiz(ci.t)) ?? Tk;
+    const shift = dot(sub(sel.center, cpW(ci)), Ti);
+    return { center: addScaled(cpW(cp), Tk, shift), u: neg(N), v: neg(A) };
+  }
+
   /** Move the cross-sections along the curve by `step` mm (default: the cross-section spacing). */
   moveAlongCurve(dir: number, step = this.crossSpacing) {
     if (!this.curve) return;
