@@ -69,6 +69,15 @@ export abstract class View {
   private middleDown = false;
   private last: Pt = [0, 0];
   private downPos: Pt = [0, 0];
+  /** The press may end as a click on nothing, which deselects the selected implant. */
+  private clickDeselects = false;
+
+  /** Whether a click about to start can deselect (an implant selected, no tool in use). */
+  private armDeselect(): boolean {
+    const a = this.app;
+    a.implantPressed = false;
+    return a.selectedId !== null && !a.placing && !a.ruler && !a.segTool && !a.drawing && !a.pendingMeasurement && !a.wax.editing;
+  }
   /** Shift+left drag pans (disabled where Shift has another meaning). */
   protected shiftPans = true;
   /** waxup teeth editing in this view (views that show teeth set it) */
@@ -665,6 +674,7 @@ export abstract class View {
       const button = IS_MAC && e.button === 2 && e.ctrlKey ? 0 : e.button;
       this.middleDown = button === 1;
       const wax = this.app.wax;
+      const arm = button === 0 && this.armDeselect();
       if (button === 2) this.drag = 'right';
       // waxup panel open: a press on a tooth goes to the waxup first (Shift = scale, Ctrl = rotate)
       else if (
@@ -683,6 +693,7 @@ export abstract class View {
         this.rulerDrag = { ...this.hitMeasureEnd(p)!, created: false };
         this.drag = 'ruler';
       } else if (button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
+      this.clickDeselects = arm && (this.drag === 'left' || this.drag === 'none') && !this.app.implantPressed;
       if (this.drag !== 'none') {
         c.setPointerCapture(e.pointerId);
         e.preventDefault();
@@ -795,6 +806,12 @@ export abstract class View {
         const moved = Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 3;
         this.onLeftUp(p, e, moved);
       }
+      if (this.clickDeselects && e.type === 'pointerup') {
+        // a click (not a drag) outside every implant deselects
+        const p = this.pos(e);
+        if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= 3 && !this.app.implantPressed) this.app.selectImplant(null, false);
+      }
+      this.clickDeselects = false;
       if (this.drag === 'pan' && this.middleDown && e.type === 'pointerup') {
         const p = this.pos(e);
         if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= 3) this.onMiddleClick(p);
@@ -1010,7 +1027,10 @@ export abstract class View {
           this.lastTapAt = now;
           // a tap on a ruler does nothing (a second tap deletes it)
           const onRuler = this.measureKind && this.hitMeasureLine(st.p);
+          const arm = !onRuler && this.armDeselect();
           if (!onRuler && this.onLeftDown(st.p, e)) this.onLeftUp(st.p, e, false);
+          // a tap outside every implant deselects
+          if (arm && !this.app.implantPressed) this.app.selectImplant(null, false);
         }
       }
       this.touchStart = null;
