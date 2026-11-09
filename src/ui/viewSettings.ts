@@ -83,7 +83,8 @@ export function refreshViewSettings() {
   const vol = app.vol;
   const vrName = { surface: 'Surface', translucent: 'Translucent', mip: 'MIP' }[app.vr.mode];
   const vrLabel = app.vr.mode === 'mip' ? `${vrName} ▾` : `${vrName} ${Math.round(app.vr.lo)}+ ▾`;
-  if ($('btn-vr-menu').textContent !== vrLabel) $('btn-vr-menu').textContent = vrLabel;
+  const vrLbl = $('btn-vr-menu').querySelector('.lbl')!;
+  if (vrLbl.textContent !== vrLabel) vrLbl.textContent = vrLabel;
   const panoLabel = `${app.panoThickness()} mm · sections ${app.crossSpacing} mm ▾`;
   if ($('btn-pano-menu').textContent !== panoLabel) $('btn-pano-menu').textContent = panoLabel;
   panoModeButtons.forEach((b) => b.classList.toggle('active', b.dataset.pm === app.panoMode));

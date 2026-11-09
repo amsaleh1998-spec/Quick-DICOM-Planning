@@ -188,7 +188,7 @@ void main() {
   float aspect = uRes.x / uRes.y;
   vec3 rd = normalize(uFwd + ndc.x * uTanHalf * aspect * uRight + ndc.y * uTanHalf * uUp);
   vec3 ro = uCam;
-  vec3 bg = mix(vec3(0.02, 0.03, 0.05), vec3(0.10, 0.13, 0.19), gl_FragCoord.y / uRes.y);
+  vec3 bg = mix(vec3(0.03, 0.03, 0.035), vec3(0.12, 0.12, 0.13), gl_FragCoord.y / uRes.y);
   vec3 L = normalize(-rd + 0.35 * uUp - 0.25 * uRight);
 
   // A = (centre, r0), B = (axis, half; negative = translucent guide), C = (colour, r1)
@@ -1457,7 +1457,7 @@ export class View3D extends View {
     this.drawTitle(o);
     const app = this.app;
     if (this.error || !app.vol) {
-      o.fillStyle = '#8a94a6';
+      o.fillStyle = '#a1a1a8';
       o.font = '13px system-ui, sans-serif';
       o.textAlign = 'center';
       o.fillText(this.error || 'No volume loaded', this.w / 2, this.h / 2);
@@ -1467,11 +1467,11 @@ export class View3D extends View {
     const modeName = { surface: 'Surface', translucent: 'Translucent', mip: 'MIP' }[app.vr.mode];
     const thr = app.vr.mode === 'mip' ? `W ${Math.round(app.wl.width)} L ${Math.round(app.wl.center)}` : `${Math.round(app.vr.lo)} – ${Math.round(app.vr.hi)}`;
     // the desktop layout shows mode and threshold in the view's own header buttons
-    if (!this.el.querySelector('.view-tools.in-view')) drawLabel(o, `${modeName} · ${thr}`, this.w - 62, 16, '#9fb0c8', 'right');
+    if (!this.el.querySelector('.view-tools.in-view')) drawLabel(o, `${modeName} · ${thr}`, this.w - 62, 16, '#ababb2', 'right');
     this.drawPivot(o);
     this.editor.draw(o);
     this.waxEditor?.draw(o);
-    if (this.texFactor > 1) drawLabel(o, `rendered at 1/${this.texFactor} resolution`, this.w - 8, this.h - 10, '#9fb0c8', 'right');
+    if (this.texFactor > 1) drawLabel(o, `rendered at 1/${this.texFactor} resolution`, this.w - 8, this.h - 10, '#ababb2', 'right');
     if (this.segError) drawLabel(o, this.segError, this.w - 8, this.h - 28, '#ff8a8a', 'right');
     const tool = app.segTool;
     if (tool) {

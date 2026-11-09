@@ -148,11 +148,11 @@ body {
 .m-chip.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #06121e;
+  color: #141416;
 }
 .m-chip-primary {
-  background: #1d4f7a;
-  border-color: #2c6aa0;
+  background: #ececef;
+  border-color: #ececef;
 }
 .m-tools-info {
   margin-left: auto;
@@ -169,7 +169,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: radial-gradient(circle at 50% 30%, #13233a 0%, var(--bg) 70%);
+  background: radial-gradient(circle at 50% 30%, #1f1f22 0%, var(--bg) 70%);
   touch-action: auto;
 }
 .m-card {
@@ -203,10 +203,10 @@ body {
 .m-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #06121e;
+  color: #141416;
 }
 .m-primary:hover {
-  background: #6cc0ff;
+  background: #f2f2f4;
 }
 .m-note {
   color: var(--muted);
@@ -243,7 +243,7 @@ body {
   font-weight: 600;
 }
 #m-tabs button.active {
-  background: rgba(79, 179, 255, 0.16);
+  background: rgba(236, 236, 239, 0.16);
   color: var(--accent);
 }
 
@@ -266,13 +266,13 @@ body {
 #m-hint {
   pointer-events: none; /* never blocks the views underneath */
   bottom: 14px;
-  background: rgba(19, 26, 38, 0.92);
+  background: rgba(25, 25, 27, 0.92);
   border: 1px solid var(--border);
   color: var(--text);
 }
 #m-toast {
   top: 12px;
-  background: rgba(29, 79, 122, 0.95);
+  background: rgba(236, 236, 239, 0.95);
   color: #fff;
 }
 #m-toast.error {
@@ -315,7 +315,7 @@ body {
   width: 44px;
   height: 5px;
   border-radius: 3px;
-  background: #3a4a66;
+  background: #4a4a50;
   margin: 8px auto 10px;
   flex: 0 0 auto;
   cursor: pointer;
@@ -473,7 +473,7 @@ body {
   position: absolute;
   inset: 0;
   border-radius: 15px;
-  background: #2a3548;
+  background: #303034;
   transition: background 0.15s;
 }
 .m-switch span::after {
@@ -484,7 +484,7 @@ body {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #dce3ee;
+  background: #ececef;
   transition: transform 0.15s;
 }
 .m-switch input:checked + span {
@@ -510,7 +510,7 @@ body {
 }
 .m-bar {
   height: 6px;
-  background: #0e1420;
+  background: #121214;
   border-radius: 3px;
   overflow: hidden;
 }

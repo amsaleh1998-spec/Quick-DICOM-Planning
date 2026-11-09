@@ -21,6 +21,9 @@ const TANG_COLOR = '#ff7ab6';
 // ---------------------------------------------------------------------------
 
 export class PlanAxialView extends PlaneView {
+  protected subtitle() {
+    return this.app.vol ? `level ${this.app.focusC.toFixed(1)} mm` : null;
+  }
   private dragPt = -1;
 
   constructor(app: App) {
@@ -451,7 +454,6 @@ export class PlanAxialView extends PlaneView {
     } else if (!curve) {
       drawLabel(o, app.touchUi ? 'Tap “Draw curve”, then tap along the arch' : 'Use “Draw panoramic curve” and click along the arch.', 8, this.h - 10, '#ffd34f');
     }
-    drawLabel(o, `level ${app.focusC.toFixed(1)} mm`, this.w - 34, 16, '#9fb0c8', 'right');
   }
 }
 
@@ -482,6 +484,9 @@ function syncCurveToggle(b: HTMLButtonElement | undefined, app: App, on: boolean
 // ---------------------------------------------------------------------------
 
 export class CrossView extends PlaneView {
+  protected subtitle() {
+    return this.app.curve ? `${this.app.crossS(this.index).toFixed(1)} mm` : null;
+  }
   constructor(
     app: App,
     readonly index: 0 | 1 | 2,
@@ -576,10 +581,8 @@ export class CrossView extends PlaneView {
     const s = this.worldToScreen(base, pl)!;
     if (app.showCurveCross) this.drawCurveGuides(o, s);
     this.drawImplantAxes(o);
-    drawLabel(o, 'B', 8, this.h / 2 + 4, '#9fb0c8');
-    drawLabel(o, 'L', this.w - 8, this.h / 2 + 4, '#9fb0c8', 'right');
-    const sk = app.crossS(this.index);
-    drawLabel(o, `${sk.toFixed(1)} mm`, this.w - 34, 16, '#9fb0c8', 'right');
+    drawLabel(o, 'B', 8, this.h / 2 + 4, '#ababb2');
+    drawLabel(o, 'L', this.w - 8, this.h / 2 + 4, '#ababb2', 'right');
     drawScaleBar(o, this.w, this.h, this.vs.scale);
   }
 
@@ -617,6 +620,12 @@ export class CrossView extends PlaneView {
 // ---------------------------------------------------------------------------
 
 export class TangView extends PlaneView {
+  protected subtitle() {
+    if (!this.plane()) return null;
+    const sel = this.app.selectedImplant();
+    const a = `${this.app.tangAngle.toFixed(0)}°`;
+    return sel ? [`${a} · around ${sel.name}`, a] : a;
+  }
   private frozen: Plane | null = null;
 
   constructor(app: App) {
@@ -698,9 +707,6 @@ export class TangView extends PlaneView {
     o.stroke();
     o.setLineDash([]);
     this.drawImplantAxes(o);
-    const sel = app.selectedImplant();
-    drawLabel(o, `${app.tangAngle.toFixed(0)}°`, this.w - 34, 16, TANG_COLOR, 'right');
-    drawLabel(o, sel ? `around ${sel.name} – scroll to rotate` : 'scroll to rotate 360°', 8, this.h - 10, '#9fb0c8');
     // compass: angle indicator
     const cx = this.w - 22;
     const cy = 46;
@@ -724,6 +730,15 @@ export class TangView extends PlaneView {
 // ---------------------------------------------------------------------------
 
 export class PanoView extends View {
+  protected subtitle() {
+    const app = this.app;
+    const curve = app.curve;
+    if (!curve) return null;
+    const slot = app.curves.length > 1 && app.activeSlot() ? `${app.activeSlot()!.name} · ` : '';
+    const off = app.panoOffset ? ` · offset ${app.panoOffset.toFixed(1)} mm` : '';
+    const full = `${slot}${app.panoMode === 'slab' ? 'slab' : 'slice'} ${app.panoThickness().toFixed(1)} mm${off} · ${curve.length.toFixed(0)} mm`;
+    return [full, `${slot}${curve.length.toFixed(0)} mm`];
+  }
   protected measureKind: 'plane' | 'pano' | null = 'pano';
   private editor = new ImplantEditor(this.app, {
     project: (w) => {
@@ -1213,16 +1228,8 @@ export class PanoView extends View {
       o.arc(pr.x, pr.y, 5, 0, Math.PI * 2);
       o.stroke();
     }
-    drawLabel(o, 'R', this.xOf(0) + 6, this.h - 10, '#9fb0c8');
-    drawLabel(o, 'L', this.xOf(curve.length) - 6, this.h - 10, '#9fb0c8', 'right');
-    drawLabel(
-      o,
-      `${app.curves.length > 1 && app.activeSlot() ? `${app.activeSlot()!.name} · ` : ''}${app.panoMode === 'slab' ? 'slab' : 'slice'} ${app.panoThickness().toFixed(1)} mm${app.panoOffset ? ` · offset ${app.panoOffset.toFixed(1)} mm` : ''} · length ${curve.length.toFixed(0)} mm`,
-      this.w - 34,
-      16,
-      '#9fb0c8',
-      'right',
-    );
+    drawLabel(o, 'R', this.xOf(0) + 6, this.h - 10, '#ababb2');
+    drawLabel(o, 'L', this.xOf(curve.length) - 6, this.h - 10, '#ababb2', 'right');
     drawScaleBar(o, this.w, this.h, this.vs.scale);
   }
 }
