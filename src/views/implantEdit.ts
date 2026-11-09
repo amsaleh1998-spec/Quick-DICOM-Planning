@@ -129,6 +129,7 @@ export class ImplantEditor {
   start(p: Pt): boolean {
     const hit = this.hit(p);
     if (!hit) return false;
+    this.app.implantPressed = true;
     const imp = hit.imp;
     let startValue = 0;
     let startMeasure = 0;

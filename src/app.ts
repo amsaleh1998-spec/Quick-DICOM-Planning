@@ -123,6 +123,8 @@ export class App {
   selectedId: number | null = null;
   /** implant placement in progress (which jaw) */
   placing: Jaw | null = null;
+  /** Set when a press lands on an implant (a click elsewhere deselects it). */
+  implantPressed = false;
   /** ruler tool active */
   ruler = false;
   measurements: Measurement[] = [];

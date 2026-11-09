@@ -38,6 +38,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['Del', 'Delete the selected implant'],
       ['Ctrl+Z / Ctrl+Y', 'Undo / redo any change of the plan: implants, curves, segments, nerves, scans, rulers'],
       ['Esc', 'Cancel / deselect'],
+      ['Click outside the implants', 'Deselect the implant'],
       ['Double-click', 'An implant in the list: rename it'],
     ],
   },

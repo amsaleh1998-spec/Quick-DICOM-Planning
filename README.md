@@ -158,7 +158,7 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   the angle table and saved projects.
 - While an implant is selected, the cross-sections follow it: they lean mesio-distally with its axis so the whole
   implant lies in them (the screen stays upright, so a buccal tilt still shows as one), and moving, tilting or resizing it re-centres the middle
-  cross-section on it (scrolling to neighbouring sections stays free). Deselect it for sections perpendicular to the
+  cross-section on it (scrolling to neighbouring sections stays free). Deselect it (Esc, or click anywhere outside the implants) for sections perpendicular to the
   curve again. The planning report uses the same sections.
 - New implants can be placed parallel to the selected one, and any implant can be made parallel to another.
 - Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.
