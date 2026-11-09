@@ -156,8 +156,8 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   brings everything back. Visibility is saved with the project and is not part of the undo history.
 - Implants can be renamed (name field, or double-click a name in the implant list); names appear in the views,
   the angle table and saved projects.
-- While an implant is selected, the cross-sections follow it: they are tilted to its axis (bucco-lingually and
-  mesio-distally), so the implant stands upright in them, and moving, tilting or resizing it re-centres the middle
+- While an implant is selected, the cross-sections follow it: they lean mesio-distally with its axis so the whole
+  implant lies in them (the screen stays upright, so a buccal tilt still shows as one), and moving, tilting or resizing it re-centres the middle
   cross-section on it (scrolling to neighbouring sections stays free). Deselect it for sections perpendicular to the
   curve again. The planning report uses the same sections.
 - New implants can be placed parallel to the selected one, and any implant can be made parallel to another.

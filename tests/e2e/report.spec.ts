@@ -23,7 +23,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => ((window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = undefined));
 });
 
-test('cross-sections follow the selected implant axis', async ({ page }) => {
+test('cross-sections contain the selected implant axis, upright on screen', async ({ page }) => {
   test.setTimeout(120_000);
   await twoImplants(page);
   // tilt the selected implant bucco-lingually and mesio-distally
@@ -42,7 +42,7 @@ test('cross-sections follow the selected implant axis', async ({ page }) => {
       const pl = a.crossPlane(k);
       const nP = crossP(pl.u, pl.v);
       const d = [0, 1, 2].map((i) => imp.center[i] - pl.center[i]);
-      out.push({ axis: Math.abs(dot(nP, imp.axis)), v: Math.abs(dot(pl.v, imp.axis)), off: Math.abs(dot(d, nP)) });
+      out.push({ axis: Math.abs(dot(nP, imp.axis)), uz: Math.abs(dot(pl.u, F[2])), tilt: (Math.acos(Math.abs(dot(pl.v, imp.axis))) * 180) / Math.PI, off: Math.abs(dot(d, nP)) });
     }
     a.selectImplant(null, false);
     const free = a.crossPlane(1);
@@ -50,7 +50,8 @@ test('cross-sections follow the selected implant axis', async ({ page }) => {
   });
   for (const o of r.out) {
     expect(o.axis).toBeLessThan(1e-6); // the axis lies in every cross-section
-    expect(o.v).toBeCloseTo(1, 6); // and is the view's vertical
+    expect(o.uz).toBeLessThan(1e-6); // the screen stays upright (its horizontal is level)
+    expect(o.tilt).toBeGreaterThan(10); // so the buccal tilt shows
   }
   expect(r.out[1].off).toBeLessThan(1e-3); // the middle one goes through the implant
   expect(r.out[0].off).toBeCloseTo(r.spacing, 0);

@@ -715,9 +715,9 @@ export class App {
 
   /**
    * Plane of cross-section k: across the curve at crossS(k), at the axial level. With an implant
-   * selected, the cross-sections follow its axis: they are tilted (bucco-lingually and
-   * mesio-distally) so that the implant's axis lies in them, and the one at the implant's position
-   * goes through it. u: buccal -> lingual, v: down the screen.
+   * selected, the cross-sections follow its axis: they lean mesio-distally with it so that the
+   * whole implant lies in them, and the one at the implant's position goes through it. The screen
+   * stays upright (an implant tilted buccally shows that tilt). u: buccal -> lingual, v: down.
    */
   crossPlane(k: number): { center: Vec3; u: Vec3; v: Vec3 } | null {
     const curve = this.curve;
@@ -737,13 +737,16 @@ export class App {
     };
     const Tk = across(horiz(cp.t));
     if (!Tk) return { center: cpW(cp), u: neg(nW), v: neg(F[2]) };
-    const N = normalize(sub(sub(nW, scale(A, dot(nW, A))), scale(Tk, dot(nW, Tk))));
+    // in the plane: up as close to the patient's vertical as it gets (the implant keeps its
+    // bucco-lingual tilt on screen), buccal -> lingual across it
+    const up = normalize(sub(F[2], scale(Tk, dot(F[2], Tk))));
+    const N = normalize(sub(sub(nW, scale(up, dot(nW, up))), scale(Tk, dot(nW, Tk))));
     // through the implant where the curve passes it (and parallel to that offset elsewhere)
     const f = toFrame(sel.center, this.O, F);
     const ci = curve.at(curve.nearest(f[0], f[1]).s);
     const Ti = across(horiz(ci.t)) ?? Tk;
     const shift = dot(sub(sel.center, cpW(ci)), Ti);
-    return { center: addScaled(cpW(cp), Tk, shift), u: neg(N), v: neg(A) };
+    return { center: addScaled(cpW(cp), Tk, shift), u: neg(N), v: neg(up) };
   }
 
   /** Move the cross-sections along the curve by `step` mm (default: the cross-section spacing). */
