@@ -16,6 +16,9 @@
   --danger: #ff6b61; /* 6.3:1 */
   --curve: var(--curve); /* the panoramic curve's own colour */
   --ui-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* critically damped spring, response 0.3 s (src/ui/motion.ts) */
+  --spring: cubic-bezier(0.2, 0, 0, 1);
+  --spring-ms: 460ms;
   color-scheme: dark;
 }
 
@@ -116,6 +119,62 @@ input[type='number'],
   font-variant-numeric: tabular-nums;
 }
 
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --spring: linear(0, 0.0247, 0.0847, 0.1637, 0.2508, 0.3389, 0.4236, 0.5024, 0.5738, 0.6375, 0.6934, 0.742, 0.7839, 0.8196, 0.8499, 0.8756, 0.8971, 0.9151, 0.9301, 0.9426, 0.9529, 0.9615, 0.9685, 0.9743, 0.9791, 0.983, 0.9862, 0.9888, 0.9909, 0.9926, 0.994, 0.9952, 0.9961, 0.9968, 0.9974, 0.9979, 0.9983, 0.9987, 0.9989, 0.9991, 1);
+  }
+}
+
+/* dialogs rise into place over a fading backdrop */
+@keyframes qdp-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes qdp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+/* a panel opened from the rail slides in from the rail's side */
+@keyframes qdp-from-rail {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+#sidebar > .panel:not(.hidden) {
+  animation: qdp-from-rail var(--spring-ms) var(--spring);
+}
+.modal-backdrop {
+  animation: qdp-fade-in 180ms ease-out;
+}
+.modal-backdrop > * {
+  animation: qdp-rise var(--spring-ms) var(--spring);
+}
+
+/* Increase Contrast: stronger edges and secondary text */
+@media (prefers-contrast: more) {
+  :root {
+    --border: #6c6c73;
+    --border-strong: #93939a;
+    --muted: #c8c8ce;
+    --selected: #6c6c73;
+  }
+}
+/* Reduce Transparency: the controls floating over the images become solid */
+@media (prefers-reduced-transparency: reduce) {
+  .view-tools button,
+  .view-tools .seg,
+  .view-thr.in-view,
+  .view-toggle,
+  .max-btn,
+  .view-reset-btn {
+    background: var(--panel) !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -123,6 +182,12 @@ input[type='number'],
     transition-duration: 0s !important;
     animation-duration: 0s !important;
     animation-iteration-count: 1 !important;
+  }
+  /* less motion is not no feedback: dialogs still cross-fade */
+  .modal-backdrop,
+  .modal-backdrop > *,
+  #sidebar > .panel:not(.hidden) {
+    animation: qdp-fade-in 150ms ease-out !important;
   }
 }
 

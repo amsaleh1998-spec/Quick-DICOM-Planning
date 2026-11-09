@@ -46,7 +46,7 @@ const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], 
 const maximize3d = (page: Page, on: boolean) =>
   page.evaluate((on) => {
     const a = window.app;
-    if (a.view3d.el.classList.contains('max') !== on) a.toggleMaximize(a.view3d);
+    if (a.view3d.el.classList.contains('max') !== on) a.toggleMaximize(a.view3d, false); // setting up the layout, not testing its motion
     a.changed();
   }, on);
 const topView = async (page: Page) => {

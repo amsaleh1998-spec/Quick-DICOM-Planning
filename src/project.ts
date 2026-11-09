@@ -332,7 +332,7 @@ export function applyProjectState(app: App, file: ProjectFile, entries?: Map<str
   if (st.camera3d) app.view3d.setCamera(st.camera3d);
   for (const v of app.views) v.invalidate();
   const mv = app.views[st.maximized];
-  if (mv && !mv.el.classList.contains('max')) app.toggleMaximize(mv);
+  if (mv && !mv.el.classList.contains('max')) app.toggleMaximize(mv, false);
   app.showUnsegmented = st.showUnsegmented ?? true;
   app.showSegOverlay = st.showSegOverlay ?? true;
   app.showCurveAxial = st.showCurveAxial ?? true;

@@ -709,7 +709,10 @@ export abstract class View {
 
   protected pos(e: MouseEvent): Pt {
     const r = this.ovCanvas.getBoundingClientRect();
-    return [e.clientX - r.left, e.clientY - r.top];
+    // the view may be scaled while it grows into place: map back to its own pixels
+    const kx = r.width ? this.ovCanvas.clientWidth / r.width : 1;
+    const ky = r.height ? this.ovCanvas.clientHeight / r.height : 1;
+    return [(e.clientX - r.left) * kx, (e.clientY - r.top) * ky];
   }
 
   private bindEvents() {

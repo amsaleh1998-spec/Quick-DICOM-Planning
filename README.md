@@ -34,6 +34,12 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   view direction (*View ▾*); the panoramic's header has *Slab / Slice* and the thickness, slice position and
   cross-section spacing (*12 mm · sections 2 mm ▾*).
 - **Status bar**: a one-line hint for the open panel, messages, and the value under the cursor.
+- **Look and motion**: graphite greys so the greyscale scan reads true; colour belongs to what is planned on it (curve,
+  view planes, implants, nerves, segments). Menus grow out of their button and fold back into it, dialogs rise into
+  place, a panel slides in from the rail and a maximized view grows out of its tile – all critically damped springs
+  (no bounce) that can be interrupted. A quick flick in the 3D view keeps the model turning and slows it like a
+  scroll; any click, wheel or key-driven view change stops it. With *Reduce motion* turned on in the system these
+  become short fades (and no flick); *Increase contrast* and *Reduce transparency* are followed too.
 
 ## Features
 
@@ -519,7 +525,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/views/waxupEdit.ts`, `src/views/waxContours.ts` | Waxup editing with the mouse in every view, tooth outlines in the slices |
 | `src/history.ts`, `src/planHistory.ts` | Undo / redo: one history of the plan, split into channels (implants, curves, segments, nerves, scans, rulers) |
 | `src/ui/undoUi.ts`, `keyboard.ts` | Undo / redo buttons and keyboard shortcuts |
-| `src/ui/rail.ts`, `src/ui/popover.ts`, `src/ui/help.ts`, `src/ui/viewTools.ts`, `src/ui/recent.ts` | Interface building blocks: panel rail, menus, shortcut sheet, view header tools, recent scans |
+| `src/ui/rail.ts`, `src/ui/popover.ts`, `src/ui/help.ts`, `src/ui/viewTools.ts`, `src/ui/recent.ts`, `src/ui/motion.ts` | Interface building blocks: panel rail, menus, shortcut sheet, view header tools, recent scans, springs (response / damping) for the interface motion |
 | `src/views/View.ts` | Base view (canvas, zoom/pan/W-L), planar view, implant rasterisation & dragging |
 | `src/views/MprView.ts` | Axial/coronal/sagittal MPR with Slicer-style rotation and crop box |
 | `src/views/PlanViews.ts` | Planning axial, panoramic, cross-section and tangential views |

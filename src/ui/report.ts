@@ -121,7 +121,7 @@ const WIDE = 2.03;
  */
 async function shot(v: View, imp: Implant, aspect: number, how: 'along' | 'endOn' | 'whole'): Promise<HTMLCanvasElement | null> {
   const wasMax = v.el.classList.contains('max');
-  if (!wasMax) app.toggleMaximize(v);
+  if (!wasMax) app.toggleMaximize(v, false);
   await settle();
   const c = v.capture();
   const W = v.el.clientWidth, H = v.el.clientHeight;
@@ -139,7 +139,7 @@ async function shot(v: View, imp: Implant, aspect: number, how: 'along' | 'endOn
       }
     }
   }
-  if (!wasMax) app.toggleMaximize(v);
+  if (!wasMax) app.toggleMaximize(v, false);
   if (!c) return null;
   // the crop, in the view and then in the captured image
   h = Math.min(h, H, W / aspect);
@@ -178,7 +178,7 @@ export async function makeReport(progress: (f: number, text: string) => void): P
   let overview: HTMLCanvasElement | null = null;
   try {
     if (app.mode !== 'plan') setMode('plan');
-    if (saved.maxed) app.toggleMaximize(saved.maxed);
+    if (saved.maxed) app.toggleMaximize(saved.maxed, false);
     await settle();
     progress(0.05, 'Capturing the views…');
     overview = captureLayout();
@@ -206,7 +206,7 @@ export async function makeReport(progress: (f: number, text: string) => void): P
     app.s = saved.s;
     app.focusC = saved.focusC;
     app.tangAngle = saved.tang;
-    if (saved.maxed) app.toggleMaximize(saved.maxed);
+    if (saved.maxed) app.toggleMaximize(saved.maxed, false);
     if (saved.mode !== 'plan') setMode(saved.mode);
     app.changed();
   }

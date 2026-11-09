@@ -31,6 +31,7 @@ import { canalCentrelines } from './ai/canal';
 import { Volume, composeAffine, resampleVolume } from './volume';
 import type { History } from './history';
 import { planHistory } from './planHistory';
+import { flipFrom } from './ui/motion';
 import { WaxState } from './waxup/waxApp';
 import { invert as invertAffine } from './register';
 import { MprView } from './views/MprView';
@@ -1511,13 +1512,17 @@ export class App {
   }
 
   /** Toggle a view between its grid cell and filling the whole layout. */
-  toggleMaximize(v: View) {
+  /** `animate`: the view grows out of its tile (when people ask for it; not for automatic layout changes). */
+  toggleMaximize(v: View, animate = true) {
     const layout = v.el.parentElement;
     if (!layout) return;
     const was = v.el.classList.contains('max');
+    const before = v.el.getBoundingClientRect();
     layout.querySelectorAll('.view.max').forEach((e) => e.classList.remove('max'));
     layout.classList.toggle('has-max', !was);
     if (!was) v.el.classList.add('max');
+    // it grows out of its tile, and goes back into it
+    if (animate) flipFrom(v.el, before);
     this.requestRender();
   }
 

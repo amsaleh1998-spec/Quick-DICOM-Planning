@@ -13,6 +13,7 @@ import { ImplantEditor } from './implantEdit';
 import { Implant, implantParts, platformOf } from '../implant';
 import { vertexNormals } from '../meshio';
 import { meshOf, meshWorld } from '../implantLibrary';
+import { reducedMotion } from '../ui/motion';
 
 const MAX_CYL = 48;
 const MAX_NERVE_SEG = 1024;
@@ -514,6 +515,8 @@ export class View3D extends View {
     this.imgCanvas.style.display = 'none';
     this.el.insertBefore(this.glCanvas, this.ovCanvas);
     this.shiftPans = true;
+    // any new input takes over from a flick at once
+    for (const ev of ['pointerdown', 'wheel'] as const) this.el.addEventListener(ev, () => this.stopCoast(), { capture: true, passive: true });
     try {
       this.gl = this.glCanvas.getContext('webgl2', { antialias: false, depth: false, alpha: false });
     } catch {
@@ -734,6 +737,7 @@ export class View3D extends View {
   }
 
   setPreset(p: Preset) {
+    this.stopCoast();
     const F = this.app.frame;
     const [e1, e2, e3] = F;
     const presets: Record<Preset, [Vec3, Vec3]> = {
@@ -1012,11 +1016,60 @@ export class View3D extends View {
       this.editor.move(p, last);
       return;
     }
-    this.orbit(p[0] - last[0], p[1] - last[1]);
+    const dx = p[0] - last[0], dy = p[1] - last[1];
+    this.dragHist.push({ t: performance.now(), dx, dy });
+    if (this.dragHist.length > 12) this.dragHist.shift();
+    this.orbit(dx, dy);
+  }
+
+  // ---- flick: released while moving, the model keeps turning and slows like a scroll -----
+
+  private dragHist: { t: number; dx: number; dy: number }[] = [];
+  private coast = 0;
+
+  /** Stop a flick where it is. */
+  stopCoast() {
+    if (this.coast) cancelAnimationFrame(this.coast);
+    this.coast = 0;
+  }
+
+  /** Carry on at the release velocity (px/ms), decaying at the scroll rate (0.996 per ms). */
+  private startCoast() {
+    const now = performance.now();
+    const h = this.dragHist.filter((s) => now - s.t < 100);
+    this.dragHist = [];
+    // no flick after a pause before letting go, or with less motion asked for
+    if (reducedMotion() || h.length < 3 || now - h[h.length - 1].t > 40) return;
+    const span = h[h.length - 1].t - h[0].t;
+    if (span < 8) return;
+    let vx = 0, vy = 0;
+    for (const s of h.slice(1)) {
+      vx += s.dx;
+      vy += s.dy;
+    }
+    vx /= span;
+    vy /= span;
+    const speed = Math.hypot(vx, vy);
+    if (speed < 0.3) return;
+    const cap = Math.min(1, 4 / speed);
+    vx *= cap;
+    vy *= cap;
+    let last = now;
+    const step = (t: number) => {
+      const dt = Math.min(48, t - last);
+      last = t;
+      this.orbit(vx * dt, vy * dt);
+      const k = Math.pow(0.996, dt);
+      vx *= k;
+      vy *= k;
+      this.coast = Math.hypot(vx, vy) < 0.02 ? 0 : requestAnimationFrame(step);
+    };
+    this.coast = requestAnimationFrame(step);
   }
 
   /** Trackpad: two-finger swipe orbits (content follows the fingers). */
   protected onSwipe(dx: number, dy: number): boolean {
+    this.stopCoast();
     this.orbit(-dx * 0.8, -dy * 0.8);
     return true;
   }
@@ -1047,6 +1100,7 @@ export class View3D extends View {
   /** t / r in screen axes (X right, Y up, Z towards the user), ±1 = full deflection. */
   spaceMotion(t: Vec3, r: Vec3, dt: number) {
     if (!this.app.vol) return;
+    this.stopCoast();
     // pan: full deflection moves the model ~0.8 view heights per second
     const pan = this.h * this.vs.scale * 0.8 * dt;
     this.vs.panU -= t[0] * pan;
@@ -1092,6 +1146,8 @@ export class View3D extends View {
       return;
     }
     this.orbiting = false;
+    if (moved) this.startCoast();
+    this.dragHist = [];
     this.app.requestRender();
     if (moved || app.segTool !== 'grow') return;
     const w = this.pickSurface(p);
