@@ -89,11 +89,11 @@ rail.onChange = () => {
     app.placing = null;
   }
   if (on && !grabbing && app.vol && !v3dMax()) {
-    app.toggleMaximize(app.view3d);
+    app.toggleMaximize(app.view3d, false);
     enlarged = true;
   } else if (!on) {
     app.wax.hover = null;
-    if (enlarged && v3dMax()) app.toggleMaximize(app.view3d);
+    if (enlarged && v3dMax()) app.toggleMaximize(app.view3d, false);
     enlarged = false;
   }
   app.changed();

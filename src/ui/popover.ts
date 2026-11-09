@@ -8,8 +8,12 @@ interface Entry {
   onOpen?: () => void;
 }
 
+import { animateTo, reducedMotion, stopMotion } from './motion';
+
 const entries: Entry[] = [];
 let open: Entry | null = null;
+/** Menus still folding away (hidden when their animation ends, unless reopened first). */
+const closing = new Map<HTMLElement, Animation>();
 
 function place(e: Entry) {
   const r = e.btn.getBoundingClientRect();
@@ -24,24 +28,52 @@ function place(e: Entry) {
   if (top + h > window.innerHeight - 6) top = Math.max(6, r.top - h - 6);
   p.style.left = `${Math.round(left)}px`;
   p.style.top = `${Math.round(top)}px`;
+  // it grows out of (and folds back into) the button that opened it
+  const ox = Math.min(w, Math.max(0, r.left + r.width / 2 - left));
+  p.style.transformOrigin = `${Math.round(ox)}px ${top < r.top ? h : 0}px`;
+}
+
+/** Folded state: a little smaller and nearer its button, transparent. */
+function folded(e: Entry): Keyframe {
+  if (reducedMotion()) return { opacity: 0, transform: 'none' };
+  const up = e.pop.getBoundingClientRect().top < e.btn.getBoundingClientRect().top;
+  return { opacity: 0, transform: `translateY(${up ? 4 : -4}px) scale(0.96)` };
 }
 
 export function closePopovers() {
   if (!open) return;
-  open.pop.classList.add('hidden');
-  open.btn.classList.remove('open');
-  open.btn.setAttribute('aria-expanded', 'false');
+  const e = open;
+  e.btn.classList.remove('open');
+  e.btn.setAttribute('aria-expanded', 'false');
   open = null;
+  const pop = e.pop;
+  pop.style.pointerEvents = 'none';
+  const a = animateTo(pop, folded(e), { response: 0.2 });
+  closing.set(pop, a);
+  const hide = () => {
+    if (closing.get(pop) !== a) return;
+    closing.delete(pop);
+    pop.classList.add('hidden');
+    pop.style.pointerEvents = '';
+  };
+  a.addEventListener('finish', hide);
+  a.addEventListener('cancel', () => closing.get(pop) === a && closing.delete(pop));
 }
 
 function show(e: Entry) {
   closePopovers();
   e.onOpen?.();
+  const wasClosing = closing.has(e.pop);
+  closing.delete(e.pop);
+  e.pop.style.pointerEvents = '';
   e.pop.classList.remove('hidden');
   e.btn.classList.add('open');
   e.btn.setAttribute('aria-expanded', 'true');
   open = e;
   place(e);
+  // from where it is if it was still folding away, otherwise from folded
+  if (!wasClosing) stopMotion(e.pop);
+  animateTo(e.pop, { opacity: 1, transform: 'none' }, { from: folded(e), response: reducedMotion() ? 0.15 : 0.28 });
   e.pop.querySelector<HTMLElement>('button, input, select')?.focus({ preventScroll: true });
 }
 
