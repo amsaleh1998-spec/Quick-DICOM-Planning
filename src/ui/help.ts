@@ -29,6 +29,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['Axial', 'Wheel = level · drag curve points · double-click curve = add / point = remove'],
       ['Panoramic', 'Wheel = buccal / lingual · Alt+wheel = along the curve · click = jump'],
       ['Cross-sections', 'Wheel = 1 mm along the curve'],
+      ['Implant selected', 'Cross-sections follow its axis'],
       ['Tangential', 'Wheel = rotate 360° around the selected implant'],
       ['Implant body', 'Drag = move'],
       ['Implant outline', 'Drag side = diameter · drag apical end = length (click the live value to type it); a library implant steps through its system’s sizes'],

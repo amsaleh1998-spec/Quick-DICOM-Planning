@@ -1,7 +1,7 @@
 import type { App, SegTool } from '../app';
 import type { NewCut } from '../segment';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, Cylinder, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, platformOf } from '../implant';
-import { Vec2, Vec3, add, addScaled, clamp, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, toFrame } from '../math';
+import { Vec2, Vec3, add, addScaled, clamp, cross, distToSegment2, dot, fromFrame, neg, normalize, scale, sub, toFrame } from '../math';
 import { CropSpec, SlabSpec, sampleLine } from '../render';
 import { Plane, PlaneView, Pt, ScrollInfo, View, ViewState, drawLabel } from './View';
 import { ImplantEditor, projectedRadialAxial } from './implantEdit';
@@ -373,11 +373,21 @@ export class PlanAxialView extends PlaneView {
     if (curve) {
       // cross-section positions (kept when the blue curve lines are hidden)
       for (let k = 0; k < 3; k++) {
-        const s = app.crossS(k);
-        const cp = curve.at(s);
+        // where the plane crosses this level
+        const pl = app.crossPlane(k)!;
+        const F = app.frame;
+        const nP = cross(pl.u, pl.v);
+        let d = cross(nP, F[2]);
+        d = scale(d, 1 / Math.max(1e-6, Math.hypot(d[0], d[1], d[2])));
+        const c = toFrame(pl.center, app.O, F);
+        const dz = c[2] - app.focusC;
+        const g = sub(F[2], scale(nP, dot(F[2], nP))); // in-plane direction that changes the level fastest
+        const gz = dot(g, F[2]);
+        const p0 = Math.abs(gz) > 1e-6 ? toFrame(addScaled(pl.center, g, -dz / gz), app.O, F) : c;
+        const dx = dot(d, F[0]), dy = dot(d, F[1]);
         const L = 12;
-        const a = this.fromAB([cp.p[0] + cp.n[0] * L, cp.p[1] + cp.n[1] * L]);
-        const b = this.fromAB([cp.p[0] - cp.n[0] * L, cp.p[1] - cp.n[1] * L]);
+        const a = this.fromAB([p0[0] + dx * L, p0[1] + dy * L]);
+        const b = this.fromAB([p0[0] - dx * L, p0[1] - dy * L]);
         o.strokeStyle = k === 1 ? '#fff' : CROSS_COLOR;
         o.lineWidth = k === 1 ? 2 : 1;
         o.beginPath();
@@ -493,17 +503,12 @@ export class CrossView extends PlaneView {
     return this.app.vol ? 'Draw a panoramic curve in the axial view first.' : 'No volume loaded';
   }
 
+  /** Kept while an implant is dragged here (the plane follows the implant's axis otherwise). */
+  private frozen: Plane | null = null;
+
   protected plane(): Plane | null {
-    const app = this.app;
-    if (!app.curve) return null;
-    const cp = app.curve.at(app.crossS(this.index));
-    const F = app.frame;
-    const nW = add(scale(F[0], cp.n[0]), scale(F[1], cp.n[1]));
-    return {
-      center: fromFrame([cp.p[0], cp.p[1], app.focusC], app.O, F),
-      u: neg(nW), // buccal on the left, lingual on the right
-      v: neg(F[2]),
-    };
+    // buccal on the left, lingual on the right; along the selected implant's axis
+    return this.frozen ?? this.app.crossPlane(this.index);
   }
   protected crop(): CropSpec | null {
     return this.app.cropSpec();
@@ -522,7 +527,11 @@ export class CrossView extends PlaneView {
       app.placeImplantAt(this.screenToWorld(p)!);
       return false;
     }
-    if (this.startImplantDrag(p)) return true;
+    const pl = this.plane();
+    if (pl && this.startImplantDrag(p)) {
+      this.frozen = pl;
+      return true;
+    }
     // click: set the vertical level
     const w = this.screenToWorld(p)!;
     app.focusC = toFrame(w, app.O, app.frame)[2];
@@ -533,7 +542,9 @@ export class CrossView extends PlaneView {
     this.dragImplant(p, last);
   }
   protected onLeftUp() {
+    this.frozen = null;
     this.endImplantDrag();
+    this.app.requestRender();
   }
   protected onHover(p: Pt) {
     if (!this.updateHoverCursor(p)) this.el.style.cursor = this.app.placing ? 'crosshair' : '';
