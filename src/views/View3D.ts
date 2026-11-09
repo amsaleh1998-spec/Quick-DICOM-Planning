@@ -58,6 +58,10 @@ uniform vec3 uNerveMin, uNerveMax, uNerveCol;
 uniform sampler2D uScanCol;
 uniform sampler2D uScanDepth;
 uniform int uScanOn;
+// library implants (their meshes, rasterised on their own)
+uniform sampler2D uImpCol;
+uniform sampler2D uImpDepth;
+uniform int uImpOn;
 uniform float uNear, uFar;
 out vec4 outColor;
 
@@ -194,11 +198,7 @@ void main() {
   float tGuide = 1e20;
   vec3 nGuide = vec3(0.0);
   vec3 cGuide = vec3(0.0);
-  // library implants are drawn as meshes (with the scans); their envelope (C.w < 0) only shows
-  // them where something covers them
-  float tEnv = 1e20;
-  vec3 nEnv = vec3(0.0);
-  vec3 cEnv = vec3(0.0);
+  // library implants (C.w < 0) are drawn from their meshes below, not as cones
   for (int i = 0; i < ${MAX_CYL}; i++) {
     if (i >= uNumCyl) break;
     vec4 A = uCyl[i * 3];
@@ -210,14 +210,13 @@ void main() {
     if (B.w < 0.0) {
       if (h.x < tGuide) { tGuide = h.x; nGuide = h.yzw; cGuide = C.rgb; }
     } else if (C.w < 0.0) {
-      if (h.x < tEnv) { tEnv = h.x; nEnv = h.yzw; cEnv = C.rgb; }
+      continue;
     } else if (h.x < tImp) { tImp = h.x; nImp = h.yzw; cImp = C.rgb; }
   }
   // implants / abutments on their own (tImp may become a nerve below)
   float tCyl = tImp;
   vec3 nCyl = nImp;
   vec3 cCyl = cImp;
-  if (tEnv < tCyl) { tCyl = tEnv; nCyl = nEnv; cCyl = cEnv; }
   // nerve canals: opaque in front, shown through the bone when hidden
   float tNerve = 1e20;
   vec3 nNerve = vec3(0.0);
@@ -414,6 +413,19 @@ void main() {
       }
     }
   }
+  // library implants: their mesh, and like every implant shown through whatever covers it
+  if (uImpOn == 1) {
+    vec2 uv = gl_FragCoord.xy / uRes;
+    vec4 ic = texture(uImpCol, uv);
+    if (ic.a > 0.0) {
+      float zn = texture(uImpDepth, uv).r * 2.0 - 1.0;
+      float tM = 2.0 * uNear * uFar / (uFar + uNear - zn * (uFar - uNear)) / dot(rd, uFwd);
+      if (tM < tImp) {
+        bool covered = tM > tSurf + 0.05 || tS < tM - 0.05 || (uMode != 0 && acc.a > 0.3);
+        col = covered ? mix(col, ic.rgb, 0.8) : ic.rgb;
+      }
+    }
+  }
   // implants and abutments are always visible: drawn over any bone, segment, scan or waxup in front
   if (tCyl < 1e19) {
     bool covered = tCyl > tSurf + 0.05 || tS < tCyl - 0.05 || (uMode != 0 && acc.a > 0.3);
@@ -473,6 +485,11 @@ export class View3D extends View {
   private scanColTex: WebGLTexture | null = null;
   private scanDepthTex: WebGLTexture | null = null;
   private scanFboSize = '';
+  /** library implants' meshes, rasterised on their own (colour + depth) */
+  private impFbo: WebGLFramebuffer | null = null;
+  private impColTex: WebGLTexture | null = null;
+  private impDepthTex: WebGLTexture | null = null;
+  private impFboSize = '';
   private uploaded = new WeakMap<object, string>();
   /** tooth whose part highlight is in its vertex colours, and which part */
   private partColored = new WeakMap<WaxTooth, string>();
@@ -534,7 +551,7 @@ export class View3D extends View {
         'uVol', 'uTexScale', 'uTexOffset', 'uTexel', 'uBoxMax', 'uCam', 'uRight', 'uUp', 'uFwd', 'uTanHalf', 'uRes',
         'uFrame', 'uOrigin', 'uCropMin', 'uCropMax', 'uLo', 'uHi', 'uStep', 'uOpac', 'uWC', 'uWW', 'uMode', 'uNumCyl', 'uCyl',
         'uLab', 'uSegTab', 'uLabInv', 'uLabMax', 'uSegOn', 'uShowUnseg', 'uMarg', 'uNerve', 'uNumNerve', 'uNerveMin', 'uNerveMax', 'uNerveCol',
-        'uScanCol', 'uScanDepth', 'uScanOn', 'uNear', 'uFar',
+        'uScanCol', 'uScanDepth', 'uScanOn', 'uNear', 'uFar', 'uImpCol', 'uImpDepth', 'uImpOn',
       ];
       for (const n of names) this.uni[n] = gl.getUniformLocation(p, n);
       gl.bindVertexArray(gl.createVertexArray());
@@ -552,6 +569,9 @@ export class View3D extends View {
         this.scanFbo = gl.createFramebuffer();
         this.scanColTex = this.makeTex(gl.TEXTURE_2D);
         this.scanDepthTex = this.makeTex(gl.TEXTURE_2D);
+        this.impFbo = gl.createFramebuffer();
+        this.impColTex = this.makeTex(gl.TEXTURE_2D);
+        this.impDepthTex = this.makeTex(gl.TEXTURE_2D);
       } catch (e) {
         console.warn('Scan rendering unavailable', e);
         this.meshGl = null;
@@ -1247,6 +1267,7 @@ export class View3D extends View {
     gl.uniform4fv(u.uCyl, cyl);
     this.bindSegmentation();
     const scansOn = this.drawScans(cam.pos, W, H);
+    const impOn = this.drawImplantMeshes(cam.pos, W, H);
     gl.useProgram(this.prog);
     gl.viewport(0, 0, W, H);
     gl.uniform1i(u.uScanOn, scansOn ? 1 : 0);
@@ -1256,10 +1277,61 @@ export class View3D extends View {
     gl.activeTexture(gl.TEXTURE7);
     gl.bindTexture(gl.TEXTURE_2D, this.scanDepthTex);
     gl.uniform1i(u.uScanDepth, 7);
+    gl.uniform1i(u.uImpOn, impOn ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE8);
+    gl.bindTexture(gl.TEXTURE_2D, this.impColTex);
+    gl.uniform1i(u.uImpCol, 8);
+    gl.activeTexture(gl.TEXTURE9);
+    gl.bindTexture(gl.TEXTURE_2D, this.impDepthTex);
+    gl.uniform1i(u.uImpDepth, 9);
     gl.uniform1f(u.uNear, SCAN_NEAR);
     gl.uniform1f(u.uFar, SCAN_FAR);
     gl.activeTexture(gl.TEXTURE0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /** Rasterise the library implants' meshes into their own colour / depth target. */
+  private drawImplantMeshes(camPos: Vec3, W: number, H: number): boolean {
+    const gl = this.gl!;
+    const mg = this.meshGl;
+    const app = this.app;
+    if (!mg || !this.impFbo) return false;
+    const libImps = app.implants.filter((imp) => !imp.hidden && imp.lib && meshOf(imp.lib.id));
+    if (!libImps.length) return false;
+    const size = `${W}x${H}`;
+    if (size !== this.impFboSize) {
+      gl.bindTexture(gl.TEXTURE_2D, this.impColTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.bindTexture(gl.TEXTURE_2D, this.impDepthTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, W, H, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.impFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.impColTex, 0);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.impDepthTex, 0);
+      this.impFboSize = size;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.impFbo);
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clearDepth(1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    const mvp = viewProjection(camPos, this.right, this.up, this.fwd, FOV, W / Math.max(1, H), SCAN_NEAR, SCAN_FAR);
+    for (const imp of libImps) {
+      const m = meshOf(imp.lib!.id)!;
+      const p = platformOf(imp);
+      const key = `${imp.lib!.id}|${p.join(',')}|${imp.axis.join(',')}`;
+      if (this.uploaded.get(imp) !== key || !mg.has(imp)) {
+        const pos = meshWorld(imp, m, p, imp.axis);
+        mg.upload(imp, pos, vertexNormals(pos, m.idx), m.idx, null);
+        this.uploaded.set(imp, key);
+      }
+      const col = imp.id === app.selectedId ? IMPLANT_SELECTED_COLOR : IMPLANT_COLOR;
+      mg.draw(imp, mvp, camPos, { color: col, opacity: 1, vertexColors: false });
+    }
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return true;
   }
 
   /** Rasterise the visible, placed scans and the waxup teeth into the offscreen colour/depth target. */
@@ -1273,7 +1345,7 @@ export class View3D extends View {
     if (!mg || !this.scanFbo) return false;
     const libImps = app.implants.filter((imp) => !imp.hidden && imp.lib && meshOf(imp.lib.id));
     mg.prune(new Set<unknown>([...app.scans, ...wax.model.teeth, ...libImps]));
-    if (!scans.length && !teeth.length && !libImps.length) return false;
+    if (!scans.length && !teeth.length) return false;
     const size = `${W}x${H}`;
     if (size !== this.scanFboSize) {
       gl.bindTexture(gl.TEXTURE_2D, this.scanColTex);
@@ -1334,24 +1406,6 @@ export class View3D extends View {
             vc = true;
           }
           mg.draw(t, mvp, camPos, { color, opacity: wax.opacity, vertexColors: vc });
-        },
-      });
-    }
-    // library implants: their meshes, in the implant colours
-    for (const imp of libImps) {
-      items.push({
-        opacity: 1,
-        draw: () => {
-          const m = meshOf(imp.lib!.id)!;
-          const p = platformOf(imp);
-          const key = `${imp.lib!.id}|${p.join(',')}|${imp.axis.join(',')}`;
-          if (this.uploaded.get(imp) !== key || !mg.has(imp)) {
-            const pos = meshWorld(imp, m, p, imp.axis);
-            mg.upload(imp, pos, vertexNormals(pos, m.idx), m.idx, null);
-            this.uploaded.set(imp, key);
-          }
-          const col = imp.id === app.selectedId ? IMPLANT_SELECTED_COLOR : IMPLANT_COLOR;
-          mg.draw(imp, mvp, camPos, { color: col, opacity: 1, vertexColors: false });
         },
       });
     }
