@@ -848,6 +848,12 @@ export class PanoView extends View {
   }
 
   /** World point -> panoramic screen position (projection along the curve normal). */
+  override screenPoint(w: Vec3): [number, number] | null {
+    if (!this.app.curve) return null;
+    const p = this.project(w);
+    return [p.x, p.y];
+  }
+
   project(w: Vec3): { x: number; y: number; s: number; off: number } {
     const app = this.app;
     const f = toFrame(w, app.O, app.frame);

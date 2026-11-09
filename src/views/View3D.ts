@@ -1155,6 +1155,23 @@ export class View3D extends View {
 
   // ---- rendering ------------------------------------------------------------
 
+  override screenPoint(w: Vec3): [number, number] | null {
+    const p = this.projectPoint(w);
+    return p ? [p[0], p[1]] : null;
+  }
+
+  protected override baseCanvas(): HTMLCanvasElement {
+    return this.glCanvas;
+  }
+
+  /** Captures redraw at full quality (the GL image is only there right after drawing). */
+  override capture(): HTMLCanvasElement | null {
+    this.lastKey = '';
+    this.draft = false;
+    clearTimeout(this.refineTimer);
+    return super.capture();
+  }
+
   override render() {
     if (!this.visible) return;
     const app = this.app;
