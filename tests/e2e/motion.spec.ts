@@ -71,9 +71,11 @@ for (const reduce of [false, true]) {
       expect(mid.moving).toBe(!reduce);
       expect(mid.even).toBe(true);
       await expect.poll(async () => (await view()).moving).toBe(false);
-      const end = await view();
-      expect([end.w, end.h]).toEqual([end.cw, end.ch]);
-      expect(end.canvas).toBe(Math.round(end.w * end.dpr));
+      // the size it renders at follows the layout (the resize is reported a frame later)
+      await expect.poll(async () => { const e = await view(); return [e.w, e.h, e.canvas]; }).toEqual(await page.evaluate(() => {
+        const v = window.app.crossViews[1];
+        return [v.el.clientWidth, v.el.clientHeight, Math.round(v.el.clientWidth * v.dpr)];
+      }));
     }
   });
 }

@@ -276,8 +276,12 @@
             <ul id="implant-list"></ul>
             <div class="row"><button id="btn-show-all-implants" class="hidden" title="Show every hidden implant and abutment">Show all</button></div>
             <div id="implant-edit" class="hidden edit-box">
+              <div class="tooth-pick">
+                <div class="tooth-head small"><span>Tooth</span><span id="imp-jaw" class="muted"></span></div>
+                <div id="imp-teeth" class="tooth-chart" role="group" aria-label="Tooth this implant replaces"></div>
+              </div>
               <div class="row">
-                <label class="grow">Name <input id="imp-name" type="text" maxlength="40" placeholder="e.g. 36 or Molar left" /></label>
+                <label class="grow">Name <input id="imp-name" type="text" maxlength="40" placeholder="the tooth number, or e.g. Zygoma left" title="Set by choosing the tooth above; type another name when needed" /></label>
               </div>
               <div class="imp-model">
                 <label class="small">Implant <select id="imp-brand" title="Generic (any size) or a manufacturer's implant"></select></label>

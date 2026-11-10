@@ -48,7 +48,7 @@ test('objects list: every surface with an eye, group eyes, collapse, resize', as
     a.placeImplantAt(a.vol.center);
   });
   await expect(list).toContainText('Tooth');
-  await expect(list).toContainText('Implant 1');
+  await expect(list).toContainText(await page.evaluate(() => window.app.implants[0].name as string)); // its tooth, or Implant 1
   await expect(list).toContainText('Bone outside segments');
   await page.click('#obj-groups [data-k="seg1"]');
   expect(await page.evaluate(() => window.app.seg.segments[0].visible)).toBe(false);

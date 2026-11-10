@@ -2,6 +2,8 @@
 // abutment), defaults and the angle table.
 
 import type { Jaw } from '../app';
+import type { Implant } from '../implant';
+import { TOOTH_WIDTH, jawTeeth, toothOfName } from '../teeth';
 import { MAX_IMPLANT_LENGTH, MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronalDiameter } from '../implant';
 import { NERVE_SAFETY_MM } from '../nerve';
 import { LibSystem, findModel, implantIndex, loadImplantIndex, modelId, nearestSize, preloadSystems, setOnMeshesLoaded } from '../implantLibrary';
@@ -39,6 +41,69 @@ impName.onblur = () => {
 impName.onkeydown = (e) => {
   if (e.key === 'Enter' || e.key === 'Escape') impName.blur();
 };
+
+// ---- tooth chart: the arch of the implant's jaw, seen from occlusal; a tooth names the implant ----
+const teethEl = $('imp-teeth');
+let teethKey = '';
+function renderTeeth(sel: Implant) {
+  const jaw = app.implantJaw(sel);
+  const current = toothOfName(sel.name);
+  const taken = new Map<number, string>();
+  for (const o of app.implants) {
+    const t = toothOfName(o.name);
+    if (o !== sel && t) taken.set(t, o.name);
+  }
+  const key = `${sel.id}|${jaw}|${current}|${[...taken.keys()].join()}`;
+  if (key === teethKey) return;
+  teethKey = key;
+  $('imp-jaw').textContent = jaw === 'upper' ? 'Maxilla' : 'Mandible';
+  // teeth along an elliptical arch, spaced by their widths; patient right on the left (as in the
+  // panoramic), front of the arch down for the mandible and up for the maxilla
+  const order = jawTeeth(jaw);
+  const w = order.map((t) => TOOTH_WIDTH[jaw][(t % 10) - 1]);
+  const half = w.slice(0, 8).reduce((a, b) => a + b, 0);
+  const W = 240, H = 156, cx = W / 2, rx = 92, ry = 104;
+  const up = jaw === 'upper';
+  const cy = up ? H - 26 : 26;
+  let acc = -half;
+  const pos = order.map((_, i) => {
+    const mid = acc + w[i] / 2;
+    acc += w[i];
+    const phi = (mid / half) * (Math.PI * 0.52);
+    const x = cx + rx * Math.sin(phi);
+    const y = cy + (up ? -1 : 1) * ry * Math.cos(phi);
+    return { x, y, phi };
+  });
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+  const parts = order.map((t, i) => {
+    const p = pos[i];
+    const near = Math.min(i > 0 ? dist(p, pos[i - 1]) : Infinity, i < 15 ? dist(p, pos[i + 1]) : Infinity);
+    const r = Math.max(4.5, near * 0.44);
+    // number outside the arch
+    const ox = Math.sin(p.phi), oy = (up ? -1 : 1) * Math.cos(p.phi);
+    const lx = p.x + ox * (r + 9), ly = p.y + oy * (r + 9) + 3.5;
+    const state = t === current ? 'cur' : taken.has(t) ? 'taken' : 'free';
+    const title = state === 'taken' ? `${taken.get(t)} is already at tooth ${t}` : state === 'cur' ? `Tooth ${t}` : `Tooth ${t}: name the implant ${t}`;
+    return `<g class="tooth ${state}" data-tooth="${t}" role="button" tabindex="${state === 'taken' ? -1 : 0}" aria-label="Tooth ${t}" aria-pressed="${state === 'cur'}"><title>${title}</title>
+      <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}"/>
+      <text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle">${t}</text></g>`;
+  });
+  teethEl.innerHTML = `<svg viewBox="0 0 ${W} ${H}" aria-hidden="false">${parts.join('')}</svg>`;
+}
+const pickTooth = (g: Element | null) => {
+  const sel = app.selectedImplant();
+  if (!g || !sel || g.classList.contains('taken')) return;
+  app.renameImplant(sel.id, (g as HTMLElement).dataset.tooth!);
+  app.commitHistory();
+};
+teethEl.addEventListener('click', (e) => pickTooth((e.target as Element).closest('.tooth')));
+teethEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    pickTooth((e.target as Element).closest('.tooth'));
+  }
+});
+
 const impD = $<HTMLInputElement>('imp-d');
 const impTapered = $<HTMLInputElement>('imp-tapered');
 const impAd = $<HTMLInputElement>('imp-ad');
@@ -332,6 +397,7 @@ export function refreshImplantsPanel() {
     impPicker.set(sel.lib?.id ?? null);
     $('imp-generic').classList.toggle('hidden', !!sel.lib);
     if (document.activeElement !== impName) impName.value = sel.name;
+    renderTeeth(sel);
     if (document.activeElement !== impD) impD.value = sel.diameter.toFixed(1);
     const tapered = sel.apicalDiameter !== null;
     impTapered.checked = tapered;

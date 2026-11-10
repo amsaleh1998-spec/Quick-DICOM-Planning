@@ -78,7 +78,17 @@ app.wax.openPanel = (grabbed = false) => {
   grabbing = false;
 };
 const v3dMax = () => app.view3d.el.classList.contains('max');
+// a click on an implant (in a view or the Objects list) shows the Implants panel with it
+app.openImplantsPanel = () => {
+  if (app.mode === 'plan' && (rail.current !== 'implants' || !rail.open)) rail.select('implants');
+};
 rail.onChange = () => {
+  // a panel's tools stop when another panel is shown: left on, they would keep taking the clicks
+  // in the views (picking segments, adding nerve points, placing an implant) and keep a click
+  // outside an implant from deselecting it
+  if (app.segTool === 'nerve' && rail.current !== 'nerves') app.setSegTool(null);
+  if ((app.segTool === 'grow' || app.segTool === 'cut') && rail.current !== 'segments') app.setSegTool(null);
+  if (app.placing && rail.current !== 'implants') app.placing = null;
   const on = app.mode === 'plan' && rail.current === 'waxup' && rail.open;
   if (app.wax.editing === on) return;
   app.wax.editing = on;

@@ -870,6 +870,11 @@ export abstract class View {
         if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= CLICK_SLOP && !this.app.implantPressed) this.app.selectImplant(null, false);
       }
       this.clickDeselects = false;
+      // a click (or drag) on an implant: its panel opens, once the gesture is over
+      if (this.drag === 'left' && this.app.implantPressed && e.type === 'pointerup') {
+        this.app.implantPressed = false;
+        this.app.openImplantsPanel();
+      }
       if (this.drag === 'pan' && this.middleDown && e.type === 'pointerup') {
         const p = this.pos(e);
         if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= 3) this.onMiddleClick(p);
@@ -1087,8 +1092,11 @@ export abstract class View {
           const onRuler = this.measureKind && this.hitMeasureLine(st.p);
           const arm = !onRuler && this.armDeselect();
           if (!onRuler && this.onLeftDown(st.p, e)) this.onLeftUp(st.p, e, false);
-          // a tap outside every implant deselects
-          if (arm && !this.app.implantPressed) this.app.selectImplant(null, false);
+          // a tap outside every implant deselects; a tap on one shows its panel
+          if (this.app.implantPressed) {
+            this.app.implantPressed = false;
+            this.app.openImplantsPanel();
+          } else if (arm) this.app.selectImplant(null, false);
         }
       }
       this.touchStart = null;
