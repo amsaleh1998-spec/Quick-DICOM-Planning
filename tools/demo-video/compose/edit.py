@@ -216,13 +216,12 @@ def build(S, report_pages=None):
     if 'implants' in S:
         s = S['implants']
         t0 = tl.n
-        # the clicks on "+ Upper implant" (24, 26), on the Implant ▾ and the size ▾ lists; the drag that tilts 24 in the cross-section
-        add24, brand, add26, size = s.clicks[0], s.before('brandList'), s.after('tilted24'), s.before('sizeList')
-        tilt = s.before('tilted24', 'down')
+        # the clicks on "+ Upper implant" (24, 26) and on the Implant ▾ list
+        add24, brand, add26 = s.clicks[0], s.before('brandList'), s.after('mua24')
         tl.clip(s.cap, s.a, s.b, [
-            (s.a, 1.7), (add24 - s.d(14), 1.6), (s.m('placed24'), 2.2), (s.m('zoomed') - s.d(6), 1.2),
-            (tilt - s.d(34), 1.15), (s.m('tilted24') - s.d(14), 1.9), (s.m('placed26') - s.d(20), 1.4),
-            (s.m('nudged26') - s.d(10), 1.8), (s.m('done') - s.d(8), 1.15), (s.b - s.d(34), 3.0),
+            (s.a, 1.7), (add24 - s.d(14), 1.6), (s.m('placed24'), 2.2), (s.m('zoomed') - s.d(6), 1.2), (s.m('library'), 2.0),
+            (s.m('sized24') - s.d(10), 1.5), (s.m('tilted24'), 2.6), (s.m('mua24') - s.d(24), 1.9),
+            (s.m('placed26'), 2.8), (s.m('sized26'), 2.5), (s.m('tilted26'), 3.0), (s.m('done') - s.d(20), 1.15), (s.b - s.d(34), 3.0),
         ], xfade=X)
         # the details close up: the implant's settings, the cross-sections, the tangential view and the
         # small 3D view – everything left of the Objects list, along the window's lower edge
@@ -234,12 +233,12 @@ def build(S, report_pages=None):
         cam.to(at(s, add26, t0) - 2, WIDE, move=36)
         cam.to(at(s, s.m('placed26'), t0) + 44, detail, move=40)
         cam.to(at(s, s.m('done'), t0) + 30, WIDE, move=40)
-        k = [at(s, f, t0) for f in (brand, tilt, add26, size)]
+        k = [at(s, f, t0) for f in (brand, s.m('sized24'), s.m('tilted24'), add26)]
         mv.caption(t0 + 16, k[0] - 10, 'Place the implant', 'Place')
-        mv.caption(k[0] - 2, k[1] - 30, 'Real implants: 14 brands, 1,260+ sizes', 'Real implants:')
-        mv.caption(k[1] - 22, k[2] - 12, 'Fine-tune it in the cross-section', 'Fine-tune')
-        mv.caption(k[2] - 4, k[3] - 12, 'The next one goes in parallel', 'in parallel')
-        mv.caption(k[3] - 4, tl.n - 4, 'Pick the size that fits', 'size')
+        mv.caption(k[0] - 2, k[1] - 8, 'Real implants: 14 brands, 1,260+ sizes', 'Real implants:')
+        mv.caption(k[1], k[2] - 8, 'Set position and angle in the sections', 'position and angle')
+        mv.caption(k[2], k[3] - 12, 'Add the multi-unit abutment', 'multi-unit abutment')
+        mv.caption(k[3] - 4, tl.n - 4, 'Same steps for the next one', 'next one')
 
     # ---- 3D ---------------------------------------------------------------------------------------
     if 'hero' in S:

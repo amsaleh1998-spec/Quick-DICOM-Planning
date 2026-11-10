@@ -25,12 +25,13 @@ const plan = {
   tangZoom: 2,
   brand: 'Straumann',
   /**
-   * 24: on the ridge 6 mm behind the canine (its root tip leans distally: 1.6 mm clear of it),
-   * placed at its centre height, then tilted 20° with the ridge (apex palatal).
+   * The implants, as planned by the user on this scan and exported (STL, DICOM patient coordinates):
+   * platform centre and axis (platform -> apex) read from the export, the size and the multi-unit
+   * abutment as the Implants panel lists them; the rotation of the angled head is the slider step
+   * nearest the exported one (188° against this curve's buccal direction).
    */
-  i24: { tooth: '24', s: 89.6, cCenter: 18.45, tilt: 20 },
-  /** 26: parallel to 24, platform on the ridge centre just under the crest, a wider implant */
-  i26: { tooth: '26', s: 98.5, cPlat: 13.4, size: '4.5 × 10 mm' },
+  i24: { tooth: '24', size: '3.75 × 12 mm', plat: [74.176, 34.1765, 66.1847], axis: [-0.36777, 0.37952, 0.84894], mua: { type: 'Angled MUA 17°', gh: '3', rotation: 190 } },
+  i26: { tooth: '26', size: '4.5 × 10 mm', plat: [76.8042, 43.3599, 65.303], axis: [-0.09356, 0.31861, 0.94326], mua: { type: 'Straight MUA 0°', gh: '2' } },
 
   /** 3D: app time per frame (above the 300 ms after which the app renders at full quality), orbit drags (px), zoom (hundreds of px of Ctrl + wheel: 1.9 = 1.6x closer) */
   hero: { appMs: 320, orbit1: [-145, -30], zoom: 1.9, orbit2: [-45, 10] },
