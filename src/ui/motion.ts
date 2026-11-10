@@ -70,19 +70,42 @@ export function stopMotion(el: HTMLElement) {
 }
 
 /**
- * The view grows from (or shrinks back to) the rectangle it had before a layout change: call with
- * that rectangle right after the change. Pure layout, no movement, when less motion is asked for.
+ * A view grows out of (or shrinks back into) the rectangle it had before a layout change: call
+ * with that rectangle right after the change. The view is never stretched: it is scaled evenly so
+ * that its content lines up with what the old rectangle showed (views keep their field of view
+ * across the shorter side), cut to the old rectangle, and both open up to its new place.
+ * No movement when less motion is asked for.
  */
 export function flipFrom(el: HTMLElement, before: DOMRect) {
   if (reducedMotion()) return;
-  const after = el.getBoundingClientRect();
-  if (!after.width || !after.height || !before.width || !before.height) return;
-  const sx = before.width / after.width;
-  const sy = before.height / after.height;
-  const dx = before.left - after.left;
-  const dy = before.top - after.top;
-  if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) return;
+  stopMotion(el);
+  const a = { x: el.getBoundingClientRect().left, y: el.getBoundingClientRect().top, w: el.offsetWidth, h: el.offsetHeight };
+  const b = before;
+  if (!a.w || !a.h || !b.width || !b.height) return;
+  if (Math.abs(b.left - a.x) < 1 && Math.abs(b.top - a.y) < 1 && Math.abs(b.width - a.w) < 1 && Math.abs(b.height - a.h) < 1) return;
+  const s = Math.min(b.width, b.height) / Math.min(a.w, a.h);
+  // centre on the old rectangle's centre
+  const tx = b.left + b.width / 2 - a.x - (s * a.w) / 2;
+  const ty = b.top + b.height / 2 - a.y - (s * a.h) / 2;
+  // the old rectangle in the view's own (unscaled) pixels
+  const left = Math.max(0, (b.left - a.x - tx) / s);
+  const top = Math.max(0, (b.top - a.y - ty) / s);
+  const right = Math.max(0, a.w - left - b.width / s);
+  const bottom = Math.max(0, a.h - top - b.height / s);
   el.style.transformOrigin = '0 0';
-  const a = animateTo(el, { transform: 'none' }, { from: { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }, response: 0.32 });
-  a.addEventListener('finish', () => (el.style.transformOrigin = ''));
+  el.style.zIndex = '5'; // over the views coming back on a restore
+  const anim = animateTo(
+    el,
+    { transform: 'none', clipPath: 'inset(0px 0px 0px 0px)' },
+    {
+      from: { transform: `translate(${tx}px, ${ty}px) scale(${s})`, clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px)` },
+      response: 0.32,
+    },
+  );
+  const done = () => {
+    el.style.transformOrigin = '';
+    el.style.zIndex = '';
+  };
+  anim.addEventListener('finish', done);
+  anim.addEventListener('cancel', done);
 }

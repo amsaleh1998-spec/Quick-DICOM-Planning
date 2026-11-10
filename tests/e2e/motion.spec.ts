@@ -1,6 +1,6 @@
 // Motion: menus grow from their button and fold back before hiding; a flick keeps the 3D model
 // turning until it settles (not after a pause, not with less motion asked for); a view grows
-// out of its tile when maximized.
+// out of its tile when maximized, evenly, and ends at its real size.
 import { type Page } from '@playwright/test';
 import { expect, openDemo, test } from './fixtures';
 
@@ -57,9 +57,23 @@ for (const reduce of [false, true]) {
     await page.waitForTimeout(2500);
     expect(await flick(page, 120)).toBe(false); // not after a pause before letting go
 
-    await page.evaluate(() => window.app.toggleMaximize(window.app.crossViews[1]));
-    const grows = await page.evaluate(() => getComputedStyle(window.app.crossViews[1].el).transform !== 'none');
-    expect(grows).toBe(!reduce);
-    await expect.poll(() => page.evaluate(() => getComputedStyle(window.app.crossViews[1].el).transform)).toBe('none');
+    // maximize and restore: grows evenly (never stretched) and ends at the view's real size
+    const view = () =>
+      page.evaluate(() => {
+        const v = window.app.crossViews[1];
+        const m = getComputedStyle(v.el).transform;
+        const k = m === 'none' ? [1, 0, 0, 1] : m.slice(7, -1).split(',').map(Number);
+        return { moving: m !== 'none', even: Math.abs(k[0] - k[3]) < 1e-3, w: v.w, h: v.h, cw: v.el.clientWidth, ch: v.el.clientHeight, canvas: v.ovCanvas.width, dpr: v.dpr };
+      });
+    for (let i = 0; i < 2; i++) {
+      await page.evaluate(() => window.app.toggleMaximize(window.app.crossViews[1]));
+      const mid = await view();
+      expect(mid.moving).toBe(!reduce);
+      expect(mid.even).toBe(true);
+      await expect.poll(async () => (await view()).moving).toBe(false);
+      const end = await view();
+      expect([end.w, end.h]).toEqual([end.cw, end.ch]);
+      expect(end.canvas).toBe(Math.round(end.w * end.dpr));
+    }
   });
 }
