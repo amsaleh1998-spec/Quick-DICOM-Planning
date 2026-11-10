@@ -32,8 +32,8 @@ const plan = {
   /** 26: parallel to 24, platform on the ridge centre just under the crest, a wider implant */
   i26: { tooth: '26', s: 98.5, cPlat: 13.4, size: '4.5 × 10 mm' },
 
-  /** 3D: app time per frame (above the 300 ms after which the app renders at full quality), orbit drags (px) and zoom notches */
-  hero: { appMs: 320, orbit1: [-145, -30], zoom: 4, orbit2: [-45, 10] },
+  /** 3D: app time per frame (above the 300 ms after which the app renders at full quality), orbit drags (px), zoom (hundreds of px of Ctrl + wheel: 1.9 = 1.6x closer) */
+  hero: { appMs: 320, orbit1: [-145, -30], zoom: 1.9, orbit2: [-45, 10] },
 };
 
 /** Catmull-Rom through the points, sampled every `step` mm: a smooth hand stroke. */

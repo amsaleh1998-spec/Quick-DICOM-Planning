@@ -220,7 +220,7 @@ def build(S, report_pages=None):
         add24, brand, add26, size = s.clicks[0], s.before('brandList'), s.after('tilted24'), s.before('sizeList')
         tilt = s.before('tilted24', 'down')
         tl.clip(s.cap, s.a, s.b, [
-            (s.a, 1.7), (add24 - s.d(14), 1.6), (s.m('placed24'), 2.2), (s.m('zoomed') - s.d(6), 1.5), (s.m('library'), 1.2),
+            (s.a, 1.7), (add24 - s.d(14), 1.6), (s.m('placed24'), 2.2), (s.m('zoomed') - s.d(6), 1.2),
             (tilt - s.d(34), 1.15), (s.m('tilted24') - s.d(14), 1.9), (s.m('placed26') - s.d(20), 1.4),
             (s.m('nudged26') - s.d(10), 1.8), (s.m('done') - s.d(8), 1.15), (s.b - s.d(34), 3.0),
         ], xfade=X)
@@ -236,8 +236,8 @@ def build(S, report_pages=None):
         cam.to(at(s, s.m('done'), t0) + 30, WIDE, move=40)
         k = [at(s, f, t0) for f in (brand, tilt, add26, size)]
         mv.caption(t0 + 16, k[0] - 10, 'Place the implant', 'Place')
-        mv.caption(k[0] - 2, k[1] - 44, 'Real implants: 14 brands, 1,260+ sizes', 'Real implants:')
-        mv.caption(k[1] - 36, k[2] - 12, 'Fine-tune it in the cross-section', 'Fine-tune')
+        mv.caption(k[0] - 2, k[1] - 30, 'Real implants: 14 brands, 1,260+ sizes', 'Real implants:')
+        mv.caption(k[1] - 22, k[2] - 12, 'Fine-tune it in the cross-section', 'Fine-tune')
         mv.caption(k[2] - 4, k[3] - 12, 'The next one goes in parallel', 'in parallel')
         mv.caption(k[3] - 4, tl.n - 4, 'Pick the size that fits', 'size')
 
@@ -247,8 +247,10 @@ def build(S, report_pages=None):
         t0 = tl.n
         c = s.clicks  # 0 maximize the 3D view, 1 the eye of "Upper jaw"
         o1, o2 = s.downs[1], s.downs[3]  # the two turns of the model
-        # (the shot starts with the 3D view already enlarged and the implant deselected)
-        tl.clip(s.cap, s.m('ready'), s.b, [(s.a, 1.3), (o1 - s.d(8), 1.3), (s.m('turned'), 1.5), (c[1] + s.d(16), 1.6), (o2 - s.d(6), 1.1), (s.m('end'), 1.5)], xfade=X)
+        # The shot starts with the 3D view already enlarged and the implant deselected. While the model
+        # moves (the turns, the zoom between them) every recorded frame is shown: played at 1.3x it
+        # would advance in uneven steps. The pointer's ways in between are shortened.
+        tl.clip(s.cap, s.m('ready'), s.b, [(s.a, 1.5), (o1 - s.d(4), 1.0), (s.m('turned'), 1.5), (s.m('zoom') - s.d(2), 1.0), (s.m('zoomed') + s.d(4), 1.5), (o2 - s.d(4), 1.0), (s.m('end'), 1.5)], xfade=X)
         views = within(view_of(union(s.r('hero3d'), s.r('objects')), fill=1.0), union(s.r('hero3d'), s.r('objects')), top=True)  # the 3D view and the Objects list, nothing else
         cam.cut(t0, views)
         focus = implants_rect(s.cap, s.m('end'), s.r('hero3d'))
