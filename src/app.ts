@@ -32,6 +32,7 @@ import { Volume, composeAffine, resampleVolume } from './volume';
 import type { History } from './history';
 import { planHistory } from './planHistory';
 import { flipFrom } from './ui/motion';
+import { nameForTooth } from './teeth';
 import { WaxState } from './waxup/waxApp';
 import { invert as invertAffine } from './register';
 import { MprView } from './views/MprView';
@@ -126,6 +127,8 @@ export class App {
   placing: Jaw | null = null;
   /** Set when a press lands on an implant (a click elsewhere deselects it). */
   implantPressed = false;
+  /** Show the Implants panel (set by the interface; after a click on an implant). */
+  openImplantsPanel: () => void = () => {};
   /** ruler tool active */
   ruler = false;
   measurements: Measurement[] = [];
@@ -824,6 +827,8 @@ export class App {
       this.applyModel(imp, this.defaultModel);
       imp.center = w;
     }
+    // named after the tooth it replaces (from where it sits on the arch); changed in the panel's chart
+    imp.name = nameForTooth(this, imp);
     if (sameJaw && ref?.abutment) imp.abutment = { ...ref.abutment };
     if (sameJaw && ref) imp.showProstheticAxis = ref.showProstheticAxis;
     this.implants.push(imp);

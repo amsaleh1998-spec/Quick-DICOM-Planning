@@ -2606,3 +2606,58 @@ a.btn-link {
 .error-text {
   color: var(--danger);
 }
+
+/* Implants panel: tooth chart (src/ui/implantsPanel.ts) */
+.tooth-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.tooth-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.tooth circle {
+  fill: var(--panel-3);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  transition: fill 0.12s;
+}
+.tooth text {
+  fill: var(--muted);
+  font: 600 10px var(--ui-font);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.tooth.free {
+  cursor: pointer;
+}
+.tooth.free:hover circle {
+  fill: var(--selected);
+}
+.tooth.free:hover text {
+  fill: var(--text);
+}
+.tooth.cur circle {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+.tooth.cur text {
+  fill: var(--text);
+}
+/* another implant is at this tooth: the implants' green, not clickable */
+.tooth.taken circle {
+  fill: rgba(64, 214, 128, 0.35);
+  stroke: rgb(64, 214, 128);
+}
+.tooth.taken {
+  cursor: not-allowed;
+}
+.tooth:focus-visible {
+  outline: none;
+}
+.tooth:focus-visible circle {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}

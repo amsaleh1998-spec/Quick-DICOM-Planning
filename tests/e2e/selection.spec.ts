@@ -1,6 +1,7 @@
 // A click outside every implant deselects the selected one (a few pixels of wobble included, and
 // with the Waxup panel open); a click on an implant selects it, and drags (orbiting the 3D view)
-// or clicks with a tool in use keep the selection.
+// or clicks with a tool in use keep the selection; a panel's tools stop when another panel is
+// shown; a click on an implant shows the Implants panel.
 import { type Page } from '@playwright/test';
 import { clickView, expect, inView, openDemo, test } from './fixtures';
 
@@ -81,4 +82,26 @@ test('a click outside every implant deselects it', async ({ page }) => {
   await page.evaluate((id) => window.app.selectImplant(id, true), id);
   await clickView(page, 'view3d', 0.06, 0.5);
   expect(await selected(page)).toBeNull();
+
+  // a segment pick left on in the Segments panel stops when another panel is shown – it no longer
+  // takes the clicks (and keeps a click outside from deselecting)
+  await page.click('[data-panel="segments"]');
+  await page.click('[data-seg-preset="0"]');
+  expect(await page.evaluate(() => window.app.segTool)).toBe('grow');
+  await page.click('[data-panel="implants"]');
+  expect(await page.evaluate(() => window.app.segTool)).toBeNull();
+  await page.evaluate((id) => window.app.selectImplant(id, true), id);
+  await clickView(page, 'crossViews.1', 0.08, 0.92);
+  expect(await selected(page)).toBeNull();
+
+  // a click on an implant from another panel shows the Implants panel with it
+  await page.click('[data-panel="segments"]');
+  await expect(page.locator('#panel-plan')).toBeHidden();
+  await page.evaluate((id) => window.app.selectImplant(id, true), id);
+  const [qx, qy] = await onImplant(page, 'pano');
+  await page.evaluate(() => window.app.selectImplant(null, false));
+  await page.mouse.click(qx, qy);
+  expect(await selected(page)).toBe(id);
+  await expect(page.locator('#panel-plan')).toBeVisible();
+  await expect(page.locator('#implant-edit')).toBeVisible();
 });

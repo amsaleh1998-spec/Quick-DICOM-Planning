@@ -171,7 +171,10 @@ function collect(): Group[] {
       color: [64, 214, 128],
       visible: !imp.hidden,
       set: (v) => (imp.hidden = !v),
-      select: () => app.selectImplant(imp.id, true),
+      select: () => {
+        app.selectImplant(imp.id, true);
+        app.openImplantsPanel();
+      },
     }));
     const withAb = app.implants.filter((i) => i.abutment);
     if (withAb.length)

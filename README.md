@@ -160,8 +160,14 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - **Show / hide**: the eye button in the implant list hides an implant (with its abutment and axis); the **MUA** button
   hides only its abutment. Hidden items are not drawn in any view (including 3D) and cannot be clicked; *Show all*
   brings everything back. Visibility is saved with the project and is not part of the undo history.
-- Implants can be renamed (name field, or double-click a name in the implant list); names appear in the views,
-  the angle table and saved projects.
+- **Implants are named after their tooth** (FDI: 36, 46, 11 …): a new implant gets the tooth at its place on the
+  arch (its distance from the midline of the panoramic curve, counted in mean tooth widths, in the jaw it points
+  to). The implant's box has a **tooth chart** of its jaw: click a tooth to name the implant after it (teeth of
+  other implants are shown green and cannot be taken twice; undo brings the old name back). The name field below
+  takes any other name (e.g. *Zygoma left*); names appear in the views, the angle table, the report and projects.
+- **A click on an implant** (in a view or the Objects list) selects it and shows the Implants panel; a click
+  anywhere else in a view deselects it. Tools of other panels (segment picking, cuts, nerve tracing, placing an
+  implant) stop when another panel is shown, so they no longer take the clicks.
 - While an implant is selected, the cross-sections follow it: they lean mesio-distally with its axis so the whole
   implant lies in them (the screen stays upright, so a buccal tilt still shows as one), and moving, tilting or resizing it re-centres the middle
   cross-section on it (scrolling to neighbouring sections stays free). Deselect it (Esc, or click anywhere outside the implants) for sections perpendicular to the
