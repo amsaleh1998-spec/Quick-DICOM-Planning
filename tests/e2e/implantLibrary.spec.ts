@@ -46,6 +46,10 @@ test('library implants: choose a model, defaults for new implants, generic again
   expect(s.d).toBeGreaterThan(4.4);
   // the slices show the cut through its mesh once it has loaded
   await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource').some((r) => r.name.includes('implants/straumann-blx-slactive.json')))).toBe(true);
+  // once the mesh is there every view is redrawn with it (the 3D view's render key says so) – no
+  // generic cylinder left over until the implant is moved
+  await expect.poll(() => page.evaluate(() => window.app.libraryMeshLoaded(window.app.selectedImplant().lib.id))).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window.app.view3d as unknown as { lastKey: string }).lastKey.includes('\\"mesh\\"'))).toBe(true); // (quoted inside the key's JSON)
 
   // the model chosen last is the default for new implants
   await addLower(page, 0.6);

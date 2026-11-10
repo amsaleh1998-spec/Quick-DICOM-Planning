@@ -4,7 +4,7 @@
 import type { Jaw } from '../app';
 import { MAX_IMPLANT_LENGTH, MUA_HEIGHTS, apicalDiameterOf, isTapered, setApicalDiameter, setCoronalDiameter } from '../implant';
 import { NERVE_SAFETY_MM } from '../nerve';
-import { LibSystem, findModel, implantIndex, loadImplantIndex, modelId, nearestSize, setOnMeshesLoaded } from '../implantLibrary';
+import { LibSystem, findModel, implantIndex, loadImplantIndex, modelId, nearestSize, preloadSystems, setOnMeshesLoaded } from '../implantLibrary';
 import { $, EYE, EYE_OFF, app, clampNum, escapeHtml } from './shell';
 
 const placeButton = (jaw: Jaw) => () => {
@@ -101,6 +101,8 @@ function modelPicker(prefix: 'imp' | 'def', dims: () => { d: number; L: number }
   };
   brandSel.onchange = () => {
     if (!brandSel.value) return apply(null);
+    const brand = implantIndex()?.brands.find((x) => x.name === brandSel.value);
+    if (brand) preloadSystems(brand.systems);
     fillSystems();
     const sys = systemOf();
     fillSizes(sys);
@@ -124,6 +126,8 @@ function modelPicker(prefix: 'imp' | 'def', dims: () => { d: number; L: number }
       shown = key;
       brandSel.innerHTML = `<option value="">Generic</option>` + (ix?.brands ?? []).map((b) => `<option>${escapeHtml(b.name)}</option>`).join('');
       const f = id ? findModel(id) : null;
+      // the brand's other systems load meanwhile: switching between them is instant
+      if (f) preloadSystems(f.brand.systems);
       brandSel.value = f ? f.brand.name : '';
       if (f) {
         fillSystems();

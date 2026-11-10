@@ -9,7 +9,7 @@ import { composeSegmentation, drawNervesProjected } from './overlays';
 import { drawPanoScans } from './scanContours';
 import { drawPanoWax, waxAt } from './waxContours';
 import { silhouette, sideOf } from './implantSections';
-import { meshOf } from '../implantLibrary';
+import { libraryShape, meshOf } from '../implantLibrary';
 import { WaxupEditor, intoScreen } from './waxupEdit';
 
 const CURVE_COLOR = '#4fb3ff';
@@ -1154,7 +1154,11 @@ export class PanoView extends View {
       const rb = part.r0 / this.vs.scale;
       o.beginPath();
       const mesh = isImp && imp.lib && app.curve ? meshOf(imp.lib.id) : null;
-      if (mesh) {
+      // a library implant whose mesh is still on its way: no generic outline in its place
+      const pending = isImp && !mesh && !!imp.lib && libraryShape(imp.lib.id) === 'pending';
+      if (pending) {
+        /* drawn when the mesh arrives */
+      } else if (mesh) {
         // library implant: its silhouette across the panoramic (threads and all)
         const cp = app.curve!.at(this.project(imp.center).s);
         const F = app.frame;
@@ -1175,8 +1179,10 @@ export class PanoView extends View {
       o.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${isGuide ? 0.8 : 1})`;
       o.lineWidth = sel ? 2 : 1.5;
       if (isGuide) o.setLineDash([5, 4]);
-      o.fill();
-      o.stroke();
+      if (!pending) {
+        o.fill();
+        o.stroke();
+      }
       o.setLineDash([]);
       if (isGuide) continue; // labels sit above the implant/abutment, not the guide
       if (isImp) {
