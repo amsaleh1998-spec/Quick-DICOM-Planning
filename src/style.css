@@ -2661,3 +2661,77 @@ a.btn-link {
   stroke: var(--accent);
   stroke-width: 2.5;
 }
+
+/* A folder with several patients (src/ui/patientChooser.ts) */
+.modal.patient-chooser {
+  max-width: 640px;
+}
+.patient-chooser footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+.patient-chooser .grow {
+  flex: 1;
+}
+.pc-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pc-card {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.pc-preview {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  background: #000;
+  border-radius: 6px;
+}
+.pc-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.pc-facts {
+  margin: 2px 0 4px;
+}
+.pc-facts b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pc-scan,
+.pc-files {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.pc-done {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(64, 214, 128, 0.12);
+  border: 1px solid rgba(64, 214, 128, 0.5);
+}
+@media (max-width: 520px) {
+  .pc-card {
+    grid-template-columns: 64px 1fr;
+  }
+  .pc-preview {
+    width: 64px;
+    height: 64px;
+  }
+  .pc-open {
+    grid-column: 1 / -1;
+  }
+}

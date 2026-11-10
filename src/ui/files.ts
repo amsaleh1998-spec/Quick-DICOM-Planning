@@ -7,6 +7,7 @@ import { isZipFile, zipEntriesAsFiles } from '../zip';
 import { findScanFolder, parentOf, rememberScanFolder, type FolderHit, type ScanDir } from '../scanFolders';
 import { formatDicomDate, formatPatientName } from '../dicomMeta';
 import { filesFromDataTransfer, loadDicomFiles } from '../dicom';
+import { choosePatient } from './patientChooser';
 import { createPhantom } from '../volume';
 import { closePopovers } from './popover';
 import { RecentEntry, RecentSource, addRecent, ago, handlesFromDrop, listRecent, readRecent, recentFromHandles, removeRecent } from './recent';
@@ -43,20 +44,35 @@ export async function loadFiles(files: File[]): Promise<string | null> {
   }
   try {
     showLoading('Reading files…', 0);
-    const vol = await loadDicomFiles(files, (stage, f) => showLoading(`${stage}…`, f));
+    const vol = await loadDicomFiles(files, (stage, f) => showLoading(`${stage}…`, f), {
+      // a folder with several patients: choose one (or sort them into folders first)
+      choosePatient: async (patients) => {
+        const pick = await choosePatient(patients, { startIn: openedDir ?? undefined });
+        if (pick !== null) showLoading('Reading files…', 1);
+        return pick;
+      },
+    });
     app.setVolume(vol);
     setMode(openInPlan() ? 'plan' : 'mpr');
     setStatus(`Loaded ${vol.nx}×${vol.ny}×${vol.nz} voxels from ${vol.info.source}`);
     noteRecent();
     return null;
   } catch (e) {
+    if ((e as Error).name === 'AbortError') {
+      setStatus('Nothing opened.');
+      return null;
+    }
     console.error(e);
     setStatus((e as Error).message, true);
     return (e as Error).message;
   } finally {
     hideLoading();
+    openedDir = null;
   }
 }
+
+/** The folder the files being opened come from (where patient folders are created by default). */
+let openedDir: FileSystemDirectoryHandle | null = null;
 
 // ---- installed app: open DICOM files from Windows Explorer ------------------------
 // The manifest registers .dcm/.dicom/.dic/.ima; Chrome/Edge hand the double-clicked file to
@@ -303,6 +319,7 @@ export async function pickAndOpen(kind: 'files' | 'folder' | 'project') {
     if (kind === 'folder') {
       if (!pickers.showDirectoryPicker) return folderInput.click();
       const dir = await pickers.showDirectoryPicker({ id: 'qdp-open', mode: 'read' });
+      openedDir = dir;
       showLoading('Reading folder…', 0);
       const files = await filesFromDirectory(dir as unknown as DirHandle, 4);
       pendingRecent = { kind: 'folder', handles: [dir], depth: 4 };

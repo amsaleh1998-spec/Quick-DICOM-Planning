@@ -7,6 +7,11 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 
 - **Start screen**: drop a CBCT (files, folder, ZIP or project), use the buttons, or reopen a scan from **Recent**
   (Chrome / Edge remember the files you opened through *Open*; reopening may ask for read access again).
+- **Several patients in one folder**: when the files hold scans of more than one patient (told apart by ID, name and
+  birth date), a dialog shows each one – name, ID, birth date, sex, scan date, the scans with their number of images
+  and a picture of each – to open the right one. *Create a folder for each patient…* copies each patient's files
+  into a folder of its own named after them (e.g. *DOE Jane (ID 12345)*), in a folder you choose (the one you opened,
+  by default); the original files are left as they are. Browsers that cannot write folders get a ZIP per patient.
 - **Top bar** (one row): the **patient chip** (name and scan date; click for ID, birth date, the editable name, volume
   details and *DICOM tags*) · **Open ▾** (files, folder, project, demo, recent) · **Save** · **Export ▾** (STL, project) ·
   the steps **① Reorient / ② Plan** · undo / redo · *Ruler* / *Clear* · window / level · **⚙ Settings** (mouse or
@@ -393,7 +398,7 @@ The type is guessed from the file name (upper / lower / wax-up …) and can be c
 - **Align to the CBCT** in a two-pane workspace (scan | CBCT). The CBCT side is the surface you choose: any segment
   (e.g. *Maxilla*) or the *3D render at the current threshold* (inside the crop box); closed hollow spaces are filled
   so only the outer surface is matched.
-  - **Points** (like Blue Sky Plan, RealGuide, exoplan): click a point on the scan, then the same point on the CBCT;
+  - **Points** (the default; like Blue Sky Plan, RealGuide, exoplan): click a point on the scan, then the same point on the CBCT;
     at least 3 pairs. The fit is refined on the surface around the points (or on the painted areas).
   - **Surfaces** (like coDiagnostiX): paint the areas of the scan that are visible in the CBCT (tooth surfaces, not
     gingiva or metal artefacts) and press *Match* – the position is searched automatically (rotations around the

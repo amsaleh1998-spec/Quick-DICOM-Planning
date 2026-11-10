@@ -14,15 +14,20 @@ import { pathToFileURL } from 'node:url';
 export const TEST_SERIES = { cols: 80, rows: 70, slices: 50, ps: 0.4, dz: 0.5, intercept: -1000, topZ: 100 };
 
 /** The series as files: [{ name, data }] (data: Buffer). */
-export function makeTestSeries({ noExt = false, raw = null } = {}) {
+/**
+ * `patient`: the made-up patient written into the files; `uid` / `prefix`: another series (a
+ * second patient in the same folder needs its own series UID and file names).
+ */
+export function makeTestSeries({ noExt = false, raw = null, patient = null, uid = null, prefix = 'IMG', slices: nSlices = 50 } = {}) {
+  const pat = { name: 'Test^Loader', id: 'PAT-0042', birth: '19800615', sex: 'F', ...(patient ?? {}) };
   const files = [];
   const cols = 80;
   const rows = 70;
-  const slices = 50;
+  const slices = nSlices;
   const ps = 0.4; // pixel spacing
   const dz = 0.5; // slice spacing
   const intercept = -1000;
-  const seriesUid = '1.2.826.0.1.3680043.8.498.1';
+  const seriesUid = uid ?? '1.2.826.0.1.3680043.8.498.1';
 
   function el(group, elem, vr, value) {
     if (raw === 'implicit' && group !== 0x0002) return elImplicit(group, elem, vr, value);
@@ -119,10 +124,10 @@ export function makeTestSeries({ noExt = false, raw = null } = {}) {
       seq(0x0008, 0x1140, [
         Buffer.concat([el(0x0008, 0x1150, 'UI', '1.2.840.10008.5.1.4.1.1.2'), el(0x0008, 0x1155, 'UI', `${seriesUid}.99`)]),
       ]),
-      el(0x0010, 0x0010, 'PN', 'Test^Loader'),
-      el(0x0010, 0x0020, 'LO', 'PAT-0042'),
-      el(0x0010, 0x0030, 'DA', '19800615'),
-      el(0x0010, 0x0040, 'CS', 'F'),
+      el(0x0010, 0x0010, 'PN', pat.name),
+      el(0x0010, 0x0020, 'LO', pat.id),
+      el(0x0010, 0x0030, 'DA', pat.birth),
+      el(0x0010, 0x0040, 'CS', pat.sex),
       el(0x0018, 0x0060, 'DS', '90'),
       el(0x0018, 0x0050, 'DS', String(dz)),
       el(0x0020, 0x000e, 'UI', seriesUid),
@@ -145,7 +150,7 @@ export function makeTestSeries({ noExt = false, raw = null } = {}) {
     const file = raw ? ds : Buffer.concat([Buffer.alloc(128), Buffer.from('DICM'), groupLen, meta, ds]);
     // shuffle file names relative to slice order
     const n = String((k * 37) % slices).padStart(4, '0');
-    files.push({ name: noExt ? `IM${n}` : `IMG${n}.dcm`, data: file });
+    files.push({ name: noExt ? `IM${n}` : `${prefix}${n}.dcm`, data: file });
   }
   return files;
 }
