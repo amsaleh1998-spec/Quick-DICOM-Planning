@@ -1,6 +1,6 @@
 import { ArchCurve } from './curve';
 import { Cylinder, Implant, MUA_ANGLES, createImplant, implantParts, platformOf, setApicalDiameter, setImplantAxis, setImplantLength } from './implant';
-import { findModel, meshOf } from './implantLibrary';
+import { findModel, libraryShape, meshOf } from './implantLibrary';
 import {
   Frame,
   Vec2,
@@ -1123,7 +1123,9 @@ export class App {
 
   implantsKey(): string {
     const hasAb = this.implants.some((i) => i.abutment);
-    return JSON.stringify([this.implants, this.selectedId, hasAb ? [this.curve?.ctrl, this.frame] : 0]);
+    // a library mesh arriving changes how the implant is drawn
+    const shapes = this.implants.map((i) => (i.lib ? libraryShape(i.lib.id) : 0));
+    return JSON.stringify([this.implants, this.selectedId, hasAb ? [this.curve?.ctrl, this.frame] : 0, shapes]);
   }
 
   // ---- segmentation -----------------------------------------------------------

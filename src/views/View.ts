@@ -5,7 +5,7 @@ import type { NewCut } from '../segment';
 import { CUT_CSS, composeNerveSection, composeSegmentation } from './overlays';
 import { drawPlaneScans } from './scanContours';
 import { drawPlaneWax, waxAt } from './waxContours';
-import { drawPlaneImplants, isMeshed } from './implantSections';
+import { drawPlaneImplants, isLibraryDrawn } from './implantSections';
 import { WaxupEditor, intoScreen } from './waxupEdit';
 import { ABUTMENT_COLOR, ABUTMENT_SELECTED_COLOR, IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, PROSTHETIC_COLOR, radiusAt } from '../implant';
 import { ImplantEditor } from './implantEdit';
@@ -1351,7 +1351,7 @@ export abstract class PlaneView extends View {
       const hl = part.half;
       if (Math.abs(dot(sub(part.center, pl.center), n)) > hl + r) continue;
       // library implants are cut from their mesh on the overlay (implantSections.ts)
-      if (part.kind === 'implant' && isMeshed(part.implant)) continue;
+      if (part.kind === 'implant' && isLibraryDrawn(part.implant)) continue;
       const sel = part.implant.id === this.app.selectedId;
       const isImplant = part.kind === 'implant';
       const isGuide = part.kind === 'prosthetic';

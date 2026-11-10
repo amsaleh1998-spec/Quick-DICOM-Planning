@@ -240,6 +240,9 @@ export function findModel(id: string): { brand: LibBrand; system: LibSystem; siz
 
 const meshes = new Map<string, LibMesh>();
 const systemLoads = new Map<string, Promise<void>>();
+/** Systems whose file could not be loaded, and when (retried after a while). */
+const failed = new Map<string, number>();
+const RETRY_MS = 15_000;
 
 /** Parse a system file (the decompressed binary) into meshes by model id. */
 export function parseSystem(buf: ArrayBuffer): Map<string, LibMesh> {
@@ -292,8 +295,11 @@ export function loadSystem(system: LibSystem): Promise<void> {
       })
       .catch((e) => {
         systemLoads.delete(system.file);
+        failed.set(system.file, performance.now());
+        onMeshesLoaded(); // drawn as a generic shape meanwhile
         throw e;
       });
+    failed.delete(system.file);
     systemLoads.set(system.file, p);
   }
   return p;
@@ -304,8 +310,27 @@ export function meshOf(id: string): LibMesh | null {
   const m = meshes.get(id);
   if (m) return m;
   const f = findModel(id);
-  if (f) void loadSystem(f.system).catch(() => {});
+  if (f && performance.now() - (failed.get(f.system.file) ?? -Infinity) > RETRY_MS) void loadSystem(f.system).catch(() => {});
   return null;
+}
+
+/**
+ * How a library model is drawn: its mesh, nothing yet ('pending' – the mesh is on its way, a
+ * fraction of a second), or a generic shape ('none': not in the catalogue, or its file could not
+ * be loaded).
+ */
+export function libraryShape(id: string): 'mesh' | 'pending' | 'none' {
+  if (meshOf(id)) return 'mesh';
+  const f = findModel(id);
+  if (!f) return 'none';
+  return performance.now() - (failed.get(f.system.file) ?? -Infinity) > RETRY_MS ? 'pending' : 'none';
+}
+
+/** Start loading these systems' meshes in the background (switching between them is then instant). */
+export function preloadSystems(systems: LibSystem[]) {
+  void (async () => {
+    for (const s of systems) await loadSystem(s).catch(() => {});
+  })();
 }
 
 /** Library mesh -> world for an implant: platform at `platform`, apex along `axis`. */

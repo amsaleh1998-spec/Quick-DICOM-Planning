@@ -12,7 +12,7 @@ import { Pt, View, drawLabel } from './View';
 import { ImplantEditor } from './implantEdit';
 import { Implant, implantParts, platformOf } from '../implant';
 import { vertexNormals } from '../meshio';
-import { meshOf, meshWorld } from '../implantLibrary';
+import { libraryShape, meshOf, meshWorld } from '../implantLibrary';
 import { reducedMotion } from '../ui/motion';
 
 const MAX_CYL = 48;
@@ -1333,7 +1333,8 @@ export class View3D extends View {
               : ABUTMENT_COLOR;
       const half = c.kind === 'prosthetic' ? -c.half : c.half; // sign marks translucent guides
       // a library implant whose mesh is drawn: its cone only for the view through what covers it
-      const meshed = c.kind === 'implant' && !!c.implant.lib && !!meshOf(c.implant.lib.id);
+      // (also while its mesh loads: never a generic cylinder in its place)
+      const meshed = c.kind === 'implant' && !!c.implant.lib && libraryShape(c.implant.lib.id) !== 'none';
       cyl.set([...c.center, c.r0, ...c.axis, half, col[0] / 255, col[1] / 255, col[2] / 255, meshed ? -Math.max(c.r1, 1e-3) : c.r1], i * 12);
     });
     gl.uniform1i(u.uNumCyl, parts.length);

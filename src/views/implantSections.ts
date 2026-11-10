@@ -3,7 +3,7 @@
 
 import type { App } from '../app';
 import { IMPLANT_COLOR, IMPLANT_SELECTED_COLOR, Implant, platformOf } from '../implant';
-import { LibMesh, meshOf, meshWorld } from '../implantLibrary';
+import { LibMesh, libraryShape, meshOf, meshWorld } from '../implantLibrary';
 import { Vec3, addScaled, cross, dot, normalize } from '../math';
 import { meshPlaneSegments } from './scanContours';
 
@@ -18,6 +18,8 @@ export function meshedImplants(app: App): { imp: Implant; m: LibMesh }[] {
   return out;
 }
 export const isMeshed = (imp: Implant) => !!imp.lib && !!meshOf(imp.lib.id);
+/** A library implant: drawn from its mesh – never as a generic cone, also while its mesh loads. */
+export const isLibraryDrawn = (imp: Implant) => !!imp.lib && libraryShape(imp.lib.id) !== 'none';
 
 const boxCache = new WeakMap<Float32Array, { min: Vec3; max: Vec3 }>();
 function box(p: Float32Array) {
