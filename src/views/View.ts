@@ -138,9 +138,9 @@ export abstract class View {
   }
 
   private resize() {
-    const r = this.el.getBoundingClientRect();
-    const w = Math.max(0, Math.floor(r.width));
-    const h = Math.max(0, Math.floor(r.height));
+    // layout size: not the on-screen box, which an animation may be scaling at this moment
+    const w = Math.max(0, this.el.clientWidth);
+    const h = Math.max(0, this.el.clientHeight);
     if (w === this.w && h === this.h) return;
     this.w = w;
     this.h = h;
@@ -648,15 +648,14 @@ export abstract class View {
 
   /** Controls along the top of the view: where the first row's free space ends and the second's begins. */
   private headerSpace(): { end1: number; start2: number; end2: number } {
-    const box = this.el.getBoundingClientRect();
     let end1 = this.w - 32; // maximize button
     let start2 = 8;
     let end2 = this.w - 12;
     for (const c of Array.from(this.el.children) as HTMLElement[]) {
       if (c instanceof HTMLCanvasElement || c === this.sbar || c.offsetParent === null) continue;
-      const r = c.getBoundingClientRect();
-      const top = r.top - box.top, left = r.left - box.left, right = r.right - box.left;
-      if (r.width === 0) continue;
+      // layout positions inside the view (unaffected by animations)
+      const top = c.offsetTop, left = c.offsetLeft, right = c.offsetLeft + c.offsetWidth;
+      if (c.offsetWidth === 0) continue;
       if (top < 18 && left > 40) end1 = Math.min(end1, left);
       else if (top >= 18 && top < 44) {
         if (left < 60) start2 = Math.max(start2, right + 6);
