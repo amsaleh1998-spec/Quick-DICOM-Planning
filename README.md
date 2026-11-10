@@ -40,7 +40,11 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   cross-section spacing (*12 mm · sections 2 mm ▾*).
 - **Status bar**: a one-line hint for the open panel, messages, and the value under the cursor.
 - **Look and motion**: graphite greys so the greyscale scan reads true; colour belongs to what is planned on it (curve,
-  view planes, implants, nerves, segments). Menus grow out of their button and fold back into it, dialogs rise into
+  view planes, implants, nerves, segments). One material stands out – titanium, the implants' own: the brand mark and
+  app icon (an implant with its crown), the prominent action of a panel, checked boxes and slider thumbs. Controls are
+  drawn, not the browser's defaults (selects, check boxes, sliders filled up to the thumb, thin scroll bars); the views
+  are rounded tiles on the dark window; menus and dialogs float as translucent layers over a blurred backdrop (solid
+  when the system asks for less transparency). The start screen says what the app is and that scans stay on the computer. Menus grow out of their button and fold back into it, dialogs rise into
   place, a panel slides in from the rail and a maximized view grows out of its tile – all critically damped springs
   (no bounce) that can be interrupted. A quick flick in the 3D view keeps the model turning and slows it like a
   scroll; any click, wheel or key-driven view change stops it. With *Reduce motion* turned on in the system these
