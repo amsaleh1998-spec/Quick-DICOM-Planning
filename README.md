@@ -300,9 +300,18 @@ the size: the implant keeps its platform where it is and takes the model's shape
   collar).
 - Nerve distances, hit testing and the see-through view use a cone that encloses the implant's part in bone.
 - STL export writes the implant's mesh. Projects remember the model.
-- The library (`public/implants/`: a catalogue and one file per system, fetched when a system is first used) is built
-  from the manufacturers' implant STLs by `scripts/make-implant-library.py` (decimated to at most 5,000 triangles,
-  platform / apex / connection measured on the mesh).
+- **Download for instant loading** (*Implant library* at the bottom of the Implants panel): without it, each system
+  is fetched from the server the first time one of its implants is used. *Download* keeps the whole library (about
+  56 MB) in this browser – the catalogue and every implant then load instantly, also offline. *Remove download*
+  frees the space.
+- **Library versions**: the library has a version number (now **1**). When a newer version is published, a browser
+  that downloaded an older one shows *Update* next to *Implant library* and offers *Update to version N*; the new
+  version is downloaded next to the old one, which is dropped once the new one is complete (a failed or cancelled
+  update leaves the working copy as it was). Without a download, the newest version is always used.
+- The library (`public/implants/`: a catalogue and one file per system) is built from the manufacturers' implant
+  STLs by `scripts/make-implant-library.py` (decimated to at most 5,000 triangles, platform / apex / connection
+  measured on the mesh). Each build is a new library version: one more than the version in the output folder, or
+  `--library-version N`.
 
 ## Planning report (Export → Planning report (PDF))
 
@@ -520,7 +529,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/ui/install.ts` | Install app and the Windows / Mac double-click helper |
 | `src/ui/reorientPanel.ts`, `curvePanel.ts`, `implantsPanel.ts`, `segmentsPanel.ts`, `nervesPanel.ts`, `scansPanel.ts` | One module per side panel: its controls and its refresh |
 | `src/ui/viewSettings.ts`, `settings.ts`, `patient.ts` | Settings inside the 3D / panoramic views, the ⚙ Settings popover (input, SpaceMouse), the patient chip |
-| `src/implantLibrary.ts`, `src/views/implantSections.ts` | Implant library: catalogue, system meshes, sizes; library implants in the slices and the panoramic |
+| `src/implantLibrary.ts`, `src/ui/libraryPanel.ts`, `src/views/implantSections.ts` | Implant library: catalogue, system meshes, sizes, download into the browser and versions; library implants in the slices and the panoramic |
 | `src/waxup/` | Waxup: tooth library loader, model (arch placement, mirror), chain (contacts, tube, chain / single / tube, pins, setup in contact), sculpting, panel state and setup |
 | `src/views/waxupEdit.ts`, `src/views/waxContours.ts` | Waxup editing with the mouse in every view, tooth outlines in the slices |
 | `src/history.ts`, `src/planHistory.ts` | Undo / redo: one history of the plan, split into channels (implants, curves, segments, nerves, scans, rulers) |

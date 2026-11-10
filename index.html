@@ -353,6 +353,16 @@
               </div>
               <label class="check small"><input id="place-parallel" type="checkbox" checked /> Parallel to the selected implant</label>
             </details>
+            <details class="sub" id="lib-box">
+              <summary>Implant library <span id="lib-badge" class="lib-badge hidden">Update</span></summary>
+              <div id="lib-status" class="small lib-status"></div>
+              <div id="lib-progress" class="lib-progress hidden" role="progressbar" aria-label="Download of the implant library" aria-valuemin="0" aria-valuemax="100"><div></div></div>
+              <div class="row">
+                <button id="btn-lib-download" class="hidden" title="Keep the whole library in this browser: implants load instantly, also offline">Download</button>
+                <button id="btn-lib-cancel" class="hidden">Cancel</button>
+                <button id="btn-lib-remove" class="hidden" title="Free the space: implants are loaded from the server again as they are used">Remove download</button>
+              </div>
+            </details>
           </section>
 
           <section id="panel-seg" class="panel" data-panel="segments">

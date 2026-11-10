@@ -8,10 +8,14 @@ in the usual CAD library frame: the implant axis along z, the coronal end up (+z
 negative z and the origin at the implant's reference level (platform / shoulder).
 
     pip install numpy pyfqmr
-    python3 scripts/make-implant-library.py "<root>" public/implants
+    python3 scripts/make-implant-library.py "<root>" public/implants [--library-version N]
+
+Library version: every build is a new version of the library (`library` in index.json). People who
+downloaded the library in the app are offered the update when the published version is higher.
+Without --library-version the version is one more than the one already in the output folder.
 
 What it writes
-  - index.json: brands -> systems -> sizes, with the nominal diameter / length from the file name
+  - index.json: the library version, then brands -> systems (with the file size in bytes) -> sizes, with the nominal diameter / length from the file name
     and what was measured on the mesh: the platform level (`zp`, the origin or the top of the mesh
     when that lies below it), the length from the platform to the apex (`len`), the widest
     diameter of the part in bone (`dia`), the diameter near the apex (`apex`), the height of the
@@ -96,10 +100,23 @@ def measure(pos, L):
     return {'zp': round(zp, 3), 'len': round(length, 3), 'dia': round(dia, 3), 'apex': round(min(apex, dia), 3), 'top': round(zmax - zp, 3)}
 
 
+def library_version(out, args):
+    if '--library-version' in args:
+        return int(args[args.index('--library-version') + 1])
+    try:
+        with open(os.path.join(out, 'index.json')) as fh:
+            previous = json.load(fh).get('library', 0)
+    except (OSError, ValueError):
+        previous = 0
+    return previous + 1
+
+
 def main():
     root, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
-    index = {'format': 'qdp-implant-index', 'version': 1, 'quant': QUANT, 'brands': []}
+    library = library_version(out, sys.argv[3:])
+    print(f'Library version {library}', flush=True)
+    index = {'format': 'qdp-implant-index', 'version': 1, 'library': library, 'quant': QUANT, 'brands': []}
     for brand in sorted(os.listdir(root), key=str.lower):
         bdir = os.path.join(root, brand, 'Implants')
         if not os.path.isdir(bdir):
@@ -132,7 +149,7 @@ def main():
             wrapped = {'format': 'qdp-implant-system', 'encoding': 'deflate+base64', 'data': base64.b64encode(zlib.compress(data, 9)).decode()}
             with open(os.path.join(out, f'{slug}.json'), 'w') as fh:
                 json.dump(wrapped, fh, separators=(',', ':'))
-            systems.append({'name': clean(system), 'file': f'{slug}.json', 'sizes': [{k: s[k] for k in ('label', 'prefix', 'd', 'L', 'zp', 'len', 'dia', 'apex', 'top')} for s in sizes]})
+            systems.append({'name': clean(system), 'file': f'{slug}.json', 'bytes': os.path.getsize(os.path.join(out, f'{slug}.json')), 'sizes': [{k: s[k] for k in ('label', 'prefix', 'd', 'L', 'zp', 'len', 'dia', 'apex', 'top')} for s in sizes]})
             print(f'{brand} / {system}: {len(sizes)} sizes, {os.path.getsize(os.path.join(out, slug + ".json")) / 1e6:.2f} MB', flush=True)
         if systems:
             index['brands'].append({'name': clean(brand), 'systems': systems})

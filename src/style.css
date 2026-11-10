@@ -2569,3 +2569,40 @@ a.btn-link {
   flex: 1;
   min-width: 0;
 }
+
+/* Implants panel → Implant library (src/ui/libraryPanel.ts) */
+.lib-status {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 2px 0 6px;
+}
+.lib-status b {
+  color: var(--text);
+  font-weight: 600;
+}
+.lib-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.lib-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--panel-3);
+  overflow: hidden;
+  margin: 0 0 6px;
+}
+.lib-progress > div {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+.error-text {
+  color: var(--danger);
+}

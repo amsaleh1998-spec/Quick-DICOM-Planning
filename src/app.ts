@@ -853,6 +853,11 @@ export class App {
     meshOf(id); // start loading its mesh
   }
 
+  /** Whether a library model's mesh is loaded (starts loading it if not). */
+  libraryMeshLoaded(id: string): boolean {
+    return !!meshOf(id);
+  }
+
   selectImplant(id: number | null, snap: boolean) {
     const changed = this.selectedId !== id;
     this.selectedId = id;
