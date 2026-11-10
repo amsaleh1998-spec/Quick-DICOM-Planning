@@ -516,6 +516,14 @@ GitHub Pages on every push to `main` (or manually from the Actions tab) – only
 GitHub Actions**. The site is then served at `https://<owner>.github.io/Quick-DICOM-Planning/`. The app is fully
 static – scans are processed in the visitor's browser and never uploaded.
 
+### Demo video
+
+`tools/demo-video/` records the built app being used on a CBCT – the scan is dropped in, segmented, matched with the
+intraoral scans, two implants are planned, the report is exported – and edits the recording into a one-minute video
+(1920 × 1080, 60 fps). `capture.cjs` drives the app in headless Chromium with real mouse, keyboard and drag-and-drop
+events, one screenshot per video frame; `compose/edit.py` adds the camera moves, the pointer, captions and title cards.
+The scan is not part of the repository. See `tools/demo-video/README.md`.
+
 ## Code layout
 
 | File | Purpose |
@@ -560,6 +568,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/ai/dsPlan.ts`, `src/ai/dsEngine.ts` | DentalSegmentator: nnU-Net constants, tile grid, Gaussian weights; sliding-window engine (tile input, blending ring buffer, resampling to the label grid) |
 | `src/ai/dsWorker.ts`, `src/ai/dentalSegmentator.ts` | Model download/cache, ONNX Runtime Web (WebGPU / WebAssembly) in a worker; dialog, progress and credits |
 | `public/models/dentalsegmentator/`, `tools/dentalsegmentator/` | The converted model (CC BY 4.0, Dot et al.) and the conversion scripts |
+| `tools/demo-video/` | Demo video: records the app being used on a scan and edits the recording (see its README) |
 
 ## Limitations
 
