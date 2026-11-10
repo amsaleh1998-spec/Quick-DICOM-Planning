@@ -264,12 +264,133 @@ async function curve(st) {
   console.log('  curve:', await st.page.evaluate(() => ({ len: +window.app.curve.length.toFixed(1), n: window.app.curve.ctrl.length, level: +window.app.focusC.toFixed(2) })));
 }
 
-/** Implants at 24 and 26: placed in the panoramic, a manufacturer's implant from the library, fine-tuned in the cross-section. */
+// ---- implants: helpers ---------------------------------------------------------------------------
+
+/** A planned implant (platform and axis in DICOM patient coordinates) in the app's coordinates. */
+const inApp = (page, t) =>
+  page.evaluate((t) => {
+    const A = window.app.vol.info.patientAffine ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0];
+    const m = [A.slice(0, 3), A.slice(4, 7), A.slice(8, 11)], tr = [A[3], A[7], A[11]];
+    const det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    const inv = [0, 1, 2].map((i) => [0, 1, 2].map((j) => { const r = [0, 1, 2].filter((k) => k !== j), c = [0, 1, 2].filter((k) => k !== i); return ((i + j) % 2 ? -1 : 1) * (m[r[0]][c[0]] * m[r[1]][c[1]] - m[r[0]][c[1]] * m[r[1]][c[0]]) / det; }));
+    const mul = (v) => inv.map((r) => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
+    const ax = mul(t.axis), n = Math.hypot(...ax);
+    return { plat: mul(t.plat.map((x, k) => x - tr[k])), axis: ax.map((x) => x / n) };
+  }, t);
+
+/** The selected implant and its target in a view: page points to drag from and to, and how far off it still is. */
+const aim = (page, view, T) =>
+  page.evaluate(([view, T]) => {
+    const a = window.app, imp = a.selectedImplant(), v = view.split('.').reduce((o, k) => o[k], a), b = v.el.getBoundingClientRect();
+    const pg = (w) => { const s = v.worldToScreen(w); return [b.x + s[0], b.y + s[1]]; };
+    const L = imp.length, plat = imp.center.map((x, k) => x - (imp.axis[k] * L) / 2);
+    const hd = v.editor.handles(imp).apical, R = Math.hypot(...hd.map((x, k) => x - plat[k]));
+    return {
+      centre: pg(imp.center), plat: pg(plat), apical: pg(hd),
+      toCentre: pg(T.plat.map((x, k) => x + (imp.axis[k] * L) / 2)), toApical: pg(plat.map((x, k) => x + T.axis[k] * R)),
+      mm: Math.hypot(...plat.map((x, k) => x - T.plat[k])), deg: (Math.acos(Math.min(1, imp.axis.reduce((s, x, k) => s + x * T.axis[k], 0))) * 180) / Math.PI,
+    };
+  }, [view, T]);
+
+/** Drag the implant by its body in a view until its platform is on the target's (as far as this view's plane goes). */
+async function moveBody(st, view, T, o = {}) {
+  const g = await aim(st.page, view, T);
+  const d = [g.toCentre[0] - g.centre[0], g.toCentre[1] - g.centre[1]];
+  if (Math.hypot(...d) < 1) return false;
+  await st.drag([g.centre, [g.centre[0] + d[0], g.centre[1] + d[1]]], { dur: 0.6, before: 0.15, after: 0.3, ...o });
+  return true;
+}
+
+/** Turn the implant around its platform with the A handle in a view, onto the target axis (as seen in this view). */
+async function tilt(st, view, T, o = {}) {
+  const g = await aim(st.page, view, T);
+  const r = Math.hypot(g.apical[0] - g.plat[0], g.apical[1] - g.plat[1]);
+  const a0 = Math.atan2(g.apical[1] - g.plat[1], g.apical[0] - g.plat[0]);
+  let da = Math.atan2(g.toApical[1] - g.plat[1], g.toApical[0] - g.plat[0]) - a0;
+  if (da > Math.PI) da -= 2 * Math.PI;
+  if (da < -Math.PI) da += 2 * Math.PI;
+  if (Math.abs(da) * r < 1) return false;
+  const n = Math.max(8, Math.round(Math.abs(da) * 60));
+  const pts = [];
+  for (let i = 0; i <= n; i++) pts.push([g.plat[0] + r * Math.cos(a0 + (da * i) / n), g.plat[1] + r * Math.sin(a0 + (da * i) / n)]);
+  await st.drag(pts, { dur: 0.5 + Math.abs(da) * 0.8, before: 0.15, after: 0.3, ...o });
+  return true;
+}
+
+/** Body and axis onto the target: in the cross-section, then what is left of it in the tangential view. */
+async function pose(st, T, name) {
+  await moveBody(st, 'crossViews.1', T);
+  st.mark(`implants.tilt${name}`);
+  await tilt(st, 'crossViews.1', T);
+  await tilt(st, 'tang', T);
+  // what the first passes left (the views turn with the implant): small corrections
+  for (let i = 0; i < 3; i++) {
+    const g = await aim(st.page, 'tang', T);
+    if (g.mm < 0.05 && g.deg < 0.15) break;
+    if (g.mm >= 0.05) (await moveBody(st, 'tang', T, { dur: 0.35 })) || (await moveBody(st, 'crossViews.1', T, { dur: 0.35 }));
+    if ((await aim(st.page, 'tang', T)).deg >= 0.15) (await tilt(st, 'crossViews.1', T, { dur: 0.35 })) , (await tilt(st, 'tang', T, { dur: 0.35 }));
+  }
+  const g = await aim(st.page, 'tang', T);
+  console.log(`  ${name}: platform ${g.mm.toFixed(3)} mm, axis ${g.deg.toFixed(2)}° off the plan`);
+  if (g.mm > 0.15 || g.deg > 0.5) throw new Error(`implant ${name} is not on its planned position`);
+}
+
+/** Bring a control of the side panel into view (the panel scrolls once the abutment section is open). */
+async function reveal(st, sel) {
+  const r = await st.page.evaluate((sel) => { const b = document.querySelector(sel).getBoundingClientRect(); return { y: b.y, b: b.bottom, x: b.x + b.width / 2, H: innerHeight }; }, sel);
+  const by = r.b - (r.H - 150);
+  if (by <= 0) return;
+  await st.moveTo([r.x, Math.min(r.y, r.H - 200)], { dur: 0.3 });
+  await st.wheel(by / 100, { dur: 0.4, delta: 10, native: true });
+  await st.hold(0.15);
+}
+
+/** Choose an option of a select of the side panel. */
+async function choose(st, sel, text, o = {}) {
+  await reveal(st, sel);
+  await st.click(sel, { after: 0.35 });
+  if (o.mark) st.mark(o.mark);
+  await scrollToOption(st, sel, text);
+  await st.moveTo(await optionPoint(st.page, sel, text), { dur: 0.45 });
+  await st.hold(0.1);
+  await st.click(undefined, { after: o.after ?? 0.4 });
+}
+
+/** The multi-unit abutment of the selected implant, in the panel's abutment section. */
+async function abutment(st, m) {
+  const page = st.page;
+  if (!(await page.evaluate(() => document.querySelector('#ab-type').closest('details').open))) {
+    await reveal(st, '#implant-edit details.sub summary');
+    await st.click({ sel: '#implant-edit details.sub summary', fx: 0.2 }, { after: 0.4 });
+  }
+  await choose(st, '#ab-type', m.type);
+  await choose(st, '#ab-height', m.gh);
+  if (m.rotation !== undefined && m.rotation !== (await page.evaluate(() => window.app.selectedImplant().abutment.rotation))) {
+    // turn the angled head: drag the rotation slider, the last steps with the arrow keys
+    await reveal(st, '#ab-rot');
+    const x = (v) => page.evaluate((v) => { const e = document.querySelector('#ab-rot'), b = e.getBoundingClientRect(), th = 16; return [b.x + th / 2 + ((v - +e.min) / (+e.max - +e.min)) * (b.width - th), b.y + b.height / 2]; }, v);
+    const value = () => page.evaluate(() => +document.querySelector('#ab-rot').value);
+    await st.drag([await x(await value()), await x(m.rotation)], { dur: 0.9, before: 0.15, after: 0.2 });
+    for (let i = 0; i < 12 && (await value()) !== m.rotation; i++) await st.key((await value()) < m.rotation ? 'ArrowRight' : 'ArrowLeft', { after: 0.08 });
+    if ((await value()) !== m.rotation) throw new Error('abutment rotation not set');
+  }
+  await st.hold(0.3);
+}
+
+/** Implants at 24 and 26 as planned (lib/plan.cjs): placed in the panoramic, a manufacturer's implant from the library, brought into position in the cross-section and the tangential view, multi-unit abutments. */
 async function implants(st) {
   st.begin('implants');
   const page = st.page;
   for (const [name, v] of [['pano', 'pano'], ['cs1', 'crossViews.0'], ['cs2', 'crossViews.1'], ['cs3', 'crossViews.2'], ['tang', 'tang'], ['plan3d', 'view3d'], ['planAxialTile', 'planAxial']]) await st.rect(name, await viewRect(page, v));
   await st.rect('sidebar', '#sidebar');
+  const T24 = await inApp(page, plan.i24), T26 = await inApp(page, plan.i26);
+  // where to click in the panoramic for a new implant whose platform is to be at `plat` (it comes vertical, or parallel to the selected one)
+  const clickFor = (T, len) => page.evaluate(([T, len]) => {
+    const a = window.app, ref = a.selectedImplant(), ax = ref ? ref.axis : [0, 0, a.frame[2][2] >= 0 ? 1 : -1];
+    const c = T.plat.map((x, k) => x + (ax[k] * len) / 2);
+    const s = a.curve.nearest(c[0] - a.O[0], c[1] - a.O[1]).s, v = a.pano, b = v.el.getBoundingClientRect();
+    return [b.x + v.xOf(s), b.y + v.yOf(c[2] - a.O[2])];
+  }, [T, len]);
   // zoom the panoramic onto the upper left quadrant
   await st.moveTo(await panoPoint(page, plan.panoZoom.s, plan.panoZoom.c));
   await st.wheel(-plan.panoZoom.notches, { dur: 0.7, ctrl: true, delta: 20 });
@@ -278,7 +399,7 @@ async function implants(st) {
   // ---- 24 ----
   await st.click('#btn-add-upper');
   await st.hold(0.15);
-  await st.click(await panoPoint(page, plan.i24.s, plan.i24.cCenter), { after: 0.7 });
+  await st.click(await clickFor(T24, 10), { after: 0.7 });
   st.mark('implants.placed24');
   await st.rect('impEdit', '#implant-edit');
   await st.rect('toothChart', '#imp-teeth');
@@ -300,60 +421,33 @@ async function implants(st) {
   await st.click(undefined, { after: 0.2 });
   await st.realtime((page) => page.evaluate(() => { const i = window.app.implants[0]; return !!i?.lib && window.app.libraryMeshLoaded(i.lib.id); }), { label: 'mesh', every: 60 });
   st.mark('implants.library');
-  await st.hold(0.7);
+  await st.hold(0.5);
+  await choose(st, '#imp-size', plan.i24.size, { mark: 'implants.sizeList24' });
+  st.mark('implants.sized24');
   await nameAfterTooth(st, plan.i24.tooth); // (the app's own name for this place)
-  // tilt it with the ridge: the A handle in the cross-section turns the implant around its platform
-  const rot = await page.evaluate((deg) => {
-    const a = window.app, v = a.crossViews[1], imp = a.selectedImplant(), b = v.el.getBoundingClientRect();
-    const hd = v.editor.handles(imp);
-    const plat = imp.center.map((x, k) => x - (imp.axis[k] * imp.length) / 2);
-    const h = v.worldToScreen(hd.apical), c = v.worldToScreen(plat);
-    const r = Math.hypot(h[0] - c[0], h[1] - c[1]), a0 = Math.atan2(h[1] - c[1], h[0] - c[0]);
-    const pts = [];
-    const n = 24;
-    // apex towards lingual (screen right): clockwise on screen
-    for (let i = 0; i <= n; i++) { const t = a0 + ((deg * Math.PI) / 180) * (i / n); pts.push([b.x + c[0] + r * Math.cos(t), b.y + c[1] + r * Math.sin(t)]); }
-    return pts;
-  }, plan.i24.tilt);
-  await st.drag(rot, { dur: 0.9, before: 0.2, after: 0.5 });
+  await pose(st, T24, '24');
   st.mark('implants.tilted24');
+  await abutment(st, plan.i24.mua);
+  st.mark('implants.mua24');
 
-  // ---- 26: parallel to 24 (the default), then into the middle of the ridge ----
-  const target26 = await page.evaluate((p) => {
-    const a = window.app, ref = a.selectedImplant();
-    const cp = a.curve.at(p.s);
-    const plat = [cp.p[0] + a.O[0], cp.p[1] + a.O[1], p.cPlat + a.O[2]];
-    // centre of the new implant (same model and axis as the selected one) for that platform
-    const centre = plat.map((x, k) => x + (ref.axis[k] * ref.length) / 2);
-    const s = a.curve.nearest(centre[0] - a.O[0], centre[1] - a.O[1]).s;
-    return { plat, centre, s, c: centre[2] - a.O[2] };
-  }, plan.i26);
+  // ---- 26: comes parallel to 24 with the same implant and abutment ----
   await st.click('#btn-add-upper');
   await st.hold(0.15);
-  await st.click(await panoPoint(page, target26.s, target26.c), { after: 0.7 });
+  await st.click(await clickFor(T26, await page.evaluate(() => window.app.selectedImplant().length)), { after: 0.7 });
   st.mark('implants.placed26');
   // (counted off in mean tooth widths, this place is the tooth before)
   if (await nameAfterTooth(st, plan.i26.tooth)) st.mark('implants.named26');
-  // nudge it into the ridge centre in the cross-section (drag the body)
-  const nudge = await page.evaluate((centre) => {
-    const a = window.app, v = a.crossViews[1], imp = a.selectedImplant(), b = v.el.getBoundingClientRect();
-    const from = v.worldToScreen(imp.center), to = v.worldToScreen(centre);
-    return { from: [b.x + from[0], b.y + from[1]], to: [b.x + to[0], b.y + to[1]], off: to[2] };
-  }, target26.centre);
-  await st.drag([nudge.from, nudge.to], { dur: 0.7, before: 0.2, after: 0.4 });
-  st.mark('implants.nudged26');
-  // a wider implant for the molar site: the sizes of the same system
-  await st.click('#imp-size', { after: 0.4 });
-  st.mark('implants.sizeList');
-  await scrollToOption(st, '#imp-size', plan.i26.size);
-  await st.moveTo(await optionPoint(page, '#imp-size', plan.i26.size), { dur: 0.5 });
-  await st.hold(0.12);
-  await st.click(undefined, { after: 0.9 });
+  // a wider, shorter implant for the molar site: the sizes of the same system
+  await choose(st, '#imp-size', plan.i26.size, { mark: 'implants.sizeList' });
+  st.mark('implants.sized26');
+  await pose(st, T26, '26');
+  st.mark('implants.tilted26');
+  await abutment(st, plan.i26.mua);
   st.mark('implants.done');
   // look at the whole plan: move the pointer out of the way
   await st.moveTo(await panoPoint(page, 60, 30), { dur: 0.6 });
   await st.hold(1.0);
-  console.log('  implants:', JSON.stringify((await implantState(page)).map((i) => ({ name: i.name, lib: i.lib, tilt: +i.tilt.toFixed(1), plat: i.platform.map((v) => +v.toFixed(2)) }))));
+  console.log('  implants:', JSON.stringify((await implantState(page)).map((i) => ({ name: i.name, lib: i.lib, tilt: +i.tilt.toFixed(1), plat: i.platform.map((v) => +v.toFixed(2)) }))), JSON.stringify(await page.evaluate(() => window.app.implants.map((i) => i.abutment))));
 }
 
 /** 3D: the plan in the segmented jaw with the scans; hide the upper scan to see the implants in the bone. */
