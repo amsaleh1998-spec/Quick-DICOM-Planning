@@ -76,7 +76,7 @@ export abstract class View {
   private armDeselect(): boolean {
     const a = this.app;
     a.implantPressed = false;
-    return a.selectedId !== null && !a.placing && !a.ruler && !a.segTool && !a.drawing && !a.pendingMeasurement && !a.wax.editing;
+    return a.selectedId !== null && !a.placing && !a.ruler && !a.segTool && !a.drawing && !a.pendingMeasurement;
   }
   /** Shift+left drag pans (disabled where Shift has another meaning). */
   protected shiftPans = true;
@@ -750,7 +750,8 @@ export abstract class View {
         this.rulerDrag = { ...this.hitMeasureEnd(p)!, created: false };
         this.drag = 'ruler';
       } else if (button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
-      this.clickDeselects = arm && (this.drag === 'left' || this.drag === 'none') && !this.app.implantPressed;
+      // a plain click anywhere but on an implant – empty space, the image, a waxup tooth
+      this.clickDeselects = arm && (this.drag === 'left' || this.drag === 'none' || this.drag === 'wax') && !this.app.implantPressed;
       if (this.drag !== 'none') {
         c.setPointerCapture(e.pointerId);
         e.preventDefault();
@@ -866,7 +867,7 @@ export abstract class View {
       if (this.clickDeselects && e.type === 'pointerup') {
         // a click (not a drag) outside every implant deselects
         const p = this.pos(e);
-        if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= 3 && !this.app.implantPressed) this.app.selectImplant(null, false);
+        if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= CLICK_SLOP && !this.app.implantPressed) this.app.selectImplant(null, false);
       }
       this.clickDeselects = false;
       if (this.drag === 'pan' && this.middleDown && e.type === 'pointerup') {
@@ -1499,6 +1500,9 @@ export function orientationLabel(d: Vec3): string {
   ];
   return letters[i][d[i] >= 0 ? 1 : 0];
 }
+
+/** A press that moves less than this (px) is a click, not a drag – hands and trackpads wobble. */
+const CLICK_SLOP = 6;
 
 /** Font of text drawn in the views (the interface's own). */
 export const UI_FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";

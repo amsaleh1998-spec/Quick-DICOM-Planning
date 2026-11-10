@@ -99,7 +99,7 @@ export function flipFrom(el: HTMLElement, before: DOMRect) {
     { transform: 'none', clipPath: 'inset(0px 0px 0px 0px)' },
     {
       from: { transform: `translate(${tx}px, ${ty}px) scale(${s})`, clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px)` },
-      response: 0.32,
+      response: 0.2,
     },
   );
   const done = () => {

@@ -1,5 +1,6 @@
-// A click outside every implant deselects the selected one; a click on an implant selects it, and
-// drags (orbiting the 3D view) or clicks with a tool in use keep the selection.
+// A click outside every implant deselects the selected one (a few pixels of wobble included, and
+// with the Waxup panel open); a click on an implant selects it, and drags (orbiting the 3D view)
+// or clicks with a tool in use keep the selection.
 import { type Page } from '@playwright/test';
 import { clickView, expect, inView, openDemo, test } from './fixtures';
 
@@ -64,5 +65,20 @@ test('a click outside every implant deselects it', async ({ page }) => {
   await page.mouse.click(px, py);
   expect(await selected(page)).toBe(id);
   await clickView(page, 'view3d', 0.08, 0.5);
+  expect(await selected(page)).toBeNull();
+
+  // a click whose hand moves a few pixels is still a click
+  await page.evaluate((id) => window.app.selectImplant(id, true), id);
+  const [wx, wy] = await inView(page, 'crossViews.0', 0.1, 0.9);
+  await page.mouse.move(wx, wy);
+  await page.mouse.down();
+  await page.mouse.move(wx + 3, wy + 3);
+  await page.mouse.up();
+  expect(await selected(page)).toBeNull();
+
+  // with the Waxup panel open too
+  await page.click('[data-panel="waxup"]');
+  await page.evaluate((id) => window.app.selectImplant(id, true), id);
+  await clickView(page, 'view3d', 0.06, 0.5);
   expect(await selected(page)).toBeNull();
 });
