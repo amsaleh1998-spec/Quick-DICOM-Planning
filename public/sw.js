@@ -8,7 +8,18 @@
 const CACHE = 'qdp-v1';
 
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) =>
+  e.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      // implant library files are kept by the app's own download (src/implantLibrary.ts), not here
+      caches
+        .open(CACHE)
+        .then((c) => c.keys().then((keys) => Promise.all(keys.filter((r) => new URL(r.url).pathname.includes('/implants/')).map((r) => c.delete(r)))))
+        .catch(() => {}),
+    ]),
+  ),
+);
 
 function isolated(res) {
   if (!res || res.status === 0 || res.type === 'opaque' || res.type === 'opaqueredirect') return res;
@@ -23,8 +34,9 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
-  // the AI model keeps its own cache (downloaded once, checked): do not store it twice
-  if (url.pathname.includes('/models/')) {
+  // the AI model and the implant library keep their own caches (downloaded on request): do not
+  // store them twice
+  if (url.pathname.includes('/models/') || url.pathname.includes('/implants/')) {
     e.respondWith(fetch(req).then(isolated));
     return;
   }

@@ -118,7 +118,7 @@ function modelPicker(prefix: 'imp' | 'def', dims: () => { d: number; L: number }
     /** show a model (or generic) */
     set(id: string | null) {
       const ix = implantIndex();
-      const key = `${id}|${!!ix}`;
+      const key = `${id}|${ix ? (ix.library ?? 1) : 0}`; // a library update refills the lists
       row.classList.toggle('hidden', !id);
       if (key === shown) return;
       shown = key;

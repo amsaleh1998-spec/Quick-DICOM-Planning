@@ -22,6 +22,7 @@ import { refreshUndo } from './ui/undoUi';
 import { refreshObjects } from './ui/objectsPanel';
 import './ui/keyboard';
 import './ui/report';
+import './ui/libraryPanel';
 
 // ---- top bar -------------------------------------------------------------------
 bindPopover($('btn-open-menu'), $('pop-open'), { onOpen: () => void renderRecent() });

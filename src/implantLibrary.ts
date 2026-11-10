@@ -2,6 +2,11 @@
 // public/implants). The catalogue (brands -> systems -> sizes with their measured dimensions) is
 // small and loaded at start; the meshes of a system are fetched when one of its implants is used.
 //
+// The whole library can also be downloaded into the browser (Cache Storage, one store per library
+// version): the catalogue and the meshes then come from there – instantly, and offline. The
+// catalogue carries a library version (`library`); a newer published version is offered as an
+// update, downloaded into a new store, and the old store is dropped once the new one is complete.
+//
 // Mesh coordinates: the implant platform at the origin, the axis along z, coronal = +z, the apex at
 // z = -len. Parts above the platform (tissue-level collars, ball heads) have z > 0 up to `top`.
 
@@ -23,6 +28,8 @@ export interface LibSize {
 export interface LibSystem {
   name: string;
   file: string;
+  /** size of the system file (bytes) */
+  bytes?: number;
   sizes: LibSize[];
 }
 export interface LibBrand {
@@ -30,7 +37,24 @@ export interface LibBrand {
   systems: LibSystem[];
 }
 export interface ImplantIndex {
+  /** library version: goes up with every update of the library */
+  library?: number;
   brands: LibBrand[];
+}
+/** The library as downloaded into this browser. */
+export interface DownloadedLibrary {
+  library: number;
+  bytes: number;
+  systems: number;
+  /** ISO date of the download */
+  date: string;
+}
+/** What a catalogue holds. */
+export interface LibrarySummary {
+  library: number;
+  bytes: number;
+  systems: number;
+  brands: number;
 }
 export interface LibMesh {
   pos: Float32Array;
@@ -50,23 +74,150 @@ export const modelId = (brand: string, system: string, label: string) => `${bran
 
 let index: ImplantIndex | null = null;
 let indexLoading: Promise<ImplantIndex> | null = null;
+
+// ---- downloaded library (Cache Storage) -------------------------------------------------------
+
+const STORE_PREFIX = 'qdp-implant-library-v';
+/** Written last into a store: a store without it is an unfinished download. */
+const META_URL = './implants/__downloaded.json';
+const hasCaches = () => typeof caches !== 'undefined';
+const abs = (u: string) => new URL(u, location.href).href;
+
+/** The downloaded library in use (null: loaded from the server as needed). */
+let local: { meta: DownloadedLibrary; store: string } | null = null;
+
+export function summarize(ix: ImplantIndex): LibrarySummary {
+  let bytes = 0, systems = 0;
+  for (const b of ix.brands)
+    for (const s of b.systems) {
+      bytes += s.bytes ?? 0;
+      systems++;
+    }
+  return { library: ix.library ?? 1, bytes, systems, brands: ix.brands.length };
+}
+
+/** The newest complete download in this browser. */
+async function findDownload(): Promise<{ meta: DownloadedLibrary; store: string } | null> {
+  if (!hasCaches()) return null;
+  const names = (await caches.keys()).filter((n) => n.startsWith(STORE_PREFIX));
+  names.sort((a, b) => Number(b.slice(STORE_PREFIX.length)) - Number(a.slice(STORE_PREFIX.length)));
+  for (const store of names) {
+    const r = await caches.match(abs(META_URL), { cacheName: store });
+    if (r) return { meta: (await r.json()) as DownloadedLibrary, store };
+  }
+  return null;
+}
+
+export function downloadedLibrary(): DownloadedLibrary | null {
+  return local?.meta ?? null;
+}
+
+/** The library published on the server now (null when it cannot be reached). */
+export async function publishedLibrary(): Promise<LibrarySummary | null> {
+  try {
+    const r = await fetch(IMPLANT_INDEX_URL, { cache: 'no-cache' });
+    return r.ok ? summarize((await r.json()) as ImplantIndex) : null;
+  } catch {
+    return null;
+  }
+}
+
+let downloading: AbortController | null = null;
+
+/**
+ * Download the published library into this browser (a new store for its version); the older
+ * store goes once the new one is complete. `onProgress`: bytes so far and in all.
+ */
+export async function downloadLibrary(onProgress: (done: number, total: number) => void): Promise<DownloadedLibrary> {
+  if (!hasCaches()) throw new Error('This browser cannot keep files for offline use.');
+  downloading?.abort();
+  const ctl = (downloading = new AbortController());
+  try {
+    const res = await fetch(IMPLANT_INDEX_URL, { cache: 'no-cache', signal: ctl.signal });
+    if (!res.ok) throw new Error(`Implant library not available (${res.status})`);
+    const text = await res.text();
+    const ix = JSON.parse(text) as ImplantIndex;
+    const sum = summarize(ix);
+    const store = STORE_PREFIX + sum.library;
+    await caches.delete(store); // an unfinished earlier try
+    const cache = await caches.open(store);
+    const files = ix.brands.flatMap((b) => b.systems);
+    let done = 0;
+    onProgress(0, sum.bytes);
+    let next = 0;
+    const worker = async () => {
+      while (next < files.length) {
+        const f = files[next++];
+        const url = abs(`./implants/${f.file}`);
+        const r = await fetch(url, { cache: 'no-cache', signal: ctl.signal });
+        if (!r.ok) throw new Error(`Implant library file missing (${f.file}: ${r.status})`);
+        await cache.put(url, r);
+        done += f.bytes ?? 0;
+        onProgress(done, sum.bytes);
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    await cache.put(abs(IMPLANT_INDEX_URL), new Response(text, { headers: { 'Content-Type': 'application/json' } }));
+    const meta: DownloadedLibrary = { library: sum.library, bytes: sum.bytes, systems: sum.systems, date: new Date().toISOString() };
+    await cache.put(abs(META_URL), new Response(JSON.stringify(meta), { headers: { 'Content-Type': 'application/json' } }));
+    // the new version is complete: drop the others
+    for (const n of await caches.keys()) if (n.startsWith(STORE_PREFIX) && n !== store) await caches.delete(n);
+    // ask the browser to keep it when space runs low
+    void navigator.storage?.persist?.().catch(() => false);
+    useIndex(ix);
+    local = { meta, store };
+    return meta;
+  } catch (e) {
+    if (ctl.signal.aborted) throw new Error('Download cancelled');
+    throw e;
+  } finally {
+    if (downloading === ctl) downloading = null;
+  }
+}
+
+/** Stop a download in progress (what was stored so far is dropped on the next try). */
+export function cancelDownload() {
+  downloading?.abort();
+}
+
+/** Remove the downloaded library: it is loaded from the server again as needed. */
+export async function removeDownloadedLibrary() {
+  local = null; // first: nothing reads from it any more
+  if (hasCaches()) for (const n of await caches.keys()) if (n.startsWith(STORE_PREFIX)) await caches.delete(n);
+}
+
+/** Switch to another catalogue (an update): meshes of the old one are dropped. */
+function useIndex(ix: ImplantIndex) {
+  index = ix;
+  indexLoading = Promise.resolve(ix);
+  meshes.clear();
+  systemLoads.clear();
+  onMeshesLoaded();
+}
 /** Called when a system's meshes arrive (the app redraws). */
 export let onMeshesLoaded: () => void = () => {};
 export function setOnMeshesLoaded(f: () => void) {
   onMeshesLoaded = f;
 }
 
+/** The catalogue: the downloaded one when there is one (no network), otherwise the server's. */
 export function loadImplantIndex(): Promise<ImplantIndex> {
-  indexLoading ??= fetch(IMPLANT_INDEX_URL)
-    .then((r) => {
-      if (!r.ok) throw new Error(`Implant library not available (${r.status})`);
-      return r.json() as Promise<ImplantIndex>;
-    })
-    .then((ix) => (index = ix))
-    .catch((e) => {
-      indexLoading = null;
-      throw e;
-    });
+  indexLoading ??= (async () => {
+    const d = await findDownload().catch(() => null);
+    if (d) {
+      const r = await caches.match(abs(IMPLANT_INDEX_URL), { cacheName: d.store });
+      if (r) {
+        local = d;
+        return (index = (await r.json()) as ImplantIndex);
+      }
+    }
+    const r = await fetch(IMPLANT_INDEX_URL);
+    if (!r.ok) throw new Error(`Implant library not available (${r.status})`);
+    return (index = (await r.json()) as ImplantIndex);
+  })().catch((e) => {
+    indexLoading = null;
+    throw e;
+  });
   return indexLoading;
 }
 export function implantIndex(): ImplantIndex | null {
@@ -125,11 +276,15 @@ async function unpack(f: { format: string; encoding: string; data: string }): Pr
 export function loadSystem(system: LibSystem): Promise<void> {
   let p = systemLoads.get(system.file);
   if (!p) {
-    p = fetch(`./implants/${system.file}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`Implant library file missing (${r.status})`);
-        return r.json();
-      })
+    const url = `./implants/${system.file}`;
+    p = (async () => {
+      // the downloaded copy, else the server
+      // (match with cacheName only looks: it never creates a store that was just removed)
+      const hit = local ? await caches.match(abs(url), { cacheName: local.store }) : undefined;
+      const r = hit ?? (await fetch(url));
+      if (!r.ok) throw new Error(`Implant library file missing (${r.status})`);
+      return r.json();
+    })()
       .then(unpack)
       .then((buf) => {
         for (const [id, m] of parseSystem(buf)) meshes.set(id, m);
