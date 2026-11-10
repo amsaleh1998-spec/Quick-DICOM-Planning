@@ -5,3 +5,5 @@ dist
 test-output
 test-results
 playwright-report
+tools/demo-video/out
+__pycache__
