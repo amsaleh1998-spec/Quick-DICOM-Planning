@@ -6,7 +6,8 @@
     <title>Quick DICOM Planning</title>
     <!-- installable app: lets Windows open .dcm files with it (Chrome / Edge) -->
     <link rel="manifest" href="./manifest.webmanifest" />
-    <meta name="theme-color" content="#131a26" />
+    <meta name="theme-color" content="#18181a" />
+    <meta name="description" content="Implant planning on CBCT scans in the browser: panoramic curve, cross-sections, implant libraries, nerve tracing, segmentation, waxup and a planning report. Scans stay on your computer." />
     <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <script>
@@ -33,9 +34,25 @@
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
+    <!-- the brand mark: an implant with its crown, in titanium on a graphite tile -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="qm-tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b3b41"/><stop offset="1" stop-color="#1d1d20"/></linearGradient>
+        <linearGradient id="qm-metal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8c8c95"/><stop offset="0.45" stop-color="#f1f1f4"/><stop offset="1" stop-color="#96969f"/></linearGradient>
+        <linearGradient id="qm-crown" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dcdce2"/></linearGradient>
+        <symbol id="qdp-mark" viewBox="0 0 64 64">
+          <rect x="1" y="1" width="62" height="62" rx="14" fill="url(#qm-tile)"/>
+          <rect x="1.5" y="1.5" width="61" height="61" rx="13.5" fill="none" stroke="#fff" stroke-opacity="0.12"/>
+          <rect x="19.5" y="11" width="25" height="15" rx="6" fill="url(#qm-crown)"/>
+          <path d="M26.5 26h11l-1.4 5h-8.2z" fill="#b4b4bc"/>
+          <path d="M25.8 31h12.4l-2.6 22.5a1.8 1.8 0 0 1-1.8 1.5h-3.6a1.8 1.8 0 0 1-1.8-1.5z" fill="url(#qm-metal)"/>
+          <path d="M26.3 35.6l11.5-1.6M26.8 40.2l10.5-1.6M27.3 44.8l9.5-1.6M27.8 49.4l8.5-1.6" stroke="#1d1d20" stroke-opacity="0.75" stroke-width="1.5" stroke-linecap="round"/>
+        </symbol>
+      </defs>
+    </svg>
     <div id="app">
       <header id="toolbar">
-        <div class="brand" title="Quick DICOM Planning">QDP</div>
+        <div class="brand" title="Quick DICOM Planning" aria-label="Quick DICOM Planning"><svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true"><use href="#qdp-mark"/></svg></div>
         <button id="patient-chip" class="patient-chip" title="Patient and scan details, DICOM tags">
           <span id="patient-badge" class="pc-name">No scan open</span><span id="patient-date" class="pc-date"></span>
           <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
@@ -488,6 +505,11 @@
           <div id="layout-mpr" class="layout"></div>
           <div id="layout-plan" class="layout hidden"></div>
           <div id="start-screen" class="start-screen hidden">
+            <div class="start-hero">
+              <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true"><use href="#qdp-mark"/></svg>
+              <h1>Quick DICOM Planning</h1>
+              <p class="start-tag">Implant planning on CBCT scans, right in your browser.</p>
+            </div>
             <div class="start-drop">
               <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="7" y="9" width="32" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M23 15v14M17 23l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <h2>Drop a CBCT here</h2>
@@ -503,6 +525,7 @@
                 <ul class="obj-list recent-list"></ul>
               </div>
             </div>
+            <p class="start-note"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Scans are opened from your computer and stay there – nothing is uploaded.</p>
           </div>
           <div id="drop-overlay" class="hidden">Drop DICOM files or a folder</div>
           <div id="launch-banner" class="launch-banner hidden" role="dialog" aria-live="polite">
