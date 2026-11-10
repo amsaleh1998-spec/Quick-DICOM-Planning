@@ -69,14 +69,57 @@ export abstract class View {
   private middleDown = false;
   private last: Pt = [0, 0];
   private downPos: Pt = [0, 0];
-  /** The press may end as a click on nothing, which deselects the selected implant. */
-  private clickDeselects = false;
+  /** The press in progress, watched for its outcome as a click (see watchClicks). */
+  private press: { id: number; x: number; y: number; t: number; toolClick: boolean } | null = null;
 
-  /** Whether a click about to start can deselect (an implant selected, no tool in use). */
-  private armDeselect(): boolean {
-    const a = this.app;
-    a.implantPressed = false;
-    return a.selectedId !== null && !a.placing && !a.ruler && !a.segTool && !a.drawing && !a.pendingMeasurement;
+  /**
+   * One rule for every view and every pointer (mouse, trackpad, pen, touch): a press that ends as
+   * a click – it hardly moved and was short – deselects the selected implant unless it landed on
+   * an implant; a press on an implant (click or drag) shows the Implants panel. It watches the
+   * press from outside the view's own handling (capture phase, and the release anywhere), so no
+   * drag mode or touch path of a view can bypass it. Clicks that belong to a tool in use keep the
+   * selection: measuring, drawing the curve, tracing a nerve, drawing a cut, placing an implant.
+   */
+  private watchClicks() {
+    this.el.addEventListener(
+      'pointerdown',
+      (e) => {
+        const button = IS_MAC && e.button === 2 && e.ctrlKey ? 0 : e.button;
+        // controls inside the view (menus, chips, scroll bar) are not the view
+        if (e.target !== this.ovCanvas || button !== 0) {
+          this.press = null;
+          return;
+        }
+        const a = this.app;
+        a.implantPressed = false;
+        // only where that tool takes the click: the curve is drawn in the axial view, the ruler
+        // measures in views that measure, nerves and cuts are drawn where they are supported
+        const toolClick =
+          !!a.placing ||
+          (!!a.drawing && this === (a.planAxial as View)) ||
+          (a.ruler && !!this.measureKind) ||
+          a.pendingMeasurement?.view === this ||
+          ((a.segTool === 'nerve' || a.segTool === 'cut') && this.supportsTool(a.segTool));
+        this.press = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), toolClick };
+      },
+      true,
+    );
+    const end = (e: PointerEvent) => {
+      const pr = this.press;
+      if (!pr || pr.id !== e.pointerId) return;
+      this.press = null;
+      const a = this.app;
+      if (a.implantPressed) {
+        a.implantPressed = false;
+        a.openImplantsPanel();
+        return;
+      }
+      if (e.type !== 'pointerup' || pr.toolClick || a.selectedId === null) return;
+      if (Math.hypot(e.clientX - pr.x, e.clientY - pr.y) > CLICK_SLOP || performance.now() - pr.t > 1000) return;
+      a.selectImplant(null, false);
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
   }
   /** Shift+left drag pans (disabled where Shift has another meaning). */
   protected shiftPans = true;
@@ -131,6 +174,7 @@ export abstract class View {
     this.ovCtx = this.ovCanvas.getContext('2d')!;
     new ResizeObserver(() => this.resize()).observe(this.el);
     this.bindEvents();
+    this.watchClicks();
   }
 
   get visible() {
@@ -731,7 +775,6 @@ export abstract class View {
       const button = IS_MAC && e.button === 2 && e.ctrlKey ? 0 : e.button;
       this.middleDown = button === 1;
       const wax = this.app.wax;
-      const arm = button === 0 && this.armDeselect();
       if (button === 2) this.drag = 'right';
       // waxup panel open: a press on a tooth goes to the waxup first (Shift = scale, Ctrl = rotate)
       else if (
@@ -750,8 +793,6 @@ export abstract class View {
         this.rulerDrag = { ...this.hitMeasureEnd(p)!, created: false };
         this.drag = 'ruler';
       } else if (button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
-      // a plain click anywhere but on an implant – empty space, the image, a waxup tooth
-      this.clickDeselects = arm && (this.drag === 'left' || this.drag === 'none' || this.drag === 'wax') && !this.app.implantPressed;
       if (this.drag !== 'none') {
         c.setPointerCapture(e.pointerId);
         e.preventDefault();
@@ -863,17 +904,6 @@ export abstract class View {
         const p = this.pos(e);
         const moved = Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 3;
         this.onLeftUp(p, e, moved);
-      }
-      if (this.clickDeselects && e.type === 'pointerup') {
-        // a click (not a drag) outside every implant deselects
-        const p = this.pos(e);
-        if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= CLICK_SLOP && !this.app.implantPressed) this.app.selectImplant(null, false);
-      }
-      this.clickDeselects = false;
-      // a click (or drag) on an implant: its panel opens, once the gesture is over
-      if (this.drag === 'left' && this.app.implantPressed && e.type === 'pointerup') {
-        this.app.implantPressed = false;
-        this.app.openImplantsPanel();
       }
       if (this.drag === 'pan' && this.middleDown && e.type === 'pointerup') {
         const p = this.pos(e);
@@ -1090,13 +1120,7 @@ export abstract class View {
           this.lastTapAt = now;
           // a tap on a ruler does nothing (a second tap deletes it)
           const onRuler = this.measureKind && this.hitMeasureLine(st.p);
-          const arm = !onRuler && this.armDeselect();
           if (!onRuler && this.onLeftDown(st.p, e)) this.onLeftUp(st.p, e, false);
-          // a tap outside every implant deselects; a tap on one shows its panel
-          if (this.app.implantPressed) {
-            this.app.implantPressed = false;
-            this.app.openImplantsPanel();
-          } else if (arm) this.app.selectImplant(null, false);
         }
       }
       this.touchStart = null;

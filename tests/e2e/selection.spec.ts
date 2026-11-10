@@ -105,3 +105,61 @@ test('a click outside every implant deselects it', async ({ page }) => {
   await expect(page.locator('#panel-plan')).toBeVisible();
   await expect(page.locator('#implant-edit')).toBeVisible();
 });
+
+test('any click or tap off the implant in the 3D view or a cross-section deselects it (mouse, pen, touch)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openDemo(page);
+  await page.keyboard.press('2');
+  for (const [x, y] of [[0.22, 0.72], [0.27, 0.45], [0.38, 0.3], [0.5, 0.26], [0.62, 0.3], [0.73, 0.45], [0.78, 0.72]]) {
+    await clickView(page, 'planAxial', x, y);
+    await page.waitForTimeout(60);
+  }
+  await page.keyboard.press('Enter');
+  await page.click('#btn-add-lower');
+  await clickView(page, 'pano', 0.4, 0.55);
+  const id = await selected(page);
+  const spots: [string, number, number][] = [
+    ['view3d', 0.5, 0.15], ['view3d', 0.5, 0.5], ['view3d', 0.15, 0.85], ['view3d', 0.85, 0.5],
+    ['crossViews.0', 0.5, 0.2], ['crossViews.1', 0.3, 0.5], ['crossViews.1', 0.8, 0.85], ['crossViews.2', 0.15, 0.6], ['tang', 0.2, 0.3],
+  ];
+  // a pointer of each kind, sent as the browser would (down, a little wobble, up)
+  const press = (view: string, fx: number, fy: number, pointerType: string) =>
+    page.evaluate(
+      ([view, fx, fy, pointerType]) => {
+        const v = (view as string).split('.').reduce((o: any, k: string) => o[k], window.app);
+        const c = v.ovCanvas as HTMLCanvasElement, r = c.getBoundingClientRect();
+        const x = r.x + r.width * (fx as number), y = r.y + r.height * (fy as number);
+        const ev = (type: string, dx: number) =>
+          c.dispatchEvent(new PointerEvent(type, { clientX: x + dx, clientY: y, pointerId: 1, pointerType: pointerType as string, isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true }));
+        ev('pointerdown', 0);
+        ev('pointermove', 2);
+        ev('pointerup', 2);
+      },
+      [view, fx, fy, pointerType] as const,
+    );
+  for (const touchUi of [false, true]) {
+    await page.evaluate((t) => (window.app.touchUi = t), touchUi);
+    for (const kind of touchUi ? ['touch', 'pen'] : ['mouse', 'pen']) {
+      for (const [v, fx, fy] of spots) {
+        await page.evaluate((id) => window.app.selectImplant(id, true), id);
+        await press(v, fx, fy, kind);
+        expect(await selected(page), `${kind} on ${v} at ${fx},${fy}${touchUi ? ' (touch interface)' : ''}`).toBeNull();
+      }
+    }
+  }
+  // curve drawing left on (it takes clicks in the axial view only) does not stop it elsewhere
+  await page.evaluate(() => (window.app.touchUi = false));
+  await page.evaluate(() => window.app.startDrawing());
+  for (const [v, fx, fy] of [['view3d', 0.5, 0.15], ['crossViews.1', 0.3, 0.5]] as const) {
+    await page.evaluate((id) => window.app.selectImplant(id, true), id);
+    await clickView(page, v, fx, fy);
+    expect(await selected(page), `click on ${v} while drawing a curve`).toBeNull();
+  }
+  await page.evaluate(() => window.app.cancelDrawing());
+  // real mouse clicks too
+  for (const [v, fx, fy] of spots) {
+    await page.evaluate((id) => window.app.selectImplant(id, true), id);
+    await clickView(page, v, fx, fy);
+    expect(await selected(page), `click on ${v} at ${fx},${fy}`).toBeNull();
+  }
+});
