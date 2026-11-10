@@ -41,8 +41,8 @@ node capture.cjs --data "/path/to/Demo CBCT" --out out/rec --checkpoints \
   own: `--from out/rec/scans.qdp.zip --rail segments --fit --scenes curve,implants --out out/rec2`
   (`--rail`: the side panel a continuous session would have open at that point; `--fit`: for a
   project saved before its planning views were ever shown).
-- Without a graphics card a full recording (2×, 60 fps) takes about an hour: most of it is the 3D
-  scene (several seconds per frame) and the automatic segmentation (5 – 10 minutes on the CPU).
+- Without a graphics card a full recording (2×, 60 fps) takes about two hours: over an hour of it
+  is the 3D scene (about ten seconds per frame), ten minutes the automatic segmentation on the CPU.
 
 `python3 review.py out/rec [cols rows [from to]]` writes a contact sheet of a recording and lists
 its scenes, clicks and waits with their frame numbers.

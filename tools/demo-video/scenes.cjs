@@ -378,9 +378,11 @@ async function hero(st, cfg) {
   await st.hold(0.1, Q);
   await st.drag([c, [c[0] + plan.hero.orbit1[0], c[1] + plan.hero.orbit1[1]]], { dur: 2.2, before: 0.1, after: 0.3, appMs: Q });
   st.mark('hero.turned');
-  // closer
+  // closer: a pinch (Ctrl + wheel, in small steps) glides; a notch of the plain wheel would jump 12 %
   await st.moveTo(await page.evaluate(() => { const a = window.app, v = a.view3d, b = v.el.getBoundingClientRect(); const i = a.implants[0]; const s = v.screenPoint(i.center); return [b.x + s[0] + 20, b.y + s[1] + 10]; }), { appMs: Q });
-  await st.wheel(-plan.hero.zoom, { dur: 0.8, appMs: Q });
+  st.mark('hero.zoom');
+  await st.wheel(-plan.hero.zoom, { dur: 0.9, ctrl: true, delta: 2, appMs: Q });
+  st.mark('hero.zoomed');
   await st.hold(0.4, Q);
   // hide the upper scan: the implants in the bone, between the roots
   const eye = await page.evaluate(() => { const li = [...document.querySelectorAll('#obj-groups li')].find((l) => l.querySelector('.nm')?.textContent === 'Upper jaw'); const b = li.querySelector('.vis-btn').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; });
