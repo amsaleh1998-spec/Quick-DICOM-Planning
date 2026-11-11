@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeTestSeries } from '../../scripts/make-test-dicom.mjs';
+import { makeTestImplantLibrary } from '../../scripts/make-test-implant-library.mjs';
 import { stlBytes, tubeMesh } from '../../src/stl';
 import type { Vec3 } from '../../src/math';
 
@@ -19,6 +20,20 @@ export function dicomFiles(): string[] {
     writeFileSync(p, f.data);
     return p;
   });
+}
+
+/** The made-up implant library (brand Testco) as a .qdplib file on disk. */
+export function implantLibraryFile(library = 1): string {
+  mkdirSync(dir, { recursive: true });
+  const p = join(dir, `testco-implant-library-v${library}.qdplib`);
+  writeFileSync(p, makeTestImplantLibrary({ library }));
+  return p;
+}
+
+/** Import the test implant library (kept in the browser for the rest of the test). */
+export async function importTestLibrary(page: Page, library = 1) {
+  await page.setInputFiles('#lib-input', implantLibraryFile(library));
+  await page.waitForFunction((v) => !!document.getElementById('lib-status')?.textContent?.includes(`Version ${v} · imported`), library);
 }
 
 /** A small arch-shaped surface (a tube along a U) as an STL file, like an intraoral scan. */
