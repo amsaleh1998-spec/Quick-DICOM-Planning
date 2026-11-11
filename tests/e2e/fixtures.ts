@@ -63,6 +63,17 @@ export const test = base.extend<{ errors: string[] }>({
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
       page.on('dialog', (d) => void d.accept());
+      // The 3D view renders up to 900,000 pixels a frame; with no graphics card (as on the test
+      // machines) that is most of the tests' time, and no test looks at those pixels – picking and
+      // dragging work on the geometry. Render it small in the tests.
+      await page.addInitScript(() => {
+        const id = setInterval(() => {
+          const v3d = (window as unknown as { app?: { view3d?: { constructor: { pixelBudget: number } } } }).app?.view3d;
+          if (!v3d) return;
+          v3d.constructor.pixelBudget = 120_000;
+          clearInterval(id);
+        }, 20);
+      });
       await use(errors);
       expect(errors, 'no script errors in the page').toEqual([]);
     },
