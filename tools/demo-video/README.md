@@ -56,6 +56,14 @@ python3 compose/edit.py out/rec --stills out/stills --times 12.5,31      # singl
 python3 timeline.py out/rec                  # scene and caption times, fastest camera moves
 ```
 
+The video is encoded with a silent audio track. `compose/music.py` synthesises an original
+soundtrack of the same length (nothing sampled or licensed; 32 bars that build up to the 3D shot):
+
+```bash
+python3 compose/music.py 68.4 music.wav 51.3        # length of the video, start of the 3D shot (s)
+ffmpeg -i demo.mp4 -i music.wav -map 0:v -map 1:a -c:v copy -af loudnorm=I=-16:TP=-1.5 -c:a aac -b:a 192k demo-music.mp4
+```
+
 Several recordings can be given; a scene in a later one replaces the same scene of an earlier
 one (`edit.py out/rec out/rec2`).
 
@@ -67,9 +75,10 @@ one (`edit.py out/rec out/rec2`).
 | `compose/edit.py` | The edit: cuts, speeds, camera, captions |
 | `compose/engine.py` | Draws the frames (window, camera, pointer, captions) and encodes them |
 | `compose/cards.py`, `compose/cursors.py` | Title cards; the pointer shapes |
+| `compose/music.py` | The soundtrack, synthesised |
 
 ## Needs
 
 Node with the repository's dev dependencies (Playwright and its Chromium), Python 3 with `numpy`,
-`opencv-python-headless` and `Pillow`, `ffmpeg`, `pdftoppm` (poppler, for the report pages) and
+`opencv-python-headless`, `Pillow` and `scipy` (music), `ffmpeg`, `pdftoppm` (poppler, for the report pages) and
 the Inter font (DejaVu Sans is used when it is missing).
