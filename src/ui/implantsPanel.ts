@@ -176,6 +176,12 @@ function modelPicker(prefix: 'imp' | 'def', dims: () => { d: number; L: number }
     apply(modelId(brandSel.value, sys.name, sizeSel.value));
   };
   brandSel.onchange = () => {
+    if (brandSel.value === '__import') {
+      // no library yet: the option leads to importing one
+      brandSel.value = '';
+      shown = '\u0000';
+      return void import('./libraryPanel').then((m) => m.chooseLibraryFile());
+    }
     if (!brandSel.value) return apply(null);
     const brand = implantIndex()?.brands.find((x) => x.name === brandSel.value);
     if (brand) preloadSystems(brand.systems);
@@ -200,7 +206,9 @@ function modelPicker(prefix: 'imp' | 'def', dims: () => { d: number; L: number }
       row.classList.toggle('hidden', !id);
       if (key === shown) return;
       shown = key;
-      brandSel.innerHTML = `<option value="">Generic</option>` + (ix?.brands ?? []).map((b) => `<option>${escapeHtml(b.name)}</option>`).join('');
+      brandSel.innerHTML =
+        `<option value="">Generic</option>` +
+        (ix ? ix.brands.map((b) => `<option>${escapeHtml(b.name)}</option>`).join('') : `<option value="__import">Import an implant library…</option>`);
       const f = id ? findModel(id) : null;
       // the brand's other systems load meanwhile: switching between them is instant
       if (f) preloadSystems(f.brand.systems);

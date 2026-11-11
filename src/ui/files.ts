@@ -21,6 +21,12 @@ import { importScans } from './scansPanel';
 /** Load DICOM files, a ZIP of them or a project. Resolves to an error message, or null on success. */
 export async function loadFiles(files: File[]): Promise<string | null> {
   if (!files.length) return 'No files received.';
+  // an implant library file: imported, the open scan and plan stay
+  if (files.length === 1 && /\.qdplib$/i.test(files[0].name)) {
+    pendingRecent = null;
+    const { importLibraryFile } = await import('./libraryPanel');
+    return (await importLibraryFile(files[0])) ? null : 'The implant library was not imported.';
+  }
   if (!(await askToSave())) return ((pendingRecent = null), null);
   if (files.length === 1 && (await isZipFile(files[0]))) {
     // a project, or a ZIP of DICOM files (e.g. a whole series handed over by the Windows helper)

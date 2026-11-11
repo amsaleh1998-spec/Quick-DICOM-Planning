@@ -299,10 +299,19 @@ Like any automatic method it can be wrong (metal artefacts, unusual anatomy, low
 
 ## Implant libraries (② Plan → Implants panel)
 
-Besides the generic implant (any diameter, length and taper), the *Implant* selector offers manufacturer implants:
-14 brands, 64 systems, about 1,260 sizes (Anthogyr, BioHorizons, Biotech Dental, BTK, Dentsply Sirona, Global D,
-Hiossen, JDentalCare, Klockner, Megagen, Neodent, Nobel Biocare, Osstem, Straumann). Choose the brand, the system and
-the size: the implant keeps its platform where it is and takes the model's shape.
+Besides the generic implant (any diameter, length and taper), the *Implant* selector offers the manufacturer implants
+of an **implant library** – once one is imported. No implant library is on the website or in this repository: a
+library is a file (`.qdplib`) handed to the people who use it. Choose the brand, the system and the size: the implant
+keeps its platform where it is and takes the model's shape.
+
+- **Importing a library** (*Implant library* at the bottom of the Implants panel → *Import library file…*, the
+  *Import an implant library…* entry of the *Implant* selector, or drop the `.qdplib` file on the viewer): it is
+  kept in this browser – the catalogue and every implant load instantly, also offline. *Remove* takes it out of
+  the browser again. Plans keep their implants' models either way: without the library they are drawn as generic
+  implants of the same size until it is imported again.
+- **Library versions**: each library file carries a version number. Importing a newer version replaces the older one
+  (the new version is stored next to the old one, which is dropped once the import is complete); importing an older
+  version, or the same one again, asks first.
 
 - **Drawn as the real implant**: the 3D view shows its mesh (threads, collar, connection); where bone, a segment, a
   scan or the waxup covers it, it is shown through them as before. The slices show the cut through the mesh, the
@@ -315,18 +324,11 @@ the size: the implant keeps its platform where it is and takes the model's shape
   collar).
 - Nerve distances, hit testing and the see-through view use a cone that encloses the implant's part in bone.
 - STL export writes the implant's mesh. Projects remember the model.
-- **Download for instant loading** (*Implant library* at the bottom of the Implants panel): without it, each system
-  is fetched from the server the first time one of its implants is used. *Download* keeps the whole library (about
-  56 MB) in this browser – the catalogue and every implant then load instantly, also offline. *Remove download*
-  frees the space.
-- **Library versions**: the library has a version number (now **1**). When a newer version is published, a browser
-  that downloaded an older one shows *Update* next to *Implant library* and offers *Update to version N*; the new
-  version is downloaded next to the old one, which is dropped once the new one is complete (a failed or cancelled
-  update leaves the working copy as it was). Without a download, the newest version is always used.
-- The library (`public/implants/`: a catalogue and one file per system) is built from the manufacturers' implant
-  STLs by `scripts/make-implant-library.py` (decimated to at most 5,000 triangles, platform / apex / connection
-  measured on the mesh). Each build is a new library version: one more than the version in the output folder, or
-  `--library-version N`.
+- A library file is built from the manufacturers' implant STLs by `scripts/make-implant-library.py` (meshes decimated
+  to at most 5,000 triangles, platform / apex / connection measured on the mesh): a ZIP with `index.json` (the
+  catalogue and its version) and one compressed mesh file per system. Each build is the next version (one more than
+  `--previous` or the output file, or `--library-version N`). `.gitignore` keeps `*.qdplib` out of the repository.
+- The tests use a small made-up library (brand *Testco*, `scripts/make-test-implant-library.mjs`).
 
 ## Planning report (Export → Planning report (PDF))
 
