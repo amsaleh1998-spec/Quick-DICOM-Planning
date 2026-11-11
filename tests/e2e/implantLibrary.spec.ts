@@ -95,7 +95,7 @@ test('dragging a library implant steps through its sizes (4 × 10 → 4 × 12 �
       const bx = a.pano.el.getBoundingClientRect();
       // across the axis on screen: the patient-left direction projected (the implant is vertical)
       const sx = Math.sign(q.x - p.x) || 1;
-      return [bx.x + p.x + (sx * r) / a.pano.vs.scale, bx.y + p.y, a.pano.vs.scale] as [number, number, number];
+      return [bx.x + p.x + (sx * r) / a.pano.vs.scale, bx.y + p.y, a.pano.vs.scale, sx] as [number, number, number, number];
     }, [h, r]);
   const len = await page.evaluate(() => window.app.selectedImplant().length);
   // apex: 2.5 mm further
@@ -117,10 +117,11 @@ test('dragging a library implant steps through its sizes (4 × 10 → 4 × 12 �
   expect(await size()).toBe('4 × 8 mm');
   // the side: wider, the length stays
   const d = await page.evaluate(() => window.app.selectedImplant().diameter);
-  [x, y, sc] = await at(-1, d / 2);
-  await page.mouse.move(x, y);
+  const [sxp, syp, scp, side] = await at(-1, d / 2);
+  await page.mouse.move(sxp, syp);
   await page.mouse.down();
-  await page.mouse.move(x + 0.4 / sc, y, { steps: 6 });
+  // outward from the edge that was grabbed (which side that is depends on where the implant sits)
+  await page.mouse.move(sxp + (side * 0.4) / scp, syp, { steps: 6 });
   await page.mouse.up();
   expect(await size()).toMatch(/^4\.5 × 8 mm$/);
 });
