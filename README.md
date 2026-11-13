@@ -135,7 +135,9 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 **Implant planning**
 - Axial view: draw the panoramic curve by holding the left button and dragging along the arch (a point is placed
   every 5 mm, the stroke is lightly smoothed and the curve finishes on release), or click point by point from patient
-  right to left and double-click / Enter to finish.
+  right to left and double-click / Enter to finish. While a curve is drawn (the first one, an added one or a
+  redrawn one) the axial view takes the larger part of the window, with the other views beside it; when the curve
+  is done they spring back to their tiles. The picture keeps its field of view, so the scale stays right.
   Drag control points to edit, double-click the curve to insert a point, double-click a point to remove it.
 - **Several panoramic curves**, e.g. one for the maxilla and one for the mandible: *+ New curve* draws another one
   (scroll the axial view to that jaw's level first). The active curve drives the panoramic, cross-sections and
