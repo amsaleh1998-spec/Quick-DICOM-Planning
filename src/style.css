@@ -917,6 +917,24 @@ select {
     'pax pax pax pax pax pano pano pano pano pano pano pano pano pano pano pano pano pano pano pano'
     'cs1 cs1 cs1 cs1 cs2 cs2 cs2 cs2 cs3 cs3 cs3 cs3 tang tang tang tang v3d v3d v3d v3d';
 }
+/* while a panoramic curve is drawn the axial view takes the larger part of the window (not all of
+   it): the other views make room on the right, and take their places back once the curve is done */
+#layout-plan.drawing-curve {
+  grid-template-columns: minmax(0, 11fr) repeat(3, minmax(0, 3fr));
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    'pax pano pano pano'
+    'pax cs1 cs2 cs3'
+    'pax tang v3d v3d';
+}
+#layout-plan.drawing-curve > .view.draw-target {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+#layout-plan > .view {
+  transition: box-shadow 0.35s ease;
+}
 .layout.has-max > .view:not(.max) {
   display: none;
 }

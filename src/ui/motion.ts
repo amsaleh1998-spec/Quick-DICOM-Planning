@@ -43,7 +43,7 @@ const running = new WeakMap<Element, Animation>();
 export function animateTo(
   el: HTMLElement,
   to: Keyframe,
-  opts: { from?: Keyframe; response?: number; damping?: number; duration?: number; easing?: string } = {},
+  opts: { from?: Keyframe; response?: number; damping?: number; duration?: number; easing?: string; delay?: number } = {},
 ): Animation {
   const prev = running.get(el);
   let from: Keyframe | undefined = opts.from;
@@ -56,7 +56,8 @@ export function animateTo(
   const a = el.animate(from ? [from, to] : [to], {
     duration: opts.duration ?? sp.duration,
     easing: opts.easing ?? sp.easing,
-    fill: 'none',
+    delay: opts.delay ?? 0,
+    fill: opts.delay ? 'backwards' : 'none', // a delayed one holds its start until it starts
   });
   running.set(el, a);
   a.addEventListener('finish', () => running.get(el) === a && running.delete(el));
@@ -76,7 +77,11 @@ export function stopMotion(el: HTMLElement) {
  * across the shorter side), cut to the old rectangle, and both open up to its new place.
  * No movement when less motion is asked for.
  */
-export function flipFrom(el: HTMLElement, before: DOMRect) {
+export function flipFrom(
+  el: HTMLElement,
+  before: DOMRect,
+  opts: { response?: number; damping?: number; delay?: number; z?: number } = {},
+) {
   if (reducedMotion()) return;
   stopMotion(el);
   const a = { x: el.getBoundingClientRect().left, y: el.getBoundingClientRect().top, w: el.offsetWidth, h: el.offsetHeight };
@@ -93,13 +98,15 @@ export function flipFrom(el: HTMLElement, before: DOMRect) {
   const right = Math.max(0, a.w - left - b.width / s);
   const bottom = Math.max(0, a.h - top - b.height / s);
   el.style.transformOrigin = '0 0';
-  el.style.zIndex = '5'; // over the views coming back on a restore
+  el.style.zIndex = String(opts.z ?? 5); // over the views coming back on a restore
   const anim = animateTo(
     el,
     { transform: 'none', clipPath: 'inset(0px 0px 0px 0px)' },
     {
       from: { transform: `translate(${tx}px, ${ty}px) scale(${s})`, clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px)` },
-      response: 0.2,
+      response: opts.response ?? 0.2,
+      damping: opts.damping,
+      delay: opts.delay,
     },
   );
   const done = () => {
