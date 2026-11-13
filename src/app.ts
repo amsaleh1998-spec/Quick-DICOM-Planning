@@ -179,6 +179,8 @@ export class App {
   cutDepth: number | null = null;
   /** 3D: render bone that belongs to no segment */
   showUnsegmented = true;
+  /** 3D: the segments (and, as chosen, the bone outside them) – or false: the whole scan as before segmenting */
+  show3dSegments = true;
   /** tint segments in the 2D slices */
   showSegOverlay = true;
   /** draw the blue panoramic curve (+ slab bounds, R/L) in the axial plan view */
@@ -291,6 +293,7 @@ export class App {
     this.scans = [];
     this.wax.clear();
     this.showUnsegmented = true;
+    this.show3dSegments = true;
     this.activeSegId = null;
     this.activeNerveId = null;
     this.segTool = null;
@@ -464,7 +467,7 @@ export class App {
     }
     const oldAi = this.seg.ai;
     const ai: AiLayer | null = oldAi && { ...oldAi, toWorld: composeAffine(oldToNew, oldAi.toWorld ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]) };
-    const { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth } = this;
+    const { activeSegId, activeNerveId, showUnsegmented, show3dSegments, showSegOverlay, cutDepth } = this;
 
     this.setVolume(nv);
     this.X = X2;
@@ -478,7 +481,7 @@ export class App {
     this.focusC = focus;
     this.wl = wl;
     this.vr = vr;
-    Object.assign(this, { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth });
+    Object.assign(this, { activeSegId, activeNerveId, showUnsegmented, show3dSegments, showSegOverlay, cutDepth });
     this.restoreSegmentation(segments, cuts, nerves, ai);
     this.scans = scans;
     wax.teeth = teeth;
@@ -1354,8 +1357,11 @@ export class App {
       added.push(g);
     }
     if (!seg.segments.some((g) => g.ai)) seg.setAi(null);
-    // the AI segments cover the jaws: hide the remaining (unsegmented) bone in 3D
-    else this.showUnsegmented = false;
+    // the AI segments cover the jaws: show them, without the remaining (unsegmented) bone, in 3D
+    else {
+      this.showUnsegmented = false;
+      this.show3dSegments = true;
+    }
     this.activeSegId = null;
     this.rebuildSegments('Showing the automatic segmentation…');
     return added;
@@ -1468,6 +1474,7 @@ export class App {
       s.cuts.map((c) => c.id),
       this.showSegOverlay,
       this.showUnsegmented,
+      this.show3dSegments,
       this.nerves.map((n) => [n.pts, n.diameter, n.visible]),
     ]);
   }

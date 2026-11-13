@@ -634,8 +634,10 @@ export class View3D extends View {
     gl.activeTexture(gl.TEXTURE1);
     gl.uniform3f(u.uLabInv, 1 / seg.gs[0], 1 / seg.gs[1], 1 / seg.gs[2]);
     gl.uniform3i(u.uLabMax, Math.max(0, seg.nx - 1), Math.max(0, seg.ny - 1), Math.max(0, seg.nz - 1));
-    gl.uniform1i(u.uSegOn, segOn ? 1 : 0);
-    gl.uniform1i(u.uShowUnseg, app.showUnsegmented ? 1 : 0);
+    // the whole scan instead of the segments: rendered as before segmenting, with the threshold
+    const segsIn3d = segOn && app.show3dSegments;
+    gl.uniform1i(u.uSegOn, segsIn3d ? 1 : 0);
+    gl.uniform1i(u.uShowUnseg, !segsIn3d || app.showUnsegmented ? 1 : 0);
     // segment table: row 0 = colour + visible, row 1 = threshold
     const tab = new Float32Array(128 * 2 * 4);
     for (const g of seg.segments) {
@@ -1181,7 +1183,7 @@ export class View3D extends View {
     const tf = Math.min(b1[1], b2[1]);
     const step = vol.minSpacing * 0.5;
     const seg = app.seg;
-    const segOn = !!seg.labels && seg.segments.some((g) => g.voxels > 0);
+    const segOn = !!seg.labels && seg.segments.some((g) => g.voxels > 0) && app.show3dSegments;
     const { lo, hi } = app.vr;
     for (let t = tn; t <= tf; t += step) {
       const q = add(ro, scale(rd, t));

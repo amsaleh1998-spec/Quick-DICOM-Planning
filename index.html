@@ -413,7 +413,14 @@
                 <button id="btn-seg-delete" class="danger">Delete</button>
               </div>
             </div>
-            <label class="check small"><input id="seg-show-unseg" type="checkbox" checked /> 3D: show bone that is not segmented</label>
+            <div class="row seg3d-mode" data-seg3d>
+                <span class="small muted">3D shows</span>
+                <div class="seg small" id="seg-3d-mode" role="radiogroup" aria-label="What the 3D view shows">
+                  <button data-m="segments" role="radio" title="The segments (and, if you like, the bone outside them)">Segments</button>
+                  <button data-m="scan" role="radio" title="The whole CBCT as before segmenting – the threshold works on it">Whole scan</button>
+                </div>
+              </div>
+            <label class="check small" id="seg-show-unseg-row"><input id="seg-show-unseg" type="checkbox" checked /> 3D: also show the bone that is not segmented</label>
             <label class="check small"><input id="seg-show-2d" type="checkbox" checked /> Show segments in the slices</label>
             <div id="seg-manual" class="seg-manual">
               <h3 class="sub-h">Manual – by threshold</h3>
@@ -628,6 +635,13 @@
       <button id="btn-pano-menu" title="Slab / slice thickness, slice position and cross-section spacing">12 mm · 2 mm ▾</button>
     </div>
     <div id="pop-vr" class="popover hidden" role="dialog" aria-label="3D rendering">
+      <div class="row seg3d-mode" data-seg3d>
+        <span class="small muted">3D shows</span>
+        <div class="seg small" id="vr-3d-mode" role="radiogroup" aria-label="What the 3D view shows">
+          <button data-m="segments" role="radio" title="The segments (and, if you like, the bone outside them)">Segments</button>
+          <button data-m="scan" role="radio" title="The whole CBCT as before segmenting – the threshold works on it">Whole scan</button>
+        </div>
+      </div>
       <div class="seg" id="vr-mode">
         <button data-vr="surface">Surface</button>
         <button data-vr="translucent">Translucent</button>

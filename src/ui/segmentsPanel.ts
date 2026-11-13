@@ -63,6 +63,15 @@ segShowUnseg.onchange = () => {
   app.showUnsegmented = segShowUnseg.checked;
   app.changed();
 };
+// what the 3D view shows once there are segments: them, or the whole scan (both switches agree)
+for (const id of ['seg-3d-mode', 'vr-3d-mode'])
+  $(id).querySelectorAll<HTMLButtonElement>('button').forEach(
+    (b) =>
+      (b.onclick = () => {
+        app.show3dSegments = b.dataset.m === 'segments';
+        app.changed();
+      }),
+  );
 segShow2d.onchange = () => {
   app.showSegOverlay = segShow2d.checked;
   app.changed();
@@ -113,6 +122,16 @@ export function refreshSegmentsPanel() {
     $('btn-seg-regrow').toggleAttribute('disabled', !s.seeds.length);
   }
   segShowUnseg.checked = app.showUnsegmented;
+  const hasSegs = app.seg.segments.some((g) => g.voxels > 0);
+  document.querySelectorAll<HTMLElement>('[data-seg3d]').forEach((el) => el.classList.toggle('hidden', !hasSegs));
+  for (const id of ['seg-3d-mode', 'vr-3d-mode'])
+    $(id).querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+      const on = (b.dataset.m === 'segments') === app.show3dSegments;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-checked', String(on));
+    });
+  // the bone outside the segments only matters while the segments are shown
+  $('seg-show-unseg-row').classList.toggle('hidden', !hasSegs || !app.show3dSegments);
   segShow2d.checked = app.showSegOverlay;
   const cutBtn = $('btn-cut');
   cutBtn.classList.toggle('active', tool === 'cut');
