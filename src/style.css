@@ -3354,9 +3354,9 @@ details.sub[open] > summary::before {
   text-align: center;
 }
 .start-hero .brand-mark {
-  width: 68px;
-  height: 68px;
-  margin-bottom: 8px;
+  width: 84px;
+  height: 84px;
+  margin-bottom: 10px;
   filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.65));
 }
 .start-hero h1 {
