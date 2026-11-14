@@ -9,6 +9,7 @@ import { composeSegmentation, drawNervesProjected } from './overlays';
 import { drawPanoScans } from './scanContours';
 import { drawPanoWax, waxAt } from './waxContours';
 import { silhouette, sideOf } from './implantSections';
+import { drawPanoCuts, drawPanoSolids } from './panoImplants';
 import { libraryShape, meshOf } from '../implantLibrary';
 import { WaxupEditor, intoScreen } from './waxupEdit';
 
@@ -1126,7 +1127,12 @@ export class PanoView extends View {
     o.lineTo(this.w, y);
     o.stroke();
     o.setLineDash([]);
-    // implants + abutments (projected along the curve normal)
+    // implants + abutments: in a slice, what the curved surface cuts of them (as in the
+    // cross-sections); in a slab, each one whole as a shaded 3D model. The prosthetic axis guides
+    // are outlined (projected along the curve normal) in both.
+    const slab = app.panoMode === 'slab';
+    const solid = slab ? drawPanoSolids(app, o, (w) => this.project(w), this.vs.scale, this.dpr) : false;
+    if (!slab) drawPanoCuts(app, o, (sv) => this.xOf(sv), (c) => this.yOf(c));
     const tops = new Map<number, { x: number; y: number }>();
     for (const part of app.allParts()) {
       const imp = part.implant;
@@ -1152,6 +1158,14 @@ export class PanoView extends View {
       // a = r1 end, b = r0 end (tapered parts are trapezoids)
       const ra = part.r1 / this.vs.scale;
       const rb = part.r0 / this.vs.scale;
+      // the label sits above the implant/abutment, not the guide
+      if (!isGuide && !imp.hidden) {
+        const t = tops.get(imp.id);
+        const ymin = Math.min(a.y, b.y) - r * 0.3;
+        if (!t || ymin < t.y) tops.set(imp.id, { x: (a.x + b.x) / 2, y: ymin });
+      }
+      // drawn above (cut or 3D) – only the guides, or outlines where 3D is not available
+      if (!isGuide && (!slab || solid)) continue;
       o.beginPath();
       const mesh = isImp && imp.lib && app.curve ? meshOf(imp.lib.id) : null;
       // a library implant whose mesh is still on its way: no generic outline in its place
@@ -1184,7 +1198,6 @@ export class PanoView extends View {
         o.stroke();
       }
       o.setLineDash([]);
-      if (isGuide) continue; // labels sit above the implant/abutment, not the guide
       if (isImp) {
         // platform marker
         const pf = this.project(platformOf(imp));
@@ -1194,9 +1207,6 @@ export class PanoView extends View {
         o.lineWidth = 3;
         o.stroke();
       }
-      const t = tops.get(imp.id);
-      const ymin = Math.min(a.y, b.y) - r * 0.3;
-      if (!t || ymin < t.y) tops.set(imp.id, { x: (a.x + b.x) / 2, y: ymin });
     }
     drawNervesProjected(app, o, (w) => this.project(w), this.vs.scale);
     this.editor.draw(o);
