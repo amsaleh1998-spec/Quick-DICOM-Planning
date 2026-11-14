@@ -6,7 +6,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from engine import ACCENT, FPS, H, INK, MUTED, W, blend_f, draw_text, ease_out, font, rgba_to_bgra, text_width
 
 ICON = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'public', 'icons', 'icon-512.png')
-URL = 'amsaleh1998-spec.github.io/Quick-DICOM-Planning'
+URL = 'quickdicom.app'
 _cache = {}
 
 
