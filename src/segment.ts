@@ -51,8 +51,20 @@ export interface Segment {
   voxels: number;
   /** 3D surface opacity (1 = opaque; older projects have none) */
   opacity?: number;
+  /** shown in the slices (tinted); unset = the default: only nerve canals (see segmentInSlices) */
+  slices?: boolean;
   /** automatic segment: class `cls` of the stored AI result (Segmentation.ai) instead of seeds */
   ai?: { cls: number; model: string };
+}
+
+/** A nerve canal (the automatic mandibular canal, or a segment named so by hand). */
+export function isNerveSegment(s: Segment): boolean {
+  return s.ai?.cls === 5 || /nerve|canal|nerv|canale|kanal/i.test(s.name);
+}
+
+/** Tinted in the slices: by default only the nerve canals – the slices stay clear for planning. */
+export function segmentInSlices(s: Segment): boolean {
+  return s.slices ?? isNerveSegment(s);
 }
 
 /**

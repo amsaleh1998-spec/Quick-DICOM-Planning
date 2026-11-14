@@ -49,7 +49,7 @@ test('objects list: every surface with an eye, group eyes, collapse, resize', as
   });
   await expect(list).toContainText('Tooth');
   await expect(list).toContainText(await page.evaluate(() => window.app.implants[0].name as string)); // its tooth, or Implant 1
-  await expect(list).toContainText('Bone outside segments');
+  await expect(list).toContainText('Rest of the scan (3D)');
   await page.click('#obj-groups [data-k="seg1"]');
   expect(await page.evaluate(() => window.app.seg.segments[0].visible)).toBe(false);
   await page.click('#obj-groups [data-g="implants"]');

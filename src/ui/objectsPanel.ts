@@ -117,16 +117,17 @@ function collect(): Group[] {
               name: 'Whole scan (3D)',
               info: `${Math.round(app.vr.lo)}+`,
               color: [233, 222, 200] as [number, number, number],
-              visible: !app.show3dSegments,
-              set: (v: boolean) => (app.show3dSegments = !v),
+              visible: app.seg3dMode === 'scan',
+              set: (v: boolean) => (app.seg3dMode = v ? 'scan' : 'both'),
             },
             {
+              // the scan around the segments (Segments + scan)
               key: 'bone',
-              name: 'Bone outside segments',
-              info: app.show3dSegments ? undefined : 'with segments',
+              name: 'Rest of the scan (3D)',
+              info: `${Math.round(app.vr.lo)}+`,
               color: [233, 222, 200] as [number, number, number],
-              visible: app.showUnsegmented,
-              set: (v: boolean) => (app.showUnsegmented = v),
+              visible: app.seg3dMode === 'both',
+              set: (v: boolean) => (app.seg3dMode = v ? 'both' : 'segments'),
             },
           ]
         : [

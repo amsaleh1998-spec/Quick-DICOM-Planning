@@ -25,7 +25,7 @@ import {
 import { Nerve, createNerve, implantNerveDistance, insertNervePoint } from './nerve';
 import { Scan, scansKey } from './scans';
 import { CropSpec } from './render';
-import { AiLayer, Cut, SEGMENT_PRESETS, Segment, Segmentation } from './segment';
+import { AiLayer, Cut, SEGMENT_PRESETS, Segment, Segmentation, segmentInSlices } from './segment';
 import { DS_LABELS } from './ai/dsPlan';
 import { canalCentrelines } from './ai/canal';
 import { Volume, composeAffine, resampleVolume } from './volume';
@@ -1256,6 +1256,31 @@ export class App {
     this.rebuildSegments(`Re-growing ${s.name}…`);
   }
 
+  /**
+   * Tinted in the slices: the segment's own setting (by default only the nerve canals), and the
+   * segment being clicked together with "Click to add", so the clicks can be seen.
+   */
+  segmentInSlices(s: Segment): boolean {
+    return segmentInSlices(s) || (this.segTool === 'grow' && s.id === this.activeSegId);
+  }
+
+  setSegmentInSlices(id: number, on: boolean) {
+    const s = this.seg.segmentById(id);
+    if (!s) return;
+    s.slices = on;
+    if (on) this.showSegOverlay = true; // (the switch for all of them)
+    this.changed();
+  }
+
+  /** What the 3D view shows once there are segments. */
+  get seg3dMode(): 'segments' | 'both' | 'scan' {
+    return !this.show3dSegments ? 'scan' : this.showUnsegmented ? 'both' : 'segments';
+  }
+  set seg3dMode(m: 'segments' | 'both' | 'scan') {
+    this.show3dSegments = m !== 'scan';
+    if (m !== 'scan') this.showUnsegmented = m === 'both';
+  }
+
   setSegmentVisible(id: number, visible: boolean) {
     const s = this.seg.segmentById(id);
     if (!s) return;
@@ -1470,7 +1495,7 @@ export class App {
     const s = this.seg;
     return JSON.stringify([
       s.version,
-      s.segments.map((g) => [g.id, g.visible, g.color, g.voxels, g.opacity ?? 1]),
+      s.segments.map((g) => [g.id, g.visible, g.color, g.voxels, g.opacity ?? 1, this.segmentInSlices(g)]),
       s.cuts.map((c) => c.id),
       this.showSegOverlay,
       this.showUnsegmented,

@@ -2,6 +2,7 @@
 // and cuts.
 
 import { showDentalSegmentator } from '../ai/dentalSegmentator';
+import { segmentInSlices } from '../segment';
 import { bindLowerThreshold } from './viewSettings';
 import { $, app, escapeHtml, fromHex, rgbCss, setList, setStatus, toHex } from './shell';
 
@@ -57,18 +58,14 @@ $('btn-seg-regrow').onclick = () => app.activeSegId !== null && app.regrowSegmen
 $('btn-seg-clear').onclick = () => app.activeSegId !== null && app.clearSegment(app.activeSegId);
 $('btn-seg-delete').onclick = () => app.activeSegId !== null && app.deleteSegment(app.activeSegId);
 bindLowerThreshold($<HTMLInputElement>('seg-thr'), $<HTMLInputElement>('seg-thr-num'));
-const segShowUnseg = $<HTMLInputElement>('seg-show-unseg');
 const segShow2d = $<HTMLInputElement>('seg-show-2d');
-segShowUnseg.onchange = () => {
-  app.showUnsegmented = segShowUnseg.checked;
-  app.changed();
-};
-// what the 3D view shows once there are segments: them, or the whole scan (both switches agree)
+// what the 3D view shows once there are segments: only them, them in the whole scan, or the
+// whole scan as before segmenting (both switches agree)
 for (const id of ['seg-3d-mode', 'vr-3d-mode'])
   $(id).querySelectorAll<HTMLButtonElement>('button').forEach(
     (b) =>
       (b.onclick = () => {
-        app.show3dSegments = b.dataset.m === 'segments';
+        app.seg3dMode = b.dataset.m as typeof app.seg3dMode;
         app.changed();
       }),
   );
@@ -97,9 +94,12 @@ export function refreshSegmentsPanel() {
       return {
         key: String(g.id),
         sel: g.id === app.activeSegId,
-        html: `<span class="swatch" style="background:${rgbCss(g.color)}"></span><span class="name">${escapeHtml(g.name)}</span><span class="dim">${info}</span><button data-act="eye" class="${g.visible ? '' : 'off'}" title="Show / hide">${g.visible ? 'Hide' : 'Show'}</button>`,
+        html:
+          `<span class="swatch" style="background:${rgbCss(g.color)}"></span><span class="name">${escapeHtml(g.name)}</span><span class="dim">${info}</span>` +
+          `<button data-act="3d" class="seg-vis${g.visible ? ' on' : ''}" aria-pressed="${g.visible}" title="${g.visible ? 'Shown' : 'Hidden'} in the 3D view – click to ${g.visible ? 'hide' : 'show'}">3D</button>` +
+          `<button data-act="slices" class="seg-vis${segmentInSlices(g) ? ' on' : ''}" aria-pressed="${segmentInSlices(g)}" title="${segmentInSlices(g) ? 'Shown' : 'Hidden'} in the slices – click to ${segmentInSlices(g) ? 'hide' : 'show'}">Slices</button>`,
         onClick: () => app.selectSegment(g.id),
-        onButton: () => app.setSegmentVisible(g.id, !g.visible),
+        onButton: (act) => (act === 'slices' ? app.setSegmentInSlices(g.id, !segmentInSlices(g)) : app.setSegmentVisible(g.id, !g.visible)),
       };
     }),
   );
@@ -121,17 +121,14 @@ export function refreshSegmentsPanel() {
     $('btn-seg-nerves').classList.toggle('hidden', s.ai?.cls !== 5);
     $('btn-seg-regrow').toggleAttribute('disabled', !s.seeds.length);
   }
-  segShowUnseg.checked = app.showUnsegmented;
   const hasSegs = app.seg.segments.some((g) => g.voxels > 0);
   document.querySelectorAll<HTMLElement>('[data-seg3d]').forEach((el) => el.classList.toggle('hidden', !hasSegs));
   for (const id of ['seg-3d-mode', 'vr-3d-mode'])
     $(id).querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
-      const on = (b.dataset.m === 'segments') === app.show3dSegments;
+      const on = b.dataset.m === app.seg3dMode;
       b.classList.toggle('active', on);
       b.setAttribute('aria-checked', String(on));
     });
-  // the bone outside the segments only matters while the segments are shown
-  $('seg-show-unseg-row').classList.toggle('hidden', !hasSegs || !app.show3dSegments);
   segShow2d.checked = app.showSegOverlay;
   const cutBtn = $('btn-cut');
   cutBtn.classList.toggle('active', tool === 'cut');
