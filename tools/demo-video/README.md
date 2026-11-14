@@ -31,10 +31,13 @@ another scan, change it.
 npm run build
 node tools/demo-video/serve.cjs &          # dist/ on http://127.0.0.1:4174/
 cd tools/demo-video
-node capture.cjs --data "/path/to/Demo CBCT" --out out/rec --checkpoints \
+node capture.cjs --data "/path/to/Demo CBCT" --library /path/to/library.qdplib --out out/rec --checkpoints \
   --scenes open,ai,scans,curve,implants,hero,report
 ```
 
+- `--library`: the implant library file the implants are chosen from. It is imported before the
+  recording starts, as it is in a browser that has had it imported before (the library is private
+  and not part of the repository).
 - `--preview` records small and fast (1×, 30 fps; with `--draft3d` the 3D scene at the app's
   draft quality) to check the choreography.
 - `--checkpoints` saves a project after each scene. A scene can then be recorded again on its
@@ -57,10 +60,10 @@ python3 timeline.py out/rec                  # scene and caption times, fastest 
 ```
 
 The video is encoded with a silent audio track. `compose/music.py` synthesises an original
-instrumental soundtrack of the same length (modelled guitar, piano, bass, strings and percussion; nothing sampled or licensed):
+soundtrack of the same length (electronic, 32 bars that build up to the 3D shot; nothing sampled or licensed):
 
 ```bash
-python3 compose/music.py 68.4 music.wav 51.3        # length of the video, start of the 3D shot (s)
+python3 compose/music.py 70.6 music.wav 53.4        # length of the video, start of the 3D shot (s)
 ffmpeg -i demo.mp4 -i music.wav -map 0:v -map 1:a -c:v copy -af loudnorm=I=-16:TP=-1.5 -c:a aac -b:a 192k demo-music.mp4
 ```
 

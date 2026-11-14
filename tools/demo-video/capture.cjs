@@ -9,6 +9,7 @@
 //   --from <project>     start from a saved project instead of a fresh page (scenes after `open`)
 //   --rail <panel>       with --from: the side panel to have open (as a continuous session would)
 //   --fit                with --from: fit every view first (for a project saved before its planning views were shown)
+//   --library <file>     the implant library (.qdplib) the implants scene chooses from (or DEMO_LIBRARY=<file>)
 const path = require('path');
 const fs = require('fs');
 const { Stage } = require('./lib/stage.cjs');
@@ -63,7 +64,9 @@ const checkpoints = !!arg('checkpoints', false);
       if (arg('fit', false)) await page.keyboard.press('f');
       // the side panel a continuous session would have open here
       const rail = arg('rail', null);
-      if (rail) await page.click(`#rail [data-panel="${rail}"]`);
+      // (a project reopens with the panel it was saved with: a click on the open panel's button would close it)
+      const shown = (sel) => page.evaluate((sel) => { const b = document.querySelector(sel), s = document.querySelector('#sidebar').getBoundingClientRect(); return b.classList.contains('on') && s.width > 100; }, sel);
+      if (rail && !(await shown(`#rail [data-panel="${rail}"]`))) await page.click(`#rail [data-panel="${rail}"]`);
       // a project opened in Plan mode comes up ready to draw a curve, also when it has one: a session that drew it is not
       if (await page.evaluate(() => !!window.app.drawing && !window.app.drawing.length && window.app.curves.length > 0)) await page.keyboard.press('Escape');
       await page.waitForTimeout(500);
@@ -75,6 +78,19 @@ const checkpoints = !!arg('checkpoints', false);
       await idle(page);
       await page.click('#btn-auto-wl');
       await page.waitForTimeout(800);
+      await tidy(page);
+    });
+  }
+  // the implant library is a file of its own, imported once and kept in the browser: have it there before the recording
+  const library = arg('library', process.env.DEMO_LIBRARY);
+  if (library) {
+    await st.offcam(async (page) => {
+      await page.setInputFiles('#lib-input', path.resolve(library));
+      await page.waitForFunction(async () => (await caches.keys()).length > 0 && /librar/i.test(document.getElementById('status-msg').textContent), null, { timeout: 300_000 });
+      await page.waitForTimeout(1500);
+      // (the import opens the panel's library section: closed again, as it is when the library was imported another day)
+      await page.evaluate(() => { for (const d of document.querySelectorAll('#sidebar details')) if (/Implant library/.test(d.querySelector('summary')?.textContent ?? '')) d.open = false; });
+      console.log('  library:', await page.evaluate(() => document.getElementById('status-msg').textContent));
       await tidy(page);
     });
   }
