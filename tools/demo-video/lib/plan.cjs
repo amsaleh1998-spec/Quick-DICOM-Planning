@@ -15,8 +15,8 @@ const plan = {
    * The scenes use it to click the same tooth on the CBCT as on the scan.
    */
   scanToCbct: [0.9996, -0.02804, 0.00202, 55.14227, 0.02811, 0.99841, -0.04893, 31.74312, -0.00065, 0.04897, 0.9988, 53.41351],
-  /** points for the match, as fractions of the scan pane: the central incisors and the canines (around them the scan is mostly tooth: the fit is judged within 8 mm of the points) */
-  scanPoints: [[0.467, 0.263], [0.542, 0.27], [0.366, 0.344], [0.642, 0.35]],
+  /** points for the match, as fractions of the scan pane: the incisal edge of a central incisor and the last molar of each side (as the user chose them) */
+  scanPoints: [[0.467, 0.255], [0.242, 0.61], [0.714, 0.61]],
 
   /** Ctrl+wheel zoom of the panoramic onto the upper left quadrant (arc length mm, height mm, wheel notches) */
   panoZoom: { s: 88, c: 21, notches: 3 },
