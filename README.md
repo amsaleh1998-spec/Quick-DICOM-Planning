@@ -37,7 +37,7 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   front of them.
 - **View settings in the views**: the 3D view's header has the rendering mode and thresholds (*Surface 796+ ▾*) and the
   view direction (*View ▾*); the panoramic's header has *Slab / Slice* and the thickness, slice position and
-  cross-section spacing (*12 mm · sections 2 mm ▾*).
+  cross-section spacing (*12 mm · sections 1 mm ▾*; 1 mm by default).
 - **Status bar**: a one-line hint for the open panel, messages, and the value under the cursor.
 - **Look and motion**: graphite greys so the greyscale scan reads true; colour belongs to what is planned on it (curve,
   view planes, implants, nerves, segments). One material stands out – titanium, the implants' own: the brand mark and
