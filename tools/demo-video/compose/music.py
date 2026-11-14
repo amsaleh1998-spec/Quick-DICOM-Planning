@@ -27,7 +27,7 @@ bus = {k: [np.zeros(N + TAIL), np.zeros(N + TAIL)] for k in ('dry', 'wet', 'low'
 note = lambda n: 440.0 * 2 ** ((n - 69) / 12)  # MIDI number -> Hz
 # (bass, chord tones): Am, F, C, G
 CHORDS = [(33, [57, 60, 64]), (29, [53, 57, 60]), (36, [55, 60, 64]), (31, [55, 59, 62])]
-chord = lambda bar: CHORDS[(bar // 2) % 4]
+chord = lambda bar: CHORDS[0 if bar >= BARS - 2 else (bar // 2) % 4]
 
 
 def lp(x, hz, order=2):
@@ -88,8 +88,8 @@ def horn(f, dur):
     vib = 1 + 0.003 * np.sin(2 * np.pi * 5 * t) * np.minimum(1, t / 0.4)
     ph = np.cumsum(f * vib) / SR
     x = (2 * (ph % 1) - 1) + 0.5 * (2 * ((ph * 1.003) % 1) - 1)
-    e = np.minimum(1, t / 0.14) * np.minimum(1, np.maximum(0, (dur + 0.5 - t) / 0.5))
-    return (0.6 * lp(x, 700) + 0.4 * lp(x, 1500) * e) * e * 0.6
+    e = np.minimum(1, t / 0.35) ** 1.5 * np.minimum(1, np.maximum(0, (dur + 0.5 - t) / 0.5))
+    return (0.75 * lp(x, 450) + 0.25 * lp(x, 900) * e) * e * 0.6
 
 
 def boom(low=38, length=3.2):
@@ -136,16 +136,16 @@ for bar in range(0, BARS, 2):  # two bars per chord
     if bar >= 16 or last:  # high strings
         put(strings([note(tones[0] + 12), note(tones[2] + 12)], 2 * BAR, cut * 2.2, attack=1.2), t0, 0.22 + (0.2 if full or last else 0), 0.4)
     if last:
-        put(piano(note(root + 12), 5, 0.9), t0, 0.5, 0, 'wet')
-        put(piano(note(tones[2] + 12), 5, 0.7), t0 + 0.02, 0.4, 0.2, 'wet')
+        put(piano(note(root + 24), 5, 0.9), t0, 0.28, 0, 'wet')
+        put(piano(note(tones[2]), 5, 0.7), t0 + 0.02, 0.2, 0.2, 'wet')
         break
     # piano figure: sparse at first, every bar later (left out under the horns)
-    fig = [(0, tones[0] + 12), (1.5, tones[2] + 12), (2, tones[1] + 12), (3.5, tones[2]), (4, tones[0] + 12), (5.5, tones[1] + 12), (6, tones[2] + 12), (7, tones[1] + 24)]
+    fig = [(0, tones[0] + 12), (1.5, tones[2] + 12), (2, tones[1] + 12), (3.5, tones[2]), (4, tones[0] + 12), (5.5, tones[1] + 12), (6, tones[2] + 12), (7, tones[1] + 12)]
     if bar < 4:
         fig = fig[:3] + fig[6:7]
     if not full:
         for b, n in fig:
-            put(piano(note(n), 2.6, 0.75 + 0.25 * rng.random()), t0 + b * BEAT, 0.34, 0.25 * np.sin(b), 'wet')
+            put(piano(note(n), 2.6, 0.75 + 0.25 * rng.random()), t0 + b * BEAT, 0.2 if bar < 8 else 0.15, 0.25 * np.sin(b), 'wet')
     # ostinato: eighths from bar 8, sixteenth pick-ups from bar 16
     if bar >= 8:
         for k in range(16):
@@ -168,11 +168,11 @@ for bar in range(0, BARS, 2):  # two bars per chord
         mel = {0: [(0, 3, 64), (3, 1, 62), (4, 4, 60)], 1: [(0, 3, 60), (3, 1, 62), (4, 4, 65)],
                2: [(0, 3, 67), (3, 1, 64), (4, 4, 72)], 3: [(0, 2, 71), (2, 2, 67), (4, 4, 74)]}[(bar // 2) % 4]
         for b, d, n in mel:
-            put(horn(note(n), d * BEAT), t0 + b * BEAT, 0.62, -0.1, 'wet')
-            put(horn(note(n + 12), d * BEAT), t0 + b * BEAT, 0.2, 0.2, 'wet')
+            put(horn(note(n), d * BEAT), t0 + b * BEAT, 0.26, -0.1)
+            put(horn(note(n - 12), d * BEAT), t0 + b * BEAT, 0.16, 0.15)
 
 # deep hits where the picture turns; air rising into the big ones
-for b, g in ((0, 0.5), (8, 0.55), (16, 0.6), (drop_bar, 0.95), (END, 1.0)):
+for b, g in ((0, 0.5), (8, 0.55), (16, 0.6), (drop_bar, 0.7), (END, 0.7)):
     put(boom(), b * BAR, g, 0, 'low')
 for b, g, bright in ((8, 0.06, False), (16, 0.09, False), (drop_bar, 0.22, True), (END, 0.12, True)):
     put(swell(2 * BAR, bright), b * BAR - 2 * BAR, g, 0, 'wet')
@@ -188,7 +188,7 @@ def hall(x, seed):
     for d in (0.0437, 0.0571, 0.0683, 0.0797, 0.0911, 0.1039):
         k = int(d * (1 + 0.03 * r.random()) * SR)
         a = np.zeros(k + 1)
-        a[0], a[k] = 1, -0.86
+        a[0], a[k] = 1, -0.8
         y += lfilter([1], a, x)
     y = lp(y, 8000) / 6
     for d, g in ((0.0127, 0.6), (0.0041, 0.6)):
@@ -203,8 +203,8 @@ def hall(x, seed):
 
 L = bus['dry'][0] + bus['wet'][0] + bus['low'][0]
 R = bus['dry'][1] + bus['wet'][1] + bus['low'][1]
-L += 0.22 * hall(bus['dry'][0], 1) + 0.5 * hall(bus['wet'][0], 2)
-R += 0.22 * hall(bus['dry'][1], 3) + 0.5 * hall(bus['wet'][1], 4)
+L += 0.22 * hall(bus['dry'][0], 1) + 0.35 * hall(bus['wet'][0], 2)
+R += 0.22 * hall(bus['dry'][1], 3) + 0.35 * hall(bus['wet'][1], 4)
 L, R = L[:N], R[:N]
 fade = np.ones(N)
 fo = int(2.4 * SR)
