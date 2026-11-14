@@ -25,7 +25,7 @@ import {
 import { Nerve, createNerve, implantNerveDistance, insertNervePoint } from './nerve';
 import { Scan, scansKey } from './scans';
 import { CropSpec } from './render';
-import { AiLayer, Cut, SEGMENT_PRESETS, Segment, Segmentation } from './segment';
+import { AiLayer, Cut, SEGMENT_PRESETS, Segment, Segmentation, segmentInSlices } from './segment';
 import { DS_LABELS } from './ai/dsPlan';
 import { canalCentrelines } from './ai/canal';
 import { Volume, composeAffine, resampleVolume } from './volume';
@@ -114,7 +114,7 @@ export class App {
   s = 0;
   /** height (frame z) of the axial level / focus */
   focusC = 0;
-  crossSpacing = 2;
+  crossSpacing = 1;
   /** panoramic shows either a thick slab or a thin slice */
   panoMode: 'slab' | 'slice' = 'slab';
   panoSlab = 12;
@@ -123,6 +123,8 @@ export class App {
   tangAngle = 0;
   implants: Implant[] = [];
   selectedId: number | null = null;
+  /** the side panel shown (set by the UI; saved with projects) */
+  currentPanel: () => string | null = () => null;
   /** implant placement in progress (which jaw) */
   placing: Jaw | null = null;
   /** Set when a press lands on an implant (a click elsewhere deselects it). */
@@ -179,6 +181,8 @@ export class App {
   cutDepth: number | null = null;
   /** 3D: render bone that belongs to no segment */
   showUnsegmented = true;
+  /** 3D: the segments (and, as chosen, the bone outside them) – or false: the whole scan as before segmenting */
+  show3dSegments = true;
   /** tint segments in the 2D slices */
   showSegOverlay = true;
   /** draw the blue panoramic curve (+ slab bounds, R/L) in the axial plan view */
@@ -291,6 +295,7 @@ export class App {
     this.scans = [];
     this.wax.clear();
     this.showUnsegmented = true;
+    this.show3dSegments = true;
     this.activeSegId = null;
     this.activeNerveId = null;
     this.segTool = null;
@@ -464,7 +469,7 @@ export class App {
     }
     const oldAi = this.seg.ai;
     const ai: AiLayer | null = oldAi && { ...oldAi, toWorld: composeAffine(oldToNew, oldAi.toWorld ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]) };
-    const { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth } = this;
+    const { activeSegId, activeNerveId, showUnsegmented, show3dSegments, showSegOverlay, cutDepth } = this;
 
     this.setVolume(nv);
     this.X = X2;
@@ -478,7 +483,7 @@ export class App {
     this.focusC = focus;
     this.wl = wl;
     this.vr = vr;
-    Object.assign(this, { activeSegId, activeNerveId, showUnsegmented, showSegOverlay, cutDepth });
+    Object.assign(this, { activeSegId, activeNerveId, showUnsegmented, show3dSegments, showSegOverlay, cutDepth });
     this.restoreSegmentation(segments, cuts, nerves, ai);
     this.scans = scans;
     wax.teeth = teeth;
@@ -894,9 +899,13 @@ export class App {
   private commitTimer = 0;
   private pointersDown = 0;
 
+  /** while true, nothing is recorded: a change made in several parts becomes one step */
+  private historyHeld = false;
+
   /** Record the changes since the last commit as one undo step. */
   commitHistory() {
     clearTimeout(this.commitTimer);
+    if (this.historyHeld) return;
     this.history?.commit();
   }
 
@@ -1253,6 +1262,31 @@ export class App {
     this.rebuildSegments(`Re-growing ${s.name}…`);
   }
 
+  /**
+   * Tinted in the slices: the segment's own setting (by default only the nerve canals), and the
+   * segment being clicked together with "Click to add", so the clicks can be seen.
+   */
+  segmentInSlices(s: Segment): boolean {
+    return segmentInSlices(s) || (this.segTool === 'grow' && s.id === this.activeSegId);
+  }
+
+  setSegmentInSlices(id: number, on: boolean) {
+    const s = this.seg.segmentById(id);
+    if (!s) return;
+    s.slices = on;
+    if (on) this.showSegOverlay = true; // (the switch for all of them)
+    this.changed();
+  }
+
+  /** What the 3D view shows once there are segments. */
+  get seg3dMode(): 'segments' | 'both' | 'scan' {
+    return !this.show3dSegments ? 'scan' : this.showUnsegmented ? 'both' : 'segments';
+  }
+  set seg3dMode(m: 'segments' | 'both' | 'scan') {
+    this.show3dSegments = m !== 'scan';
+    if (m !== 'scan') this.showUnsegmented = m === 'both';
+  }
+
   setSegmentVisible(id: number, visible: boolean) {
     const s = this.seg.segmentById(id);
     if (!s) return;
@@ -1315,8 +1349,21 @@ export class App {
    * Show an automatic segmentation. `only`: the classes computed (one jaw) – the others keep what an
    * earlier run found; null = the whole result replaces the earlier one.
    */
-  applyAiSegmentation(res: { cls: Uint8Array; margin: Uint8Array; counts: number[] }, model: string, only: number[] | null = null): Segment[] {
+  /**
+   * A segmented mandibular canal is turned into nerve paths (one per side, as "Nerves from the
+   * canal" does) and then removed – the nerves are what planning uses. `done` gets the sides traced
+   * once that has run (the canal stays a segment when no path could be made from it).
+   */
+  applyAiSegmentation(
+    res: { cls: Uint8Array; margin: Uint8Array; counts: number[] },
+    model: string,
+    only: number[] | null = null,
+    done?: (nerves: ('right' | 'left')[]) => void,
+  ): Segment[] {
     const seg = this.seg;
+    // segments, nerves from the canal and the canal's removal: one undo step
+    this.commitHistory();
+    this.historyHeld = true;
     let { cls, margin, counts } = res;
     const old = only ? seg.aiLabels() : null;
     if (only) {
@@ -1354,10 +1401,29 @@ export class App {
       added.push(g);
     }
     if (!seg.segments.some((g) => g.ai)) seg.setAi(null);
-    // the AI segments cover the jaws: hide the remaining (unsegmented) bone in 3D
-    else this.showUnsegmented = false;
+    // the AI segments cover the jaws: show them, without the remaining (unsegmented) bone, in 3D
+    else {
+      this.showUnsegmented = false;
+      this.show3dSegments = true;
+    }
     this.activeSegId = null;
-    this.rebuildSegments('Showing the automatic segmentation…');
+    const canal = added.find((g) => g.ai?.cls === 5);
+    this.busy('Showing the automatic segmentation…', () => {
+      let sides: ('right' | 'left')[] = [];
+      try {
+        seg.rebuild();
+        if (canal) {
+          sides = this.nervesFromCanal(canal.id);
+          if (sides.length) {
+            seg.removeSegment(canal.id);
+            seg.rebuild();
+          }
+        }
+      } finally {
+        this.historyHeld = false;
+      }
+      done?.(sides);
+    });
     return added;
   }
 
@@ -1464,10 +1530,11 @@ export class App {
     const s = this.seg;
     return JSON.stringify([
       s.version,
-      s.segments.map((g) => [g.id, g.visible, g.color, g.voxels, g.opacity ?? 1]),
+      s.segments.map((g) => [g.id, g.visible, g.color, g.voxels, g.opacity ?? 1, this.segmentInSlices(g)]),
       s.cuts.map((c) => c.id),
       this.showSegOverlay,
       this.showUnsegmented,
+      this.show3dSegments,
       this.nerves.map((n) => [n.pts, n.diameter, n.visible]),
     ]);
   }

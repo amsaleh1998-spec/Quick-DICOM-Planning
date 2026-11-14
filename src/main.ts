@@ -57,6 +57,15 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 // ---- state -> UI -----------------------------------------------------------------
+/** Sliders are filled up to their thumb (style.css): keep that in step with their values. */
+function syncSliders() {
+  for (const r of document.querySelectorAll<HTMLInputElement>('input[type="range"]')) {
+    const min = Number(r.min || 0), max = Number(r.max || 100);
+    r.style.setProperty('--fill', `${max > min ? ((Number(r.value) - min) / (max - min)) * 100 : 0}%`);
+  }
+}
+document.addEventListener('input', (e) => (e.target as HTMLElement).matches?.('input[type="range"]') && syncSliders(), true);
+
 function refreshUi() {
   refreshLayout();
   refreshPatient();
@@ -73,6 +82,7 @@ function refreshUi() {
   refreshNervesPanel();
   refreshScanUi();
   refreshObjects();
+  syncSliders();
 }
 app.onStateChange = refreshUi;
 

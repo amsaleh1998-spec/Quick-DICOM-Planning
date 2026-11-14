@@ -69,6 +69,39 @@ test('a dropped folder is listed under Recent and reopens from the start screen'
   await expect(page.locator('#open-recent .recent-item').first()).toContainText('TEST, Loader');
 });
 
+test('a project saved through the save dialog is listed under Recent at once, and reopens from there', async () => {
+  // the save dialog (Chrome / Edge) gives the saved file: here a file in the page's private file system
+  await page.addInitScript(() => {
+    (window as unknown as { showSaveFilePicker: (o: { suggestedName: string }) => Promise<FileSystemFileHandle> }).showSaveFilePicker = async (o) =>
+      (await navigator.storage.getDirectory()).getFileHandle(o.suggestedName, { create: true });
+  });
+  await page.goto('./');
+  // open the scan from the previous test
+  await page.locator('#start-recent li').first().click();
+  await page.waitForFunction(() => !!window.app.vol);
+  await page.click('#btn-save-project');
+  await expect(page.locator('#status-msg')).toContainText('Project saved');
+  // listed straight away, first, without opening it
+  await page.click('#btn-open-menu');
+  const first = page.locator('#open-recent .recent-item').first();
+  await expect(first).toContainText('TEST, Loader');
+  await expect(first).toContainText('project');
+  await page.keyboard.press('Escape');
+  // the folder it was made from stays listed below it
+  await page.reload();
+  await expect(page.locator('#start-recent li')).toHaveCount(2);
+  const item = page.locator('#start-recent li').first();
+  await expect(item).toContainText('project');
+  await item.click();
+  await page.waitForFunction(() => !!window.app.vol);
+  expect(await page.evaluate(() => window.app.vol.nx * window.app.vol.ny * window.app.vol.nz)).toBe(80 * 70 * 50);
+  // saving it again (same file) keeps one entry for it
+  await page.click('#btn-save-project');
+  await expect(page.locator('#status-msg')).toContainText('Project saved');
+  await page.reload();
+  await expect(page.locator('#start-recent li')).toHaveCount(2);
+});
+
 test('a dropped STL is not listed under Recent', async () => {
   await page.goto('./');
   const before = await page.locator('#start-recent li').count();

@@ -16,7 +16,7 @@ import type { WaxTooth, Waxup } from './waxup/waxup';
 
 type SavedImplant = Omit<Implant, 'hidden' | 'abutmentHidden'>;
 type SavedNerve = Omit<Nerve, 'visible'>;
-type SavedSegment = Omit<Segment, 'visible' | 'voxels'>;
+type SavedSegment = Omit<Segment, 'visible' | 'voxels' | 'slices'>;
 type SavedScan = Omit<Scan, 'mesh' | 'visible'>;
 
 function implants(app: App): Channel {
@@ -91,7 +91,7 @@ function segments(app: App): Channel {
   // what the label voxels depend on (name, colour and opacity changes need no rebuild)
   const structure = (st: State) => JSON.stringify([st.s.map((g) => [g.id, g.seeds, g.ai ?? null]), st.c, st.ai]);
   const state = (): State => ({
-    s: app.seg.segments.map(({ visible: _v, voxels: _n, ...rest }) => rest),
+    s: app.seg.segments.map(({ visible: _v, voxels: _n, slices: _s, ...rest }) => rest),
     c: app.seg.cuts,
     ai: token(app.seg.ai),
   });
@@ -102,6 +102,7 @@ function segments(app: App): Channel {
       const st = JSON.parse(key) as State;
       const seg = app.seg;
       const vis = new Map(seg.segments.map((g) => [g.id, g.visible]));
+      const inSlices = new Map(seg.segments.map((g) => [g.id, g.slices]));
       if (structure(st) === structure(state())) {
         for (const saved of st.s) {
           const g = seg.segmentById(saved.id);
@@ -114,7 +115,14 @@ function segments(app: App): Channel {
         app.changed();
       } else {
         const ai = st.ai ? layers.get(st.ai) ?? null : null;
-        const list: Segment[] = st.s.filter((g) => !g.ai || ai).map((g) => ({ ...g, visible: vis.get(g.id) ?? true, voxels: 0 }));
+        const list: Segment[] = st.s
+          .filter((g) => !g.ai || ai)
+          .map((g) => {
+            const out: Segment = { ...g, visible: vis.get(g.id) ?? true, voxels: 0 };
+            const sl = inSlices.get(g.id);
+            if (sl !== undefined) out.slices = sl;
+            return out;
+          });
         seg.restore(list, st.c);
         seg.setAi(ai);
         app.rebuildSegments('Updating segmentation…');

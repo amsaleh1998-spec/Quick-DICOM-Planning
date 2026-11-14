@@ -60,25 +60,36 @@ function renderTeeth(sel: Implant) {
   // teeth along an elliptical arch, spaced by their widths; patient right on the left (as in the
   // panoramic), front of the arch down for the mandible and up for the maxilla
   const order = jawTeeth(jaw);
-  const w = order.map((t) => TOOTH_WIDTH[jaw][(t % 10) - 1]);
-  const half = w.slice(0, 8).reduce((a, b) => a + b, 0);
-  const W = 240, H = 156, cx = W / 2, rx = 92, ry = 104;
+  // (drawn widths: halfway between the real ones and an even spacing, so the incisors' numbers have room)
+  const w = order.map((t) => (TOOTH_WIDTH[jaw][(t % 10) - 1] + 8) / 2);
+  const W = 240, H = 172, cx = W / 2, rx = 88, ry = 112;
   const up = jaw === 'upper';
-  const cy = up ? H - 26 : 26;
-  let acc = -half;
+  const cy = up ? H - 28 : 28;
+  // the arch: half an ellipse, the teeth set along its length (not its angle) so that they sit
+  // as close at the front as at the sides
+  const span = Math.PI * 0.52;
+  const N = 240;
+  const at = (phi: number) => ({ x: cx + rx * Math.sin(phi), y: cy + (up ? -1 : 1) * ry * Math.cos(phi), phi });
+  const len = [0];
+  for (let k = 1; k <= N; k++) {
+    const a = at(-span + (2 * span * (k - 1)) / N), b = at(-span + (2 * span * k) / N);
+    len.push(len[k - 1] + Math.hypot(b.x - a.x, b.y - a.y));
+  }
+  const total = w.reduce((a, b) => a + b, 0);
+  let acc = 0;
   const pos = order.map((_, i) => {
-    const mid = acc + w[i] / 2;
+    const target = ((acc + w[i] / 2) / total) * len[N];
     acc += w[i];
-    const phi = (mid / half) * (Math.PI * 0.52);
-    const x = cx + rx * Math.sin(phi);
-    const y = cy + (up ? -1 : 1) * ry * Math.cos(phi);
-    return { x, y, phi };
+    let k = 1;
+    while (k < N && len[k] < target) k++;
+    const f = (target - len[k - 1]) / Math.max(1e-6, len[k] - len[k - 1]);
+    return at(-span + (2 * span * (k - 1 + f)) / N);
   });
   const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
   const parts = order.map((t, i) => {
     const p = pos[i];
     const near = Math.min(i > 0 ? dist(p, pos[i - 1]) : Infinity, i < 15 ? dist(p, pos[i + 1]) : Infinity);
-    const r = Math.max(4.5, near * 0.44);
+    const r = Math.max(4.5, near * 0.45);
     // number outside the arch
     const ox = Math.sin(p.phi), oy = (up ? -1 : 1) * Math.cos(p.phi);
     const lx = p.x + ox * (r + 9), ly = p.y + oy * (r + 9) + 3.5;
@@ -165,6 +176,12 @@ function modelPicker(prefix: 'imp' | 'def', dims: () => { d: number; L: number }
     apply(modelId(brandSel.value, sys.name, sizeSel.value));
   };
   brandSel.onchange = () => {
+    if (brandSel.value === '__import') {
+      // no library yet: the option leads to importing one
+      brandSel.value = '';
+      shown = '\u0000';
+      return void import('./libraryPanel').then((m) => m.chooseLibraryFile());
+    }
     if (!brandSel.value) return apply(null);
     const brand = implantIndex()?.brands.find((x) => x.name === brandSel.value);
     if (brand) preloadSystems(brand.systems);
@@ -189,7 +206,9 @@ function modelPicker(prefix: 'imp' | 'def', dims: () => { d: number; L: number }
       row.classList.toggle('hidden', !id);
       if (key === shown) return;
       shown = key;
-      brandSel.innerHTML = `<option value="">Generic</option>` + (ix?.brands ?? []).map((b) => `<option>${escapeHtml(b.name)}</option>`).join('');
+      brandSel.innerHTML =
+        `<option value="">Generic</option>` +
+        (ix ? ix.brands.map((b) => `<option>${escapeHtml(b.name)}</option>`).join('') : `<option value="__import">Import an implant library…</option>`);
       const f = id ? findModel(id) : null;
       // the brand's other systems load meanwhile: switching between them is instant
       if (f) preloadSystems(f.brand.systems);

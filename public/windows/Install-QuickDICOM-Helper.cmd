@@ -106,7 +106,7 @@ if (-not $pick) {
   if (-not $found.Count) { Write-Host '    (none from a browser)' }
   foreach ($x in $found) { Write-Host ('    ' + $x.Name + ' : ' + $x.Command) }
   Write-Host ''
-  Write-Host '  1. Open https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/ in Chrome or Edge'
+  Write-Host '  1. Open https://quickdicom.app/ in Chrome or Edge'
   Write-Host '     and click "Install app".'
   Write-Host '  2. Run this helper again.'
   exit 1

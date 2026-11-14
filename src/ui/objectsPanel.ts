@@ -110,14 +110,36 @@ function collect(): Group[] {
     key: 'bone',
     title: 'CBCT',
     items: [
-      {
-        key: 'bone',
-        name: segs.length ? 'Bone outside segments' : 'Bone surface (3D)',
-        info: `${Math.round(app.vr.lo)}+`,
-        color: [233, 222, 200],
-        visible: app.showUnsegmented,
-        set: (v) => (app.showUnsegmented = v),
-      },
+      ...(segs.length
+        ? [
+            {
+              key: 'scan',
+              name: 'Whole scan (3D)',
+              info: `${Math.round(app.vr.lo)}+`,
+              color: [233, 222, 200] as [number, number, number],
+              visible: app.seg3dMode === 'scan',
+              set: (v: boolean) => (app.seg3dMode = v ? 'scan' : 'both'),
+            },
+            {
+              // the scan around the segments (Segments + scan)
+              key: 'bone',
+              name: 'Rest of the scan (3D)',
+              info: `${Math.round(app.vr.lo)}+`,
+              color: [233, 222, 200] as [number, number, number],
+              visible: app.seg3dMode === 'both',
+              set: (v: boolean) => (app.seg3dMode = v ? 'both' : 'segments'),
+            },
+          ]
+        : [
+            {
+              key: 'bone',
+              name: 'Bone surface (3D)',
+              info: `${Math.round(app.vr.lo)}+`,
+              color: [233, 222, 200] as [number, number, number],
+              visible: app.showUnsegmented,
+              set: (v: boolean) => (app.showUnsegmented = v),
+            },
+          ]),
     ],
   });
   if (segs.length)

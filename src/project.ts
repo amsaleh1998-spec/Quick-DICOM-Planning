@@ -52,6 +52,8 @@ interface ProjectFile {
     tangAngle: number;
     implants: Implant[];
     selectedId: number | null;
+    /** the side panel that was open (older projects: none) */
+    panel?: string;
     defaultDiameter: number;
     defaultTapered?: boolean;
     defaultLength: number;
@@ -69,6 +71,7 @@ interface ProjectFile {
     activeSegId?: number | null;
     activeNerveId?: number | null;
     showUnsegmented?: boolean;
+    show3dSegments?: boolean;
     showSegOverlay?: boolean;
     showCurveAxial?: boolean;
     showCurveCross?: boolean;
@@ -176,6 +179,7 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       tangAngle: app.tangAngle,
       implants: app.implants,
       selectedId: app.selectedId,
+      panel: app.currentPanel() ?? undefined,
       defaultDiameter: app.defaultDiameter,
       defaultTapered: app.defaultTapered,
       defaultLength: app.defaultLength,
@@ -191,6 +195,7 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       activeSegId: app.activeSegId,
       activeNerveId: app.activeNerveId,
       showUnsegmented: app.showUnsegmented,
+      show3dSegments: app.show3dSegments,
       showSegOverlay: app.showSegOverlay,
       showCurveAxial: app.showCurveAxial,
       showCurveCross: app.showCurveCross,
@@ -334,6 +339,7 @@ export function applyProjectState(app: App, file: ProjectFile, entries?: Map<str
   const mv = app.views[st.maximized];
   if (mv && !mv.el.classList.contains('max')) app.toggleMaximize(mv, false);
   app.showUnsegmented = st.showUnsegmented ?? true;
+  app.show3dSegments = st.show3dSegments ?? true;
   app.showSegOverlay = st.showSegOverlay ?? true;
   app.showCurveAxial = st.showCurveAxial ?? true;
   app.showCurveCross = st.showCurveCross ?? false;

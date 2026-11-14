@@ -38,6 +38,66 @@ interface Slice {
   info: VolumeInfo;
   /** parsed data set (for the metadata viewer) */
   ds: DataSet;
+  /** the file it came from */
+  file?: File;
+}
+
+/** A patient found in the files – when a folder mixes several, the user chooses one. */
+export interface PatientGroup {
+  name?: string;
+  id?: string;
+  birthDate?: string;
+  sex?: string;
+  studyDate?: string;
+  /** its volumes (largest first) */
+  series: { description: string; slices: number; rows: number; cols: number }[];
+  /** every file with images of this patient */
+  files: File[];
+  /** a small greyscale picture of the middle slice of its largest volume */
+  preview: () => Promise<{ width: number; height: number; data: Uint8ClampedArray } | null>;
+}
+
+export interface LoadOptions {
+  /** Called when the files hold scans of more than one patient: the index to open, or null to cancel. */
+  choosePatient?: (patients: PatientGroup[]) => Promise<number | null>;
+}
+
+/** Thrown when the user cancels the choice of patient. */
+export class LoadCancelled extends Error {
+  constructor() {
+    super('Nothing opened.');
+    this.name = 'AbortError';
+  }
+}
+
+/** Patients are told apart by ID, name and birth date (whatever the files carry). */
+const patientKey = (s: Slice) => [s.info.patientId ?? '', (s.info.patientName ?? '').trim().toUpperCase(), s.info.birthDate ?? ''].join('|');
+
+async function slicePreview(series: Slice[]): Promise<{ width: number; height: number; data: Uint8ClampedArray } | null> {
+  try {
+    const ordered = series.every((s) => s.position) ? [...series].sort((a, b) => a.position![2] - b.position![2]) : [...series].sort((a, b) => a.instance - b.instance);
+    const s = ordered[Math.floor(ordered.length / 2)];
+    const px = await s.decode(null);
+    // window from the 2nd to the 99.5th percentile
+    const sample: number[] = [];
+    for (let i = 0; i < px.length; i += Math.max(1, Math.floor(px.length / 4000))) sample.push(px[i]);
+    sample.sort((a, b) => a - b);
+    const lo = sample[Math.floor(sample.length * 0.02)], hi = sample[Math.floor(sample.length * 0.995)];
+    const k = Math.min(1, 128 / Math.max(s.rows, s.cols));
+    const width = Math.max(1, Math.round(s.cols * k)), height = Math.max(1, Math.round(s.rows * k));
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const v = px[Math.min(s.rows - 1, Math.floor(y / k)) * s.cols + Math.min(s.cols - 1, Math.floor(x / k))];
+        const g = hi > lo ? ((v - lo) / (hi - lo)) * 255 : 0;
+        const o = (y * width + x) * 4;
+        data[o] = data[o + 1] = data[o + 2] = g;
+        data[o + 3] = 255;
+      }
+    return { width, height, data };
+  } catch {
+    return null;
+  }
 }
 
 function str(ds: DataSet, tag: string): string | undefined {
@@ -281,7 +341,7 @@ function dominantAxis(v: Vec3): [number, number] {
   return [i, Math.sign(v[i]) || 1];
 }
 
-export async function loadDicomFiles(files: File[], progress: LoadProgress): Promise<Volume> {
+export async function loadDicomFiles(files: File[], progress: LoadProgress, opts: LoadOptions = {}): Promise<Volume> {
   const slices: Slice[] = [];
   let compressedError: Error | null = null;
   let ignored = 0;
@@ -296,6 +356,7 @@ export async function loadDicomFiles(files: File[], progress: LoadProgress): Pro
       const buf = await f.arrayBuffer();
       const got = parseFile(f.name, buf);
       if (!got.length) ignored++;
+      for (const s of got) s.file = f;
       slices.push(...got);
     } catch (e) {
       compressedError = e as Error;
@@ -316,7 +377,38 @@ export async function loadDicomFiles(files: File[], progress: LoadProgress): Pro
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(s);
   }
-  let series = [...groups.values()].sort((a, b) => b.length - a.length)[0];
+  let candidates = [...groups.values()];
+  // several patients in the files (a mixed-up folder): the user chooses whose scan to open
+  const byPatient = new Map<string, Slice[][]>();
+  for (const g of candidates.filter((g) => g.length >= 2)) {
+    const k = patientKey(g[0]);
+    if (!byPatient.has(k)) byPatient.set(k, []);
+    byPatient.get(k)!.push(g);
+  }
+  if (byPatient.size > 1 && opts.choosePatient) {
+    const keys = [...byPatient.keys()];
+    const list: PatientGroup[] = keys.map((k) => {
+      const vols = byPatient.get(k)!.sort((a, b) => b.length - a.length);
+      const i0 = vols[0][0].info;
+      const own = new Set<File>();
+      for (const s of slices) if (s.file && patientKey(s) === k) own.add(s.file);
+      return {
+        name: i0.patientName,
+        id: i0.patientId,
+        birthDate: i0.birthDate,
+        sex: i0.sex,
+        studyDate: i0.studyDate,
+        series: vols.map((v) => ({ description: v[0].info.seriesDescription ?? '', slices: v.length, rows: v[0].rows, cols: v[0].cols })),
+        files: [...own],
+        preview: () => slicePreview(vols[0]),
+      };
+    });
+    progress('Reading files', 1);
+    const pick = await opts.choosePatient(list);
+    if (pick === null) throw new LoadCancelled();
+    candidates = byPatient.get(keys[pick])!;
+  }
+  let series = candidates.sort((a, b) => b.length - a.length)[0];
   if (series.length < 2) throw new Error('Need a volume (at least 2 slices); found only single images.');
 
   const ref = series[0];

@@ -6,7 +6,9 @@
     <title>Quick DICOM Planning</title>
     <!-- installable app: lets Windows open .dcm files with it (Chrome / Edge) -->
     <link rel="manifest" href="./manifest.webmanifest" />
-    <meta name="theme-color" content="#131a26" />
+    <meta name="theme-color" content="#18181a" />
+    <meta name="description" content="Implant planning on CBCT scans in the browser: panoramic curve, cross-sections, implant libraries, nerve tracing, segmentation, waxup and a planning report. Scans stay on your computer." />
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <script>
@@ -35,7 +37,7 @@
   <body>
     <div id="app">
       <header id="toolbar">
-        <div class="brand" title="Quick DICOM Planning">QDP</div>
+        <div class="brand" title="Quick DICOM Planning" aria-label="Quick DICOM Planning"><img class="brand-mark" src="./icons/mark-256.png" alt="" draggable="false" /></div>
         <button id="patient-chip" class="patient-chip" title="Patient and scan details, DICOM tags">
           <span id="patient-badge" class="pc-name">No scan open</span><span id="patient-date" class="pc-date"></span>
           <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
@@ -358,14 +360,14 @@
               <label class="check small"><input id="place-parallel" type="checkbox" checked /> Parallel to the selected implant</label>
             </details>
             <details class="sub" id="lib-box">
-              <summary>Implant library <span id="lib-badge" class="lib-badge hidden">Update</span></summary>
+              <summary>Implant library <span id="lib-badge" class="lib-badge hidden">None</span></summary>
               <div id="lib-status" class="small lib-status"></div>
-              <div id="lib-progress" class="lib-progress hidden" role="progressbar" aria-label="Download of the implant library" aria-valuemin="0" aria-valuemax="100"><div></div></div>
+              <div id="lib-progress" class="lib-progress hidden" role="progressbar" aria-label="Import of the implant library" aria-valuemin="0" aria-valuemax="100"><div></div></div>
               <div class="row">
-                <button id="btn-lib-download" class="hidden" title="Keep the whole library in this browser: implants load instantly, also offline">Download</button>
-                <button id="btn-lib-cancel" class="hidden">Cancel</button>
-                <button id="btn-lib-remove" class="hidden" title="Free the space: implants are loaded from the server again as they are used">Remove download</button>
+                <button id="btn-lib-import" title="Import an implant library file (.qdplib) from this computer: its implants are kept in this browser and load instantly, also offline">Import library file…</button>
+                <button id="btn-lib-remove" class="hidden" title="Remove the implant library from this browser (plans keep their implants' models)">Remove</button>
               </div>
+              <input id="lib-input" type="file" accept=".qdplib,.zip" class="hidden" />
             </details>
           </section>
 
@@ -396,8 +398,15 @@
                 <button id="btn-seg-delete" class="danger">Delete</button>
               </div>
             </div>
-            <label class="check small"><input id="seg-show-unseg" type="checkbox" checked /> 3D: show bone that is not segmented</label>
-            <label class="check small"><input id="seg-show-2d" type="checkbox" checked /> Show segments in the slices</label>
+            <div class="row seg3d-mode" data-seg3d>
+                <span class="small muted">3D shows</span>
+                <div class="seg small" id="seg-3d-mode" role="radiogroup" aria-label="What the 3D view shows">
+                  <button data-m="segments" role="radio" title="Only the segments">Segments</button>
+                  <button data-m="both" role="radio" title="The whole CBCT with the segments in their colours – the threshold works on the rest of the scan">Segments + scan</button>
+                  <button data-m="scan" role="radio" title="The whole CBCT as before segmenting – the threshold works on it">Whole scan</button>
+                </div>
+              </div>
+            <label class="check small" title="Switch for all segments; which ones are shown is set per segment with “Slices” in the list (by default only the nerve canals)"><input id="seg-show-2d" type="checkbox" checked /> Show segments in the slices</label>
             <div id="seg-manual" class="seg-manual">
               <h3 class="sub-h">Manual – by threshold</h3>
               <div class="thr-row" title="Lowest value that counts as bone: for new clicks and the 3D surface (the same as the bar in the 3D view)">
@@ -488,6 +497,11 @@
           <div id="layout-mpr" class="layout"></div>
           <div id="layout-plan" class="layout hidden"></div>
           <div id="start-screen" class="start-screen hidden">
+            <div class="start-hero">
+              <img class="brand-mark" src="./icons/mark-256.png" alt="" draggable="false" />
+              <h1>Quick DICOM Planning</h1>
+              <p class="start-tag">Implant planning on CBCT scans, right in your browser.</p>
+            </div>
             <div class="start-drop">
               <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="7" y="9" width="32" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M23 15v14M17 23l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <h2>Drop a CBCT here</h2>
@@ -503,6 +517,7 @@
                 <ul class="obj-list recent-list"></ul>
               </div>
             </div>
+            <p class="start-note"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Scans are opened from your computer and stay there – nothing is uploaded.</p>
           </div>
           <div id="drop-overlay" class="hidden">Drop DICOM files or a folder</div>
           <div id="launch-banner" class="launch-banner hidden" role="dialog" aria-live="polite">
@@ -605,6 +620,14 @@
       <button id="btn-pano-menu" title="Slab / slice thickness, slice position and cross-section spacing">12 mm · 2 mm ▾</button>
     </div>
     <div id="pop-vr" class="popover hidden" role="dialog" aria-label="3D rendering">
+      <div class="row seg3d-mode" data-seg3d>
+        <span class="small muted">3D shows</span>
+        <div class="seg small" id="vr-3d-mode" role="radiogroup" aria-label="What the 3D view shows">
+          <button data-m="segments" role="radio" title="Only the segments">Segments</button>
+          <button data-m="both" role="radio" title="The whole CBCT with the segments in their colours – the threshold works on the rest of the scan">Segments + scan</button>
+          <button data-m="scan" role="radio" title="The whole CBCT as before segmenting – the threshold works on it">Whole scan</button>
+        </div>
+      </div>
       <div class="seg" id="vr-mode">
         <button data-vr="surface">Surface</button>
         <button data-vr="translucent">Translucent</button>

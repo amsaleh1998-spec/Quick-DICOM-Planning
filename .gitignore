@@ -7,3 +7,7 @@ test-results
 playwright-report
 tools/demo-video/out
 __pycache__
+
+# implant libraries are private: imported by people from their computer, never published
+*.qdplib
+public/implants/

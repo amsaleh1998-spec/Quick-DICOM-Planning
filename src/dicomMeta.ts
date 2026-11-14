@@ -285,3 +285,17 @@ export function formatDicomDate(d: string | undefined): string {
   const m = /^(\d{4})(\d{2})(\d{2})$/.exec(d.trim());
   return m ? `${m[1]}-${m[2]}-${m[3]}` : d;
 }
+
+/** A folder name for a patient: "DOE Jane (ID 12345)", safe on Windows and macOS. */
+export function patientFolderName(p: { name?: string; id?: string; birthDate?: string }, index: number): string {
+  const { last, first } = splitPersonName(p.name);
+  const who = [last.toUpperCase(), first].filter(Boolean).join(' ');
+  const parts = [who || `Patient ${index + 1}`];
+  if (p.id) parts.push(`(ID ${p.id})`);
+  else if (p.birthDate) parts.push(`(born ${formatDicomDate(p.birthDate)})`);
+  return parts
+    .join(' ')
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
+    .replace(/[. ]+$/, '')
+    .slice(0, 120);
+}
