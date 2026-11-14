@@ -54,9 +54,15 @@ export function guessKind(name: string): ScanKind {
   const n = name.toLowerCase();
   if (/wax|diag|setup|set-up|prosth|design|crown/.test(n)) return 'waxup';
   if (/antag/.test(n)) return 'antagonist';
+  return guessJaw(n) ?? 'other';
+}
+
+/** The jaw a file name names (upper / lower), if any – also for wax-ups and antagonists. */
+export function guessJaw(name: string): 'upper' | 'lower' | null {
+  const n = name.toLowerCase();
   if (/upper|maxill|oberk|\bmx\b|_ok\b|\bok_|superior|\bu[-_ ]?jaw/.test(n)) return 'upper';
   if (/lower|mandib|unterk|\bmd\b|_uk\b|\buk_|inferior|\bl[-_ ]?jaw/.test(n)) return 'lower';
-  return 'other';
+  return null;
 }
 
 export function createScan(fileName: string, mesh: MeshData, kind = guessKind(fileName)): Scan {
