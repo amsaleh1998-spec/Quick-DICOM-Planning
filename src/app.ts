@@ -123,6 +123,8 @@ export class App {
   tangAngle = 0;
   implants: Implant[] = [];
   selectedId: number | null = null;
+  /** the side panel shown (set by the UI; saved with projects) */
+  currentPanel: () => string | null = () => null;
   /** implant placement in progress (which jaw) */
   placing: Jaw | null = null;
   /** Set when a press lands on an implant (a click elsewhere deselects it). */
@@ -897,9 +899,13 @@ export class App {
   private commitTimer = 0;
   private pointersDown = 0;
 
+  /** while true, nothing is recorded: a change made in several parts becomes one step */
+  private historyHeld = false;
+
   /** Record the changes since the last commit as one undo step. */
   commitHistory() {
     clearTimeout(this.commitTimer);
+    if (this.historyHeld) return;
     this.history?.commit();
   }
 
@@ -1343,8 +1349,21 @@ export class App {
    * Show an automatic segmentation. `only`: the classes computed (one jaw) – the others keep what an
    * earlier run found; null = the whole result replaces the earlier one.
    */
-  applyAiSegmentation(res: { cls: Uint8Array; margin: Uint8Array; counts: number[] }, model: string, only: number[] | null = null): Segment[] {
+  /**
+   * A segmented mandibular canal is turned into nerve paths (one per side, as "Nerves from the
+   * canal" does) and then removed – the nerves are what planning uses. `done` gets the sides traced
+   * once that has run (the canal stays a segment when no path could be made from it).
+   */
+  applyAiSegmentation(
+    res: { cls: Uint8Array; margin: Uint8Array; counts: number[] },
+    model: string,
+    only: number[] | null = null,
+    done?: (nerves: ('right' | 'left')[]) => void,
+  ): Segment[] {
     const seg = this.seg;
+    // segments, nerves from the canal and the canal's removal: one undo step
+    this.commitHistory();
+    this.historyHeld = true;
     let { cls, margin, counts } = res;
     const old = only ? seg.aiLabels() : null;
     if (only) {
@@ -1388,7 +1407,23 @@ export class App {
       this.show3dSegments = true;
     }
     this.activeSegId = null;
-    this.rebuildSegments('Showing the automatic segmentation…');
+    const canal = added.find((g) => g.ai?.cls === 5);
+    this.busy('Showing the automatic segmentation…', () => {
+      let sides: ('right' | 'left')[] = [];
+      try {
+        seg.rebuild();
+        if (canal) {
+          sides = this.nervesFromCanal(canal.id);
+          if (sides.length) {
+            seg.removeSegment(canal.id);
+            seg.rebuild();
+          }
+        }
+      } finally {
+        this.historyHeld = false;
+      }
+      done?.(sides);
+    });
     return added;
   }
 

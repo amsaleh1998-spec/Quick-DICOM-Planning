@@ -41,7 +41,10 @@ const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.tab
 // pulse the "Implant planning" tab once after the first volume loads, until it has been opened
 let planOpened = false;
 let planNudged = false;
-export function setMode(m: Mode) {
+app.currentPanel = () => rail.current;
+
+/** `restoring`: a project is being opened – its curves and panel come from the project. */
+export function setMode(m: Mode, { restoring = false } = {}) {
   if (m === 'plan') {
     planOpened = true;
     tabButtons.forEach((b) => b.classList.remove('nudge'));
@@ -51,7 +54,7 @@ export function setMode(m: Mode) {
   planLayout.classList.toggle('hidden', m !== 'plan');
   rail.setMode(m);
   // planning starts with the panoramic curve; once there is one, the last panel used comes back
-  const noCurve = m === 'plan' && !!app.vol && !app.curves.length;
+  const noCurve = !restoring && m === 'plan' && !!app.vol && !app.curves.length;
   if (noCurve) rail.prefer('curve');
   moveView3d(m === 'mpr' ? mprLayout : planLayout);
   if (m !== 'plan' && app.drawing && !app.drawing.length) app.cancelDrawing(); // nothing drawn yet

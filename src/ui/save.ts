@@ -10,7 +10,16 @@ type ClaudeHost = { use(name: string): Promise<unknown> };
 export type FileTypeSpec = { description: string; accept: Record<string, string[]> };
 const PROJECT_FILE_TYPE: FileTypeSpec = { description: 'Quick DICOM Planning project', accept: { 'application/zip': ['.zip'] } };
 
-export async function deliverFile(blob: Blob, filename: string, fileType: FileTypeSpec = PROJECT_FILE_TYPE): Promise<boolean> {
+/**
+ * `onSaved` gets the saved file's handle where the browser's save dialog was used (Chrome, Edge) –
+ * e.g. to list a saved project under Recent. Downloads give no handle.
+ */
+export async function deliverFile(
+  blob: Blob,
+  filename: string,
+  fileType: FileTypeSpec = PROJECT_FILE_TYPE,
+  onSaved?: (handle: FileSystemFileHandle) => void,
+): Promise<boolean> {
   const host = (window as unknown as { claude?: ClaudeHost }).claude;
   if (host?.use) {
     const dl = (await host.use('downloads').catch(() => null)) as DownloadsNs | null;
@@ -46,6 +55,7 @@ export async function deliverFile(blob: Blob, filename: string, fileType: FileTy
       const w = await (handle as unknown as { createWritable(): Promise<WritableStream & { write(b: Blob): Promise<void>; close(): Promise<void> }> }).createWritable();
       await w.write(blob);
       await w.close();
+      onSaved?.(handle);
       return true;
     } catch (e) {
       if ((e as Error).name === 'AbortError') return false;

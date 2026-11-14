@@ -218,7 +218,11 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   plan: orientation/rotation, crop box, window/level, panoramic curve and slice settings, implants and abutments,
   segments (clicks, thresholds, colours, visibility), separation cuts, traced nerves, measurements, zoom/pan of every
   view, the 3D camera and which view was maximized. Segments are re-grown from their clicks when the project is opened.
-- *Open ▾ → Project* (or drag the file onto the page, or pick it under *Recent*) restores everything exactly as it was.
+- *Open ▾ → Project* (or drag the file onto the page, or pick it under *Recent*) restores everything exactly as it was,
+  with the side panel that was open and the implant that was selected (a plan with a curve opens without starting to
+  draw one).
+- Saved through the browser's save dialog (Chrome / Edge), the project is listed under **Recent** right away; saving it
+  again to the same file keeps one entry. (Browsers that save as a download do not give the app the saved file.)
 - The file is a normal ZIP: `project.json` (plan + view state) and `volume.raw` (int16, little endian, x fastest;
   dimensions/spacing in `project.json`).
 
@@ -279,13 +283,18 @@ runs work offline.
   *Settings → System → Display → Graphics* (Chrome stays on the integrated graphics); run the double-click helper again
   so it opens scans in the Edge copy (it prefers the Edge copy when the app is installed in both browsers). The dialog
   shows these steps when it detects integrated Intel graphics.
-- The result appears as five ordinary segments (marked *AI*): show / hide, recolour, rename, delete, add parts by
+- **The mandibular canals become nerve paths**: right after the segmentation, a nerve path is traced along each canal
+  (one per side, with the canal's diameter; sides that already have a traced nerve are left alone) and the canal
+  segment is removed – the nerves are what the implant distance warnings use. Check them on the cross-sections; they
+  can be edited like traced nerves. (When no path can be made from it, the canal stays as a segment.) The segments
+  and the nerves are one undo step.
+- The result appears as ordinary segments (marked *AI*): show / hide, recolour, rename, delete, add parts by
   clicking, use them as the CBCT surface when aligning intraoral scans, and export them with *Export STL*. Their
   surfaces are smooth (the network's class margins are interpolated, not the voxel staircase). They are saved in
   projects and follow *Apply rotate + crop*. Running it again replaces the previous automatic segments. Afterwards
   the 3D view shows the segments without the bone outside them (*Segments + scan* or *Whole scan* bring the rest of the
-  CBCT back), so only the segmented structures remain (the jaws slightly see-through); in the slices only the
-  mandibular canals are tinted (switch others on with *Slices*).
+  CBCT back), so only the segmented structures remain (the jaws slightly see-through); the segments are not tinted in
+  the slices (switch them on with *Slices*), where the nerves are drawn.
 
 Fidelity: the pre- and post-processing of nnU-Net is re-implemented (crop to the non-zero region, resampling to the
 model's 0.43 × 0.31 × 0.43 mm grid, CT normalisation, sliding window with Gaussian weighting, logits resampled back

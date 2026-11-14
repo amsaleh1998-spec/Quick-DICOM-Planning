@@ -379,14 +379,21 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' |
         finish('The scan changed while the automatic segmentation was running – please run it again.', true);
         return;
       }
-      const added = app.applyAiSegmentation({ cls: d.cls, margin: d.margin, counts: d.counts }, 'DentalSegmentator', o.jaw === 'both' ? null : JAW_CLASSES[o.jaw]);
       const secs = (performance.now() - t0) / 1000;
-      finish(
-        added.length
-          ? `DentalSegmentator: ${added.map((g) => g.name.toLowerCase()).join(', ')} segmented in ${fmtTime(secs)} (${d.device === 'webgpu' ? 'graphics card' : 'CPU'}). Check them before planning.`
-          : 'DentalSegmentator found no jaw or teeth in this region.',
-        !added.length,
-      );
+      // (the mandibular canals become nerve paths, and their segment is removed)
+      const added = app.applyAiSegmentation({ cls: d.cls, margin: d.margin, counts: d.counts }, 'DentalSegmentator', o.jaw === 'both' ? null : JAW_CLASSES[o.jaw], (nerves) => {
+        const segs = added.filter((g) => !(nerves.length && g.ai?.cls === 5)).map((g) => g.name.toLowerCase());
+        const traced = nerves.length
+          ? ` Nerve path${nerves.length > 1 ? 's' : ''} traced along the mandibular canal${nerves.length > 1 ? 's' : ''} (${nerves.join(' and ')}) – check ${nerves.length > 1 ? 'them' : 'it'} on the cross-sections.`
+          : '';
+        hooks.setStatus(
+          added.length
+            ? `DentalSegmentator: ${segs.join(', ')} segmented in ${fmtTime(secs)} (${d.device === 'webgpu' ? 'graphics card' : 'CPU'}).${traced} Check them before planning.`
+            : 'DentalSegmentator found no jaw or teeth in this region.',
+          !added.length,
+        );
+      });
+      finish('Showing the automatic segmentation…');
     } else if (d.type === 'error') {
       finish(`Automatic segmentation failed: ${d.message}`, true);
     }
