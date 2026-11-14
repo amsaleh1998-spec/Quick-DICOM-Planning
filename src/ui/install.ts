@@ -30,7 +30,7 @@ window.addEventListener('appinstalled', () => {
   installPrompt = null;
   $('btn-install').classList.add('hidden');
   hideInstallHelp();
-  setStatus('Installed. Double-click a .dcm file in Explorer (choose Quick DICOM Planning the first time) to open it here.');
+  setStatus('Installed. Double-click a .dcm file in Explorer (choose QDP the first time) to open it here.');
 });
 
 let infoModal: HTMLDivElement | null = null;
@@ -157,7 +157,7 @@ function showInstallHelp() {
     steps = `<ol>
       <li>Look at the right end of the address bar for the <b>install</b> icon (a monitor with a down arrow) and click it, then <b>Install</b>.</li>
       <li>No icon? Open the <b>⋮</b> menu (top right) → <b>Cast, save and share</b> → <b>Install page as app…</b>
-        (older Chrome versions: <b>Install Quick DICOM Planning…</b> directly in the menu).</li>
+        (older Chrome versions: <b>Install QDP…</b> directly in the menu).</li>
     </ol>`;
   } else {
     steps = `<p>This browser can't install web apps that open files. Open <a href="${appUrl}" target="_blank" rel="noopener">${appUrl}</a>
@@ -165,9 +165,9 @@ function showInstallHelp() {
   }
   const after = OS_MAC
     ? `After installing, select any <b>.dcm</b> file in Finder → <b>File → Get Info</b> (⌘I) → <b>Open with</b>:
-        <b>Quick DICOM Planning</b> → <b>Change All…</b>`
+        <b>QDP</b> → <b>Change All…</b>`
     : `After installing, right-click any <b>.dcm</b> file in Windows Explorer → <b>Open with</b> →
-        <b>Choose another app</b> → <b>Quick DICOM Planning</b> and tick <b>Always use this app</b>.`;
+        <b>Choose another app</b> → <b>QDP</b> (the installed app) and tick <b>Always use this app</b>.`;
   showInfoModal(
     'Install Quick DICOM Planning',
     `${steps}
