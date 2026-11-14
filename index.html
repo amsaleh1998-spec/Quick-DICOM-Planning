@@ -416,12 +416,12 @@
             <div class="row seg3d-mode" data-seg3d>
                 <span class="small muted">3D shows</span>
                 <div class="seg small" id="seg-3d-mode" role="radiogroup" aria-label="What the 3D view shows">
-                  <button data-m="segments" role="radio" title="The segments (and, if you like, the bone outside them)">Segments</button>
+                  <button data-m="segments" role="radio" title="Only the segments">Segments</button>
+                  <button data-m="both" role="radio" title="The whole CBCT with the segments in their colours – the threshold works on the rest of the scan">Segments + scan</button>
                   <button data-m="scan" role="radio" title="The whole CBCT as before segmenting – the threshold works on it">Whole scan</button>
                 </div>
               </div>
-            <label class="check small" id="seg-show-unseg-row"><input id="seg-show-unseg" type="checkbox" checked /> 3D: also show the bone that is not segmented</label>
-            <label class="check small"><input id="seg-show-2d" type="checkbox" checked /> Show segments in the slices</label>
+            <label class="check small" title="Switch for all segments; which ones are shown is set per segment with “Slices” in the list (by default only the nerve canals)"><input id="seg-show-2d" type="checkbox" checked /> Show segments in the slices</label>
             <div id="seg-manual" class="seg-manual">
               <h3 class="sub-h">Manual – by threshold</h3>
               <div class="thr-row" title="Lowest value that counts as bone: for new clicks and the 3D surface (the same as the bar in the 3D view)">
@@ -638,7 +638,8 @@
       <div class="row seg3d-mode" data-seg3d>
         <span class="small muted">3D shows</span>
         <div class="seg small" id="vr-3d-mode" role="radiogroup" aria-label="What the 3D view shows">
-          <button data-m="segments" role="radio" title="The segments (and, if you like, the bone outside them)">Segments</button>
+          <button data-m="segments" role="radio" title="Only the segments">Segments</button>
+          <button data-m="both" role="radio" title="The whole CBCT with the segments in their colours – the threshold works on the rest of the scan">Segments + scan</button>
           <button data-m="scan" role="radio" title="The whole CBCT as before segmenting – the threshold works on it">Whole scan</button>
         </div>
       </div>

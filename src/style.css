@@ -1352,6 +1352,23 @@ select {
 .obj-list button.off {
   opacity: 0.45;
 }
+/* where a segment shows: two small toggles, lit when on */
+.obj-list button.seg-vis {
+  min-width: 0;
+  padding: 1px 5px;
+  font-size: 10.5px;
+  color: var(--muted);
+  background: transparent;
+  border-color: var(--hairline, rgba(255, 255, 255, 0.12));
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+.obj-list button.seg-vis.on {
+  color: var(--text, #ececef);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+  text-decoration: none;
+}
 .edit-box {
   border: 1px solid #3a3a3f;
   border-radius: 6px;

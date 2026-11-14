@@ -101,12 +101,16 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   threshold and click a tooth or an existing implant inside the jaw.
 - Each segment has a **3D opacity** slider (in its box): see-through segments show what lies inside or behind them –
   teeth roots, canals, nerves, implants, intraoral scans. Maxilla and mandible start at 70 %, everything else opaque.
-- Each segment can be shown/hidden and recoloured; *3D: also show the bone that is not segmented* switches off everything
-  else, so e.g. only the maxilla remains.
-- **3D shows: Segments | Whole scan** (Segments panel, the 3D view's *Surface ▾* menu, or *Whole scan (3D)* in the
-  Objects list): *Whole scan* renders the full CBCT again, as before segmenting, and the threshold works on it as
-  usual; the segments stay in the slices. *Segments* goes back to the segmented view. Saved with the project. Segments are tinted (with outlines) in all slices, and the status bar names the segment
-  under the cursor. Surface, translucent and MIP rendering all respect the visibility.
+- Each segment can be recoloured and has two switches in the list: **3D** (shown in the 3D view) and **Slices**
+  (tinted, with outlines, in the slices; the status bar names the segment under the cursor). **By default only nerve
+  canals are shown in the slices** (the automatic mandibular canal, or a segment named nerve/canal), so the slices stay
+  clear for planning; the segment being clicked with *Click to add* is shown while clicking. *Show segments in the
+  slices* switches all of them off at once. Traced nerves are always drawn.
+- **3D shows: Segments | Segments + scan | Whole scan** (Segments panel, the 3D view's *Surface ▾* menu, or the
+  Objects list): *Segments* shows only the segments (e.g. only the maxilla); *Segments + scan* shows the whole
+  rendering with the segments in their colours (the threshold works on the rest of the scan; a segment hidden in 3D
+  is drawn as part of the scan); *Whole scan* renders the full CBCT as before segmenting, with the threshold working on
+  it. Saved with the project. Surface, translucent and MIP rendering all follow it.
 - **Separation cuts** for jaws/teeth that still touch: *Draw cut*, click points along the gap, double-click/Enter to finish.
   Drawn in the **panoramic** the cut is a curved sheet that follows the arch (ideal between the jaws); drawn in any
   **slice** it is the line extruded along the slice normal. *Reach* limits a cut to ± 2–20 mm around the slice it was
@@ -279,9 +283,9 @@ runs work offline.
   clicking, use them as the CBCT surface when aligning intraoral scans, and export them with *Export STL*. Their
   surfaces are smooth (the network's class margins are interpolated, not the voxel staircase). They are saved in
   projects and follow *Apply rotate + crop*. Running it again replaces the previous automatic segments. Afterwards
-  the 3D view shows the segments without the bone outside them (*Whole scan* shows the full CBCT again), so only the
-  segmented structures remain (the jaws slightly
-  see-through).
+  the 3D view shows the segments without the bone outside them (*Segments + scan* or *Whole scan* bring the rest of the
+  CBCT back), so only the segmented structures remain (the jaws slightly see-through); in the slices only the
+  mandibular canals are tinted (switch others on with *Slices*).
 
 Fidelity: the pre- and post-processing of nnU-Net is re-implemented (crop to the non-zero region, resampling to the
 model's 0.43 × 0.31 × 0.43 mm grid, CT normalisation, sliding window with Gaussian weighting, logits resampled back
