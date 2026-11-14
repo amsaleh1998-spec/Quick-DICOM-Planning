@@ -12,7 +12,8 @@ import { createPhantom } from '../volume';
 import { closePopovers } from './popover';
 import { RecentEntry, RecentSource, addRecent, ago, handlesFromDrop, listRecent, readRecent, recentFromHandles, removeRecent } from './recent';
 import { $, app, escapeHtml, hideLoading, setStatus, showLoading } from './shell';
-import { setMode } from './layout';
+import { rail, setMode } from './layout';
+import type { PanelId } from './rail';
 import { HELPER_LOG, OS_MAC, showHelperHelp } from './install';
 import { deliverFile, exportHooks } from './save';
 import { showExportStl } from '../exportStl';
@@ -234,8 +235,17 @@ export async function openProject(file: File): Promise<string | null> {
     }
     showLoading('Restoring views…', 0.9);
     app.setVolume(volume);
-    setMode(pf.state.mode);
+    setMode(pf.state.mode, { restoring: true });
     applyProjectState(app, pf, entries);
+    // the plan as it was left: the panel that was open (with its implant still selected) – or, in an
+    // older project, the implants when one is selected; a plan without a curve starts drawing one
+    const panel = pf.state.panel as PanelId | undefined;
+    if (panel) rail.select(panel);
+    else if (app.mode === 'plan' && app.selectedImplant()) rail.select('implants');
+    if (app.mode === 'plan' && !app.curves.length) {
+      rail.prefer('curve');
+      if (!app.drawing) app.startDrawing();
+    }
     setStatus(`Project "${file.name}" restored (saved ${new Date(pf.savedAt).toLocaleString()})`);
     noteRecent();
     return null;
@@ -258,7 +268,10 @@ export async function saveProject(): Promise<boolean> {
     const blob = await buildProject(app, (f) => showLoading('Compressing volume…', f));
     hideLoading();
     const name = projectFileName(app);
-    const ok = await deliverFile(blob, name);
+    // saved through the browser's save dialog: listed under Recent right away, like an opened project
+    const ok = await deliverFile(blob, name, undefined, (h) => {
+      void addRecent({ kind: 'project', handles: [h], depth: 0 }, ...recentLabel('project', h.name)).then(() => renderRecent());
+    });
     if (ok) app.markSaved();
     setStatus(ok ? `Project saved as ${name} (${(blob.size / 1e6).toFixed(1)} MB)` : 'Save cancelled');
     return ok;
@@ -313,11 +326,16 @@ let pendingRecent: RecentSource | null = null;
 function noteRecent() {
   const src = pendingRecent;
   pendingRecent = null;
+  if (!src || !app.vol) return;
+  void addRecent(src, ...recentLabel(src.kind, src.handles[0]?.name)).then(() => renderRecent());
+}
+
+/** Name and second line of a Recent entry for the open scan: patient, scan date and kind. */
+function recentLabel(kind: RecentSource['kind'], fileName?: string): [string, string] {
   const info = app.vol?.info;
-  if (!src || !info) return;
-  const name = formatPatientName(info.patientName) || info.seriesDescription?.trim() || src.handles[0]?.name || 'Scan';
-  const sub = [info.studyDate ? formatDicomDate(info.studyDate) : '', src.kind === 'project' ? 'project' : src.kind === 'folder' ? 'folder' : 'file'].filter(Boolean).join(' · ');
-  void addRecent(src, name, sub).then(() => renderRecent());
+  const name = formatPatientName(info?.patientName ?? '') || info?.seriesDescription?.trim() || fileName || 'Scan';
+  const sub = [info?.studyDate ? formatDicomDate(info.studyDate) : '', kind === 'project' ? 'project' : kind === 'folder' ? 'folder' : 'file'].filter(Boolean).join(' · ');
+  return [name, sub];
 }
 
 export async function pickAndOpen(kind: 'files' | 'folder' | 'project') {

@@ -52,6 +52,8 @@ interface ProjectFile {
     tangAngle: number;
     implants: Implant[];
     selectedId: number | null;
+    /** the side panel that was open (older projects: none) */
+    panel?: string;
     defaultDiameter: number;
     defaultTapered?: boolean;
     defaultLength: number;
@@ -177,6 +179,7 @@ export async function buildProject(app: App, onProgress?: (f: number) => void): 
       tangAngle: app.tangAngle,
       implants: app.implants,
       selectedId: app.selectedId,
+      panel: app.currentPanel() ?? undefined,
       defaultDiameter: app.defaultDiameter,
       defaultTapered: app.defaultTapered,
       defaultLength: app.defaultLength,
