@@ -491,7 +491,7 @@ when the browser has not registered it (yet), through the app's Start menu / des
 Terminal (also shown in the app under ⚙ Settings → *Install app* / *Mac helper*):
 
 ```bash
-curl -fsSL https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/mac/install-helper.sh | bash
+curl -fsSL https://quickdicom.app/mac/install-helper.sh | bash
 ```
 
 It builds *Quick DICOM Planning (whole series)* in `~/Applications` (an AppleScript droplet, current user only, no
@@ -543,7 +543,8 @@ them too and publishes nothing when one fails (the Playwright report is kept as 
 
 `.github/workflows/deploy-pages.yml` checks (type check, unit and browser tests), builds the app and publishes it to
 GitHub Pages on every push to `main` (or manually from the Actions tab) – only when every check passes. One-time setup: repository **Settings → Pages → Build and deployment → Source:
-GitHub Actions**. The site is then served at `https://<owner>.github.io/Quick-DICOM-Planning/`. The app is fully
+GitHub Actions**. The site is served at **https://quickdicom.app/** (`public/CNAME`; custom domain set in
+**Settings → Pages**, DNS `A` records to GitHub Pages); `https://<owner>.github.io/Quick-DICOM-Planning/` redirects there. The app is fully
 static – scans are processed in the visitor's browser and never uploaded.
 
 ## Code layout
