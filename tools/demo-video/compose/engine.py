@@ -194,7 +194,7 @@ def browser_bar(w, dsf):
     x0 = (w * k - pw) // 2
     d.rounded_rectangle([x0, 8 * k, x0 + pw, (TB - 8) * k], radius=12 * k, fill=(42, 45, 52))
     f = font('Medium', int(12.5 * k), display=False)
-    url = 'amsaleh1998-spec.github.io/Quick-DICOM-Planning'
+    url = 'quickdicom.app'
     tw = f.getlength(url)
     tx = x0 + (pw - tw) / 2 + 8 * k
     # padlock
