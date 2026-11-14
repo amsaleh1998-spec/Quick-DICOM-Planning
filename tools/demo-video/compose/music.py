@@ -1,10 +1,10 @@
-"""The soundtrack: an original piece synthesised here (no samples, nothing licensed), cut to the video.
+"""The soundtrack: an original cinematic piece synthesised here (no samples, nothing licensed), cut to the video.
 
   python3 music.py <seconds> <out.wav> [drop_seconds]
 
-32 bars over the length of the video, Am - F - C - G: a pad and a pluck to open, kick and bass under the
-first steps, hats and an arpeggio through the planning, everything with a lead from `drop` (the 3D shot),
-a last chord under the closing card.
+32 bars over the length of the video, Am - F - C - G with a chord every two bars: a piano figure over low
+strings to open, a string ostinato and deep hits as the work starts, drums and high strings through the
+planning, the full orchestra with a horn line from `drop` (the 3D shot), one last chord under the closing card.
 """
 import sys
 import wave
@@ -19,13 +19,15 @@ BARS = 32
 BAR = DUR / BARS
 BEAT = BAR / 4
 N = int(DUR * SR)
-rng = np.random.default_rng(3)
-L = np.zeros(N + SR * 3)
-R = np.zeros(N + SR * 3)
+TAIL = SR * 6
+rng = np.random.default_rng(5)
+# two busses: `dry` instruments get a little hall, `wet` ones (piano, drums, horns) a lot
+bus = {k: [np.zeros(N + TAIL), np.zeros(N + TAIL)] for k in ('dry', 'wet', 'low')}
 
-A4 = 440.0
-note = lambda n: A4 * 2 ** ((n - 69) / 12)  # MIDI number -> Hz
-CHORDS = [(45, [57, 60, 64, 67]), (41, [57, 60, 65, 69]), (48, [55, 60, 64, 67]), (43, [55, 59, 62, 67])]  # Am7, F, C, G
+note = lambda n: 440.0 * 2 ** ((n - 69) / 12)  # MIDI number -> Hz
+# (bass, chord tones): Am, F, C, G
+CHORDS = [(33, [57, 60, 64]), (29, [53, 57, 60]), (36, [55, 60, 64]), (31, [55, 59, 62])]
+chord = lambda bar: CHORDS[(bar // 2) % 4]
 
 
 def lp(x, hz, order=2):
@@ -38,184 +40,184 @@ def hp(x, hz, order=2):
     return lfilter(b, a, x)
 
 
-def saw(f, n, det=0.0, ph=0.0):
-    t = np.arange(n) / SR
-    return 2 * ((f * (1 + det) * t + ph) % 1.0) - 1
+def saw(f, n, ph=0.0):
+    return 2 * ((f * np.arange(n) / SR + ph) % 1.0) - 1
 
 
-def env(n, a, d, s=0.0, r=0.0):
-    """Attack / decay to `s` / release, in seconds, over n samples."""
-    e = np.full(n, s)
-    na, nd, nr = int(a * SR), int(d * SR), int(r * SR)
-    e[:min(na, n)] = np.linspace(0, 1, na)[:n]
-    k = np.arange(max(0, min(nd, n - na)))
-    e[na:na + len(k)] = s + (1 - s) * np.exp(-5 * k / max(1, nd))
-    if nr:
-        e[-min(nr, n):] *= np.linspace(1, 0, min(nr, n))
-    return e
-
-
-def put(sig, t, gain=1.0, pan=0.0):
+def put(sig, t, gain=1.0, pan=0.0, to='dry'):
     i = int(t * SR)
-    n = len(sig)
-    L[i:i + n] += sig * gain * np.sqrt((1 - pan) / 2) * 1.414
-    R[i:i + n] += sig * gain * np.sqrt((1 + pan) / 2) * 1.414
+    n = min(len(sig), N + TAIL - i)
+    bus[to][0][i:i + n] += sig[:n] * gain * np.sqrt(1 - pan)
+    bus[to][1][i:i + n] += sig[:n] * gain * np.sqrt(1 + pan)
 
 
-def kick():
-    n = int(0.32 * SR)
+def strings(freqs, dur, cut, attack=0.9, release=1.2):
+    """A string section: detuned saws per note, slow bow, a slow shimmer."""
+    n = int((dur + release) * SR)
     t = np.arange(n) / SR
-    f = 46 + 110 * np.exp(-t * 38)
-    return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 9) + 0.25 * hp(rng.standard_normal(n), 3000) * np.exp(-t * 300)
-
-
-def clap():
-    n = int(0.22 * SR)
-    t = np.arange(n) / SR
-    x = hp(lp(rng.standard_normal(n), 5500), 900)
-    e = sum(np.exp(-np.maximum(t - d, 0) * 55) * (t >= d) for d in (0, 0.011, 0.023)) / 3
+    x = np.zeros(n)
+    for f in freqs:
+        for det in (-0.007, -0.002, 0.003, 0.008):
+            vib = 1 + 0.0025 * np.sin(2 * np.pi * (4.6 + rng.random()) * t + rng.random() * 6)
+            x += 2 * ((np.cumsum(f * (1 + det) * vib) / SR + rng.random()) % 1) - 1
+    x = lp(x, cut, 2) / (len(freqs) * 4)
+    e = np.minimum(1, t / attack) ** 1.5 * np.minimum(1, np.maximum(0, (dur + release - t) / release))
     return x * e
 
 
-def hat(open_=False):
-    n = int((0.16 if open_ else 0.05) * SR)
-    t = np.arange(n) / SR
-    return hp(rng.standard_normal(n), 7500) * np.exp(-t * (22 if open_ else 90))
-
-
-def pluck(f, dur, bright=3200):
-    n = int(dur * SR)
-    x = saw(f, n, 0.003, rng.random()) + saw(f, n, -0.003, rng.random()) + 0.5 * saw(f * 2, n, 0.001, rng.random())
-    e = env(n, 0.003, dur * 0.8, 0.0, 0.01)
-    return lp(x, bright) * e * 0.33
-
-
-def pad(freqs, dur, cut):
-    n = int(dur * SR)
-    x = np.zeros(n)
-    for f in freqs:
-        for det in (-0.006, 0.0, 0.007):
-            x += saw(f, n, det, rng.random())
-    x = lp(x, cut, 2)
-    return x * env(n, 0.35, 0.1, 1.0, 0.5) / (len(freqs) * 3)
-
-
-def bass(f, dur):
+def spicc(f, dur=0.16, cut=2600):
+    """A short bow stroke (the ostinato)."""
     n = int(dur * SR)
     t = np.arange(n) / SR
-    x = np.sin(2 * np.pi * f * t) + 0.35 * lp(saw(f, n), 500)
-    return x * env(n, 0.005, dur, 0.55, 0.02)
+    x = sum(saw(f * (1 + d), n, rng.random()) for d in (-0.005, 0.0, 0.006))
+    return lp(x, cut) * np.minimum(1, t / 0.008) * np.exp(-t * 16) / 3
 
 
-def lead(f, dur):
+def piano(f, dur=2.4, vel=1.0):
     n = int(dur * SR)
     t = np.arange(n) / SR
-    vib = 1 + 0.004 * np.sin(2 * np.pi * 5.2 * t) * np.minimum(1, t / 0.25)
+    x = sum(a * np.sin(2 * np.pi * f * k * (1 + 0.0004 * k * k) * t) * np.exp(-t * (1.1 + 0.55 * k)) for k, a in ((1, 1.0), (2, 0.5), (3, 0.28), (4, 0.14), (5, 0.08), (6, 0.04)))
+    hammer = lp(rng.standard_normal(n), 2500) * np.exp(-t * 180) * 0.15
+    return (x + hammer) * np.minimum(1, t / 0.004) * vel
+
+
+def horn(f, dur):
+    """French-horn-like: a filtered saw that opens as it swells."""
+    n = int((dur + 0.5) * SR)
+    t = np.arange(n) / SR
+    vib = 1 + 0.003 * np.sin(2 * np.pi * 5 * t) * np.minimum(1, t / 0.4)
     ph = np.cumsum(f * vib) / SR
-    x = (2 * (ph % 1) - 1) + 0.6 * np.sign(np.sin(2 * np.pi * ph * 0.5 + 0.3))
-    return lp(x, 2600) * env(n, 0.02, dur, 0.6, 0.06) * 0.3
+    x = (2 * (ph % 1) - 1) + 0.5 * (2 * ((ph * 1.003) % 1) - 1)
+    e = np.minimum(1, t / 0.14) * np.minimum(1, np.maximum(0, (dur + 0.5 - t) / 0.5))
+    return (0.6 * lp(x, 700) + 0.4 * lp(x, 1500) * e) * e * 0.6
 
 
-drop_bar = int(round((float(sys.argv[3]) if len(sys.argv) > 3 else 51.3) / BAR))
+def boom(low=38, length=3.2):
+    """A deep hit: a falling sub and a dull thud."""
+    n = int(length * SR)
+    t = np.arange(n) / SR
+    f = low + 50 * np.exp(-t * 14)
+    return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 1.9) + 0.5 * lp(rng.standard_normal(n), 220) * np.exp(-t * 7)
+
+
+def drum(f0=74, length=0.9, snap=0.25):
+    """A big low drum (taiko-like)."""
+    n = int(length * SR)
+    t = np.arange(n) / SR
+    f = f0 + 70 * np.exp(-t * 30)
+    body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 6.5)
+    skin = lp(hp(rng.standard_normal(n), 300), 3000) * np.exp(-t * 45) * snap
+    return body + skin
+
+
+def swell(dur, bright=False):
+    """Air rising into a downbeat."""
+    n = int(dur * SR)
+    t = np.arange(n) / n
+    x = hp(lp(rng.standard_normal(n), 6000 if bright else 2500), 300)
+    return x * t ** 3
+
+
+drop_bar = int(round((float(sys.argv[3]) if len(sys.argv) > 3 else 51.3) / BAR / 2)) * 2
 END = BARS - 2  # the last two bars: the closing card
 
-duck = np.ones(len(L))  # the kick pushes pad and bass down a little ("sidechain")
-for bar in range(BARS):
+for bar in range(0, BARS, 2):  # two bars per chord
     t0 = bar * BAR
-    root, tones = CHORDS[bar % 4]
+    root, tones = chord(bar)
     full = drop_bar <= bar < END
-    drums = 4 <= bar < END
-    busy = 12 <= bar < END
-    # pad: opens up over the piece
-    cut = 500 + 2600 * min(1, bar / 14) + (1500 if full else 0)
-    put(pad([note(n) for n in tones], BAR + 0.5, cut), t0, 0.75 if bar < END else 0.85, -0.15)
-    put(pad([note(n + 12) for n in tones[1:]], BAR + 0.5, cut * 0.8), t0, 0.36, 0.25)
-    # pluck motif: from the start; an octave up and in 16ths once it gets busy
-    seq = [0, 2, 1, 3, 2, 1, 3, 2] if not busy else [0, 1, 2, 3, 2, 1, 2, 3, 0, 2, 1, 3, 2, 3, 1, 2]
-    step = BAR / len(seq)
-    for k, s in enumerate(seq):
-        if bar >= END and k > 0:
-            break
-        f = note(tones[s] + (12 if busy else 0))
-        g = (0.6 if not busy else 0.46) * (1.0 if k % 2 == 0 else 0.75) * (0.55 + 0.45 * min(1, (bar + 1) / 3))
-        p = pluck(f, step * 1.9, 1800 + 300 * bar if not full else 5200)
-        put(p, t0 + k * step, g, 0.45 * (-1) ** k)
-        put(p, t0 + k * step + BEAT * 0.75, g * 0.3, -0.6 * (-1) ** k)  # echo
-    # bass
-    if 4 <= bar < END:
-        pat = [(0, 1.5), (1.5, 0.5), (2, 1.0), (3, 0.5), (3.5, 0.5)] if busy else [(0, 2), (2, 1.5), (3.5, 0.5)]
-        for b, d in pat:
-            put(bass(note(root - 12 if root > 44 else root), d * BEAT * 0.95), t0 + b * BEAT, 0.24)
-    elif bar >= END and bar == END:
-        put(bass(note(33), BAR * 1.8) * np.linspace(1, 0, int(BAR * 1.8 * SR)), t0, 0.5)
-    # drums
-    if drums:
-        beats = [0, 1, 2, 3] if bar >= 8 else [0, 2]
-        for b in beats:
-            put(kick(), t0 + b * BEAT, 0.5)
-            i = int((t0 + b * BEAT) * SR)
-            n = int(0.24 * SR)
-            duck[i:i + n] = np.minimum(duck[i:i + n], 0.45 + 0.55 * np.linspace(0, 1, n) ** 1.5)
-        if bar >= 8:
-            for b in (1, 3):
-                put(clap(), t0 + b * BEAT, 0.5, 0.05)
-        if busy:
-            for k in range(8):
-                put(hat(k == 7 and bar % 2 == 1), t0 + k * BEAT / 2 + BEAT / 4, 0.3 if k % 2 else 0.2, 0.3)
-        elif bar >= 8:
-            for b in range(4):
-                put(hat(), t0 + b * BEAT + BEAT / 2, 0.24, 0.3)
-    # lead: a simple line over the 3D shot
+    last = bar >= END
+    grow = min(1.0, bar / 20)
+    # low strings from the start; they open up as the piece grows
+    cut = 700 + 2400 * grow + (2200 if full else 0)
+    put(strings([note(root + 12), note(root + 19), note(tones[1] - 12)], 2 * BAR, cut), t0, 0.5 + 0.25 * grow, -0.2)
+    put(strings([note(root)], 2 * BAR, 300 + 400 * grow, attack=0.5), t0, 0.5, 0.0, 'low')
+    if bar >= 8:  # mid strings
+        put(strings([note(n) for n in tones], 2 * BAR, cut * 1.3), t0, 0.32 + 0.2 * grow, 0.25)
+    if bar >= 16 or last:  # high strings
+        put(strings([note(tones[0] + 12), note(tones[2] + 12)], 2 * BAR, cut * 2.2, attack=1.2), t0, 0.22 + (0.2 if full or last else 0), 0.4)
+    if last:
+        put(piano(note(root + 12), 5, 0.9), t0, 0.5, 0, 'wet')
+        put(piano(note(tones[2] + 12), 5, 0.7), t0 + 0.02, 0.4, 0.2, 'wet')
+        break
+    # piano figure: sparse at first, every bar later (left out under the horns)
+    fig = [(0, tones[0] + 12), (1.5, tones[2] + 12), (2, tones[1] + 12), (3.5, tones[2]), (4, tones[0] + 12), (5.5, tones[1] + 12), (6, tones[2] + 12), (7, tones[1] + 24)]
+    if bar < 4:
+        fig = fig[:3] + fig[6:7]
+    if not full:
+        for b, n in fig:
+            put(piano(note(n), 2.6, 0.75 + 0.25 * rng.random()), t0 + b * BEAT, 0.34, 0.25 * np.sin(b), 'wet')
+    # ostinato: eighths from bar 8, sixteenth pick-ups from bar 16
+    if bar >= 8:
+        for k in range(16):
+            f = note(tones[(0, 2, 1, 2)[k % 4]] + (12 if bar >= 16 and k % 8 >= 4 else 0))
+            acc = 1.0 if k % 4 == 0 else 0.62
+            put(spicc(f, cut=2600 + 3400 * grow), t0 + k * BEAT / 2, (0.26 + 0.2 * grow) * acc, -0.35)
+            if bar >= 16 and k % 4 == 3:
+                put(spicc(f * 2, 0.1, 3000), t0 + k * BEAT / 2 + BEAT / 4, 0.16, 0.35)
+    # drums: a slow pulse from bar 12, the full pattern with fills from the drop
+    if bar >= 12:
+        pat = [(0, 1.0, 62), (3, 0.6, 74), (4, 0.9, 62), (6.5, 0.55, 82), (7, 0.7, 74)]
+        if bar >= 20:
+            pat += [(1.5, 0.45, 82), (2.5, 0.5, 74), (5.5, 0.45, 82)]
+        if full:
+            pat += [(7.5, 0.7, 82), (7.75, 0.8, 74), (2, 0.6, 62), (6, 0.7, 62)]
+        for b, g, f0 in pat:
+            put(drum(f0), t0 + b * BEAT, 0.5 * g * (1.2 if full else 0.85), 0.3 * (f0 - 70) / 12, 'wet')
+    # horns over the 3D shot: one long line, doubled an octave up
     if full:
-        mel = {0: [(0, 1.5, 76), (1.5, 0.5, 74), (2, 2, 72)], 1: [(0, 1.5, 72), (1.5, 0.5, 74), (2, 2, 77)],
-               2: [(0, 1.5, 79), (1.5, 0.5, 76), (2, 2, 72)], 3: [(0, 1, 74), (1, 1, 79), (2, 2, 83)]}[bar % 4]
+        mel = {0: [(0, 3, 64), (3, 1, 62), (4, 4, 60)], 1: [(0, 3, 60), (3, 1, 62), (4, 4, 65)],
+               2: [(0, 3, 67), (3, 1, 64), (4, 4, 72)], 3: [(0, 2, 71), (2, 2, 67), (4, 4, 74)]}[(bar // 2) % 4]
         for b, d, n in mel:
-            x = lead(note(n), d * BEAT)
-            put(x, t0 + b * BEAT, 0.7, -0.1)
-            put(x, t0 + b * BEAT + BEAT * 0.75, 0.16, 0.5)
+            put(horn(note(n), d * BEAT), t0 + b * BEAT, 0.62, -0.1, 'wet')
+            put(horn(note(n + 12), d * BEAT), t0 + b * BEAT, 0.2, 0.2, 'wet')
 
-# pad and bass duck under the kick: applied to the whole mix lightly (drums included: it is subtle)
-L *= 0.75 + 0.25 * duck
-R *= 0.75 + 0.25 * duck
+# deep hits where the picture turns; air rising into the big ones
+for b, g in ((0, 0.5), (8, 0.55), (16, 0.6), (drop_bar, 0.95), (END, 1.0)):
+    put(boom(), b * BAR, g, 0, 'low')
+for b, g, bright in ((8, 0.06, False), (16, 0.09, False), (drop_bar, 0.22, True), (END, 0.12, True)):
+    put(swell(2 * BAR, bright), b * BAR - 2 * BAR, g, 0, 'wet')
+# a roll into the drop
+for k in range(12):
+    put(drum(74, 0.5), drop_bar * BAR - (12 - k) * BEAT / 4, 0.12 + 0.035 * k, 0.2, 'wet')
 
-# risers into the busy part and into the drop; an impact on the drop and on the closing card
-for bar_to, g in ((12, 0.10), (drop_bar, 0.2)):
-    n = int(2 * BAR * SR)
-    t = np.arange(n) / n
-    x = hp(rng.standard_normal(n), 400)
-    b, a = butter(2, [0.02, 0.08], 'band')
-    x = lfilter(b, a, x) * 3 + 0.3 * x
-    put(x * t ** 2.5, bar_to * BAR - 2 * BAR, g, 0)
-for bar_at, g in ((drop_bar, 0.5), (END, 0.6)):
-    n = int(2.5 * SR)
-    t = np.arange(n) / SR
-    put(lp(rng.standard_normal(n), 1800) * np.exp(-t * 2.2), bar_at * BAR, g * 0.5, 0)
-    put(np.sin(2 * np.pi * 41 * t) * np.exp(-t * 3), bar_at * BAR, g * 0.5, 0)
 
-# a touch of room: a short feedback delay network, then the master
-def room(x):
+def hall(x, seed):
+    """A large hall: parallel feedback combs, then two all-passes."""
+    r = np.random.default_rng(seed)
     y = np.zeros_like(x)
-    for d, g in ((0.031, 0.5), (0.047, 0.42), (0.071, 0.34), (0.103, 0.26), (0.149, 0.2)):
+    for d in (0.0437, 0.0571, 0.0683, 0.0797, 0.0911, 0.1039):
+        k = int(d * (1 + 0.03 * r.random()) * SR)
+        a = np.zeros(k + 1)
+        a[0], a[k] = 1, -0.86
+        y += lfilter([1], a, x)
+    y = lp(y, 8000) / 6
+    for d, g in ((0.0127, 0.6), (0.0041, 0.6)):
         k = int(d * SR)
-        y[k:] += lp(x, 4000)[:-k] * g
+        b = np.zeros(k + 1)
+        a = np.zeros(k + 1)
+        b[0], b[k] = -g, 1
+        a[0], a[k] = 1, -g
+        y = lfilter(b, a, y)
     return y
 
-wetL, wetR = room(R), room(L)
-L += 0.16 * wetL
-R += 0.16 * wetR
-L, R = L[:N + SR], R[:N + SR]
-fade = np.ones(len(L))
-fo = int(1.6 * SR)
-fade[N - fo:N] = np.cos(np.linspace(0, np.pi / 2, fo)) ** 2
-fade[N:] = 0
+
+L = bus['dry'][0] + bus['wet'][0] + bus['low'][0]
+R = bus['dry'][1] + bus['wet'][1] + bus['low'][1]
+L += 0.22 * hall(bus['dry'][0], 1) + 0.5 * hall(bus['wet'][0], 2)
+R += 0.22 * hall(bus['dry'][1], 3) + 0.5 * hall(bus['wet'][1], 4)
+L, R = L[:N], R[:N]
+fade = np.ones(N)
+fo = int(2.4 * SR)
+fade[N - fo:] = np.cos(np.linspace(0, np.pi / 2, fo)) ** 2
 fade[:int(0.02 * SR)] = np.linspace(0, 1, int(0.02 * SR))
-L, R = hp(L, 28) * fade, hp(R, 28) * fade
+# a little air on top
+L, R = (hp(L, 26) + 0.9 * hp(L, 3500, 1)) * fade, (hp(R, 26) + 0.9 * hp(R, 3500, 1)) * fade
 peak = max(np.abs(L).max(), np.abs(R).max())
-L, R = np.tanh(L / peak * 1.6) / np.tanh(1.6), np.tanh(R / peak * 1.6) / np.tanh(1.6)
-pcm = (np.stack([L[:N], R[:N]], 1) * 0.89 * 32767).astype('<i2')
+L, R = np.tanh(L / peak * 1.5) / np.tanh(1.5), np.tanh(R / peak * 1.5) / np.tanh(1.5)
+pcm = (np.stack([L, R], 1) * 0.89 * 32767).astype('<i2')
 with wave.open(OUT, 'wb') as w:
     w.setnchannels(2)
     w.setsampwidth(2)
     w.setframerate(SR)
     w.writeframes(pcm.tobytes())
-print('wrote', OUT, f'{DUR:.1f} s, bar {BAR:.3f} s ({240 / BAR:.1f} BPM), drop at bar {drop_bar} = {drop_bar * BAR:.1f} s')
+print('wrote', OUT, f'{DUR:.1f} s, bar {BAR:.3f} s, drop at bar {drop_bar} = {drop_bar * BAR:.1f} s')
