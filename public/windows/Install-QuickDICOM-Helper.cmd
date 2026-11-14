@@ -22,6 +22,9 @@ exit /b
 
 $ErrorActionPreference = 'Stop'
 $AppName = 'Quick DICOM Planning'
+# the installed app's name: 'QDP' (short, so the patient's name shows in the taskbar), or the full
+# name in installs made before it was shortened
+$AppShort = 'QDP'
 $HelperName = 'Quick DICOM Planning (whole series)'
 $ProgId = 'QuickDICOMPlanning.Series'
 $Exts = @('.dcm', '.dicom', '.dic', '.ima')
@@ -55,7 +58,7 @@ foreach ($p in ($progIds | Where-Object { $_ -and $_ -ne $ProgId } | Select-Obje
     $found += New-Object psobject -Property @{ ProgId = $p; Command = $cmd; Name = $name }
   }
 }
-$cands = @($found | Where-Object { "$($_.Name) $($_.Command)" -like '*DICOM*' })
+$cands = @($found | Where-Object { "$($_.Name) $($_.Command)" -like '*DICOM*' -or "$($_.Name)" -eq $AppShort })
 # installed in Chrome and Edge: use the Edge copy (Edge can be given the NVIDIA card on its own)
 $pick = $cands | Where-Object { $_.Command -match 'msedge' } | Select-Object -First 1
 if (-not $pick) { $pick = $cands | Select-Object -First 1 }
@@ -67,7 +70,7 @@ if (-not $pick) {
     $a = $k.OpenSubKey('Application')
     if (-not $a) { continue }
     $n = $a.GetValue('ApplicationName'); $a.Close()
-    if ("$n" -notlike "*$AppName*" -or "$n" -like '*whole series*') { continue }
+    if (("$n" -notlike "*$AppName*" -and "$n" -ne $AppShort) -or "$n" -like '*whole series*') { continue }
     $c = $k.OpenSubKey('shell\open\command')
     if (-not $c) { continue }
     $cmd = $c.GetValue(''); $c.Close()
@@ -84,7 +87,7 @@ if (-not $pick) {
     $dirs = @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('CommonPrograms'), [Environment]::GetFolderPath('Desktop'))
     foreach ($d in ($dirs | Where-Object { $_ -and (Test-Path -LiteralPath $_) })) {
       foreach ($f in (Get-ChildItem -LiteralPath $d -Filter '*.lnk' -Recurse -ErrorAction SilentlyContinue)) {
-        if ($f.BaseName -notlike "*$AppName*" -or $f.BaseName -like '*whole series*') { continue }
+        if (($f.BaseName -notlike "*$AppName*" -and $f.BaseName -ne $AppShort) -or $f.BaseName -like '*whole series*') { continue }
         $l = $wsh.CreateShortcut($f.FullName)
         $args0 = [string]$l.Arguments
         if (-not ($args0 -match '--app-id=([A-Za-z0-9_-]+)')) { continue }

@@ -471,9 +471,12 @@ oriented.
 The app can be installed from Chrome or Microsoft Edge and then registered for `.dcm`, `.dicom`, `.dic` and `.ima` files:
 
 1. Open the app in Chrome or Edge and click **Install app** in ⚙ Settings (or the install icon in the address bar /
-   ⋯ → *Apps* → *Install this site as an app*).
+   ⋯ → *Apps* → *Install this site as an app*). The installed app is called **QDP**: the browser puts the app's name
+   in front of every window title, and with a short name the patient's name shows in the taskbar (*QDP - DOE, Jane ·
+   12.03.2025*), so several open scans are easy to tell apart. (Apps installed before the rename may ask once to
+   accept the new name; the helpers below find the app under either name.)
 2. Double-click a `.dcm` file in Explorer. The first time, Windows asks which app to use: choose
-   **Quick DICOM Planning** and tick *Always*. The browser may also ask once to allow the app to open these files.
+   **QDP** and tick *Always*. The browser may also ask once to allow the app to open these files.
 3. **One-time setup:** the first time, the app asks you to choose the folder where your scans are saved
    (e.g. `D:\CBCT` – the higher up, the better). The app remembers it. From then on, double-clicking any scan inside
    that folder loads the whole series straight away – no question, no folder window. (A web app is never handed the
