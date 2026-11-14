@@ -7,6 +7,11 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 
 - **Start screen**: drop a CBCT (files, folder, ZIP or project), use the buttons, or reopen a scan from **Recent**
   (Chrome / Edge remember the files you opened through *Open*; reopening may ask for read access again).
+- **Several patients in one folder**: when the files hold scans of more than one patient (told apart by ID, name and
+  birth date), a dialog shows each one – name, ID, birth date, sex, scan date, the scans with their number of images
+  and a picture of each – to open the right one. *Create a folder for each patient…* copies each patient's files
+  into a folder of its own named after them (e.g. *DOE Jane (ID 12345)*), in a folder you choose (the one you opened,
+  by default); the original files are left as they are. Browsers that cannot write folders get a ZIP per patient.
 - **Top bar** (one row): the **patient chip** (name and scan date; click for ID, birth date, the editable name, volume
   details and *DICOM tags*) · **Open ▾** (files, folder, project, demo, recent) · **Save** · **Export ▾** (STL, project) ·
   the steps **① Reorient / ② Plan** · undo / redo · *Ruler* / *Clear* · window / level · **⚙ Settings** (mouse or
@@ -32,10 +37,16 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   front of them.
 - **View settings in the views**: the 3D view's header has the rendering mode and thresholds (*Surface 796+ ▾*) and the
   view direction (*View ▾*); the panoramic's header has *Slab / Slice* and the thickness, slice position and
-  cross-section spacing (*12 mm · sections 2 mm ▾*).
+  cross-section spacing (*12 mm · sections 1 mm ▾*; 1 mm by default).
 - **Status bar**: a one-line hint for the open panel, messages, and the value under the cursor.
 - **Look and motion**: graphite greys so the greyscale scan reads true; colour belongs to what is planned on it (curve,
-  view planes, implants, nerves, segments). Menus grow out of their button and fold back into it, dialogs rise into
+  view planes, implants, nerves, segments). One material stands out – titanium, the implants' own: the prominent action of a
+  panel, checked boxes and slider thumbs. The logo (an implant in a hexagon, in navy and teal) sits on a white tile in
+  the toolbar, the start screen and the app icon (`brand/quickdicom-logo.png`; `python3 scripts/make-icons.py` makes the
+  icon sizes from it). Controls are
+  drawn, not the browser's defaults (selects, check boxes, sliders filled up to the thumb, thin scroll bars); the views
+  are rounded tiles on the dark window; menus and dialogs float as translucent layers over a blurred backdrop (solid
+  when the system asks for less transparency). The start screen says what the app is and that scans stay on the computer. Menus grow out of their button and fold back into it, dialogs rise into
   place, a panel slides in from the rail and a maximized view grows out of its tile – all critically damped springs
   (no bounce) that can be interrupted. A quick flick in the 3D view keeps the model turning and slows it like a
   scroll; any click, wheel or key-driven view change stops it. With *Reduce motion* turned on in the system these
@@ -92,9 +103,16 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   threshold and click a tooth or an existing implant inside the jaw.
 - Each segment has a **3D opacity** slider (in its box): see-through segments show what lies inside or behind them –
   teeth roots, canals, nerves, implants, intraoral scans. Maxilla and mandible start at 70 %, everything else opaque.
-- Each segment can be shown/hidden and recoloured; *3D: show bone that is not segmented* switches off everything else, so
-  e.g. only the maxilla remains. Segments are tinted (with outlines) in all slices, and the status bar names the segment
-  under the cursor. Surface, translucent and MIP rendering all respect the visibility.
+- Each segment can be recoloured and has two switches in the list: **3D** (shown in the 3D view) and **Slices**
+  (tinted, with outlines, in the slices; the status bar names the segment under the cursor). **By default only nerve
+  canals are shown in the slices** (the automatic mandibular canal, or a segment named nerve/canal), so the slices stay
+  clear for planning; the segment being clicked with *Click to add* is shown while clicking. *Show segments in the
+  slices* switches all of them off at once. Traced nerves are always drawn.
+- **3D shows: Segments | Segments + scan | Whole scan** (Segments panel, the 3D view's *Surface ▾* menu, or the
+  Objects list): *Segments* shows only the segments (e.g. only the maxilla); *Segments + scan* shows the whole
+  rendering with the segments in their colours (the threshold works on the rest of the scan; a segment hidden in 3D
+  is drawn as part of the scan); *Whole scan* renders the full CBCT as before segmenting, with the threshold working on
+  it. Saved with the project. Surface, translucent and MIP rendering all follow it.
 - **Separation cuts** for jaws/teeth that still touch: *Draw cut*, click points along the gap, double-click/Enter to finish.
   Drawn in the **panoramic** the cut is a curved sheet that follows the arch (ideal between the jaws); drawn in any
   **slice** it is the line extruded along the slice normal. *Reach* limits a cut to ± 2–20 mm around the slice it was
@@ -123,7 +141,9 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 **Implant planning**
 - Axial view: draw the panoramic curve by holding the left button and dragging along the arch (a point is placed
   every 5 mm, the stroke is lightly smoothed and the curve finishes on release), or click point by point from patient
-  right to left and double-click / Enter to finish.
+  right to left and double-click / Enter to finish. While a curve is drawn (the first one, an added one or a
+  redrawn one) the axial view takes the larger part of the window, with the other views beside it; when the curve
+  is done they spring back to their tiles. The picture keeps its field of view, so the scale stays right.
   Drag control points to edit, double-click the curve to insert a point, double-click a point to remove it.
 - **Several panoramic curves**, e.g. one for the maxilla and one for the mandible: *+ New curve* draws another one
   (scroll the axial view to that jaw's level first). The active curve drives the panoramic, cross-sections and
@@ -200,7 +220,11 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   plan: orientation/rotation, crop box, window/level, panoramic curve and slice settings, implants and abutments,
   segments (clicks, thresholds, colours, visibility), separation cuts, traced nerves, measurements, zoom/pan of every
   view, the 3D camera and which view was maximized. Segments are re-grown from their clicks when the project is opened.
-- *Open ▾ → Project* (or drag the file onto the page, or pick it under *Recent*) restores everything exactly as it was.
+- *Open ▾ → Project* (or drag the file onto the page, or pick it under *Recent*) restores everything exactly as it was,
+  with the side panel that was open and the implant that was selected (a plan with a curve opens without starting to
+  draw one).
+- Saved through the browser's save dialog (Chrome / Edge), the project is listed under **Recent** right away; saving it
+  again to the same file keeps one entry. (Browsers that save as a download do not give the app the saved file.)
 - The file is a normal ZIP: `project.json` (plan + view state) and `volume.raw` (int16, little endian, x fastest;
   dimensions/spacing in `project.json`).
 
@@ -261,12 +285,18 @@ runs work offline.
   *Settings → System → Display → Graphics* (Chrome stays on the integrated graphics); run the double-click helper again
   so it opens scans in the Edge copy (it prefers the Edge copy when the app is installed in both browsers). The dialog
   shows these steps when it detects integrated Intel graphics.
-- The result appears as five ordinary segments (marked *AI*): show / hide, recolour, rename, delete, add parts by
+- **The mandibular canals become nerve paths**: right after the segmentation, a nerve path is traced along each canal
+  (one per side, with the canal's diameter; sides that already have a traced nerve are left alone) and the canal
+  segment is removed – the nerves are what the implant distance warnings use. Check them on the cross-sections; they
+  can be edited like traced nerves. (When no path can be made from it, the canal stays as a segment.) The segments
+  and the nerves are one undo step.
+- The result appears as ordinary segments (marked *AI*): show / hide, recolour, rename, delete, add parts by
   clicking, use them as the CBCT surface when aligning intraoral scans, and export them with *Export STL*. Their
   surfaces are smooth (the network's class margins are interpolated, not the voxel staircase). They are saved in
   projects and follow *Apply rotate + crop*. Running it again replaces the previous automatic segments. Afterwards
-  *3D: show bone that is not segmented* is switched off, so only the segmented structures remain (the jaws slightly
-  see-through).
+  the 3D view shows the segments without the bone outside them (*Segments + scan* or *Whole scan* bring the rest of the
+  CBCT back), so only the segmented structures remain (the jaws slightly see-through); the segments are not tinted in
+  the slices (switch them on with *Slices*), where the nerves are drawn.
 
 Fidelity: the pre- and post-processing of nnU-Net is re-implemented (crop to the non-zero region, resampling to the
 model's 0.43 × 0.31 × 0.43 mm grid, CT normalisation, sliding window with Gaussian weighting, logits resampled back
@@ -290,10 +320,19 @@ Like any automatic method it can be wrong (metal artefacts, unusual anatomy, low
 
 ## Implant libraries (② Plan → Implants panel)
 
-Besides the generic implant (any diameter, length and taper), the *Implant* selector offers manufacturer implants:
-14 brands, 64 systems, about 1,260 sizes (Anthogyr, BioHorizons, Biotech Dental, BTK, Dentsply Sirona, Global D,
-Hiossen, JDentalCare, Klockner, Megagen, Neodent, Nobel Biocare, Osstem, Straumann). Choose the brand, the system and
-the size: the implant keeps its platform where it is and takes the model's shape.
+Besides the generic implant (any diameter, length and taper), the *Implant* selector offers the manufacturer implants
+of an **implant library** – once one is imported. No implant library is on the website or in this repository: a
+library is a file (`.qdplib`) handed to the people who use it. Choose the brand, the system and the size: the implant
+keeps its platform where it is and takes the model's shape.
+
+- **Importing a library** (*Implant library* at the bottom of the Implants panel → *Import library file…*, the
+  *Import an implant library…* entry of the *Implant* selector, or drop the `.qdplib` file on the viewer): it is
+  kept in this browser – the catalogue and every implant load instantly, also offline. *Remove* takes it out of
+  the browser again. Plans keep their implants' models either way: without the library they are drawn as generic
+  implants of the same size until it is imported again.
+- **Library versions**: each library file carries a version number. Importing a newer version replaces the older one
+  (the new version is stored next to the old one, which is dropped once the import is complete); importing an older
+  version, or the same one again, asks first.
 
 - **Drawn as the real implant**: the 3D view shows its mesh (threads, collar, connection); where bone, a segment, a
   scan or the waxup covers it, it is shown through them as before. The slices show the cut through the mesh, the
@@ -306,18 +345,11 @@ the size: the implant keeps its platform where it is and takes the model's shape
   collar).
 - Nerve distances, hit testing and the see-through view use a cone that encloses the implant's part in bone.
 - STL export writes the implant's mesh. Projects remember the model.
-- **Download for instant loading** (*Implant library* at the bottom of the Implants panel): without it, each system
-  is fetched from the server the first time one of its implants is used. *Download* keeps the whole library (about
-  56 MB) in this browser – the catalogue and every implant then load instantly, also offline. *Remove download*
-  frees the space.
-- **Library versions**: the library has a version number (now **1**). When a newer version is published, a browser
-  that downloaded an older one shows *Update* next to *Implant library* and offers *Update to version N*; the new
-  version is downloaded next to the old one, which is dropped once the new one is complete (a failed or cancelled
-  update leaves the working copy as it was). Without a download, the newest version is always used.
-- The library (`public/implants/`: a catalogue and one file per system) is built from the manufacturers' implant
-  STLs by `scripts/make-implant-library.py` (decimated to at most 5,000 triangles, platform / apex / connection
-  measured on the mesh). Each build is a new library version: one more than the version in the output folder, or
-  `--library-version N`.
+- A library file is built from the manufacturers' implant STLs by `scripts/make-implant-library.py` (meshes decimated
+  to at most 5,000 triangles, platform / apex / connection measured on the mesh): a ZIP with `index.json` (the
+  catalogue and its version) and one compressed mesh file per system. Each build is the next version (one more than
+  `--previous` or the output file, or `--library-version N`). `.gitignore` keeps `*.qdplib` out of the repository.
+- The tests use a small made-up library (brand *Testco*, `scripts/make-test-implant-library.mjs`).
 
 ## Planning report (Export → Planning report (PDF))
 
@@ -393,7 +425,7 @@ The type is guessed from the file name (upper / lower / wax-up …) and can be c
 - **Align to the CBCT** in a two-pane workspace (scan | CBCT). The CBCT side is the surface you choose: any segment
   (e.g. *Maxilla*) or the *3D render at the current threshold* (inside the crop box); closed hollow spaces are filled
   so only the outer surface is matched.
-  - **Points** (like Blue Sky Plan, RealGuide, exoplan): click a point on the scan, then the same point on the CBCT;
+  - **Points** (the default; like Blue Sky Plan, RealGuide, exoplan): click a point on the scan, then the same point on the CBCT;
     at least 3 pairs. The fit is refined on the surface around the points (or on the painted areas).
   - **Surfaces** (like coDiagnostiX): paint the areas of the scan that are visible in the CBCT (tooth surfaces, not
     gingiva or metal artefacts) and press *Match* – the position is searched automatically (rotations around the
@@ -461,7 +493,7 @@ when the browser has not registered it (yet), through the app's Start menu / des
 Terminal (also shown in the app under ⚙ Settings → *Install app* / *Mac helper*):
 
 ```bash
-curl -fsSL https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/mac/install-helper.sh | bash
+curl -fsSL https://quickdicom.app/mac/install-helper.sh | bash
 ```
 
 It builds *Quick DICOM Planning (whole series)* in `~/Applications` (an AppleScript droplet, current user only, no
@@ -513,7 +545,8 @@ them too and publishes nothing when one fails (the Playwright report is kept as 
 
 `.github/workflows/deploy-pages.yml` checks (type check, unit and browser tests), builds the app and publishes it to
 GitHub Pages on every push to `main` (or manually from the Actions tab) – only when every check passes. One-time setup: repository **Settings → Pages → Build and deployment → Source:
-GitHub Actions**. The site is then served at `https://<owner>.github.io/Quick-DICOM-Planning/`. The app is fully
+GitHub Actions**. The site is served at **https://quickdicom.app/** (`public/CNAME`; custom domain set in
+**Settings → Pages**, DNS `A` records to GitHub Pages); `https://<owner>.github.io/Quick-DICOM-Planning/` redirects there. The app is fully
 static – scans are processed in the visitor's browser and never uploaded.
 
 ### Demo video

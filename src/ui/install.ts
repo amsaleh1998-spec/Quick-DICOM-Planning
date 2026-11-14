@@ -143,7 +143,7 @@ function showInstallHelp() {
   const isEdge = /Edg\//.test(ua);
   const isChrome = !isEdge && /Chrome\//.test(ua) && !/OPR\//.test(ua);
   const inFrame = window.top !== window.self;
-  const appUrl = 'https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/';
+  const appUrl = 'https://quickdicom.app/';
   let steps: string;
   if (inFrame) {
     steps = `<p>This copy of the app runs inside another page, and browsers can't install it from there.

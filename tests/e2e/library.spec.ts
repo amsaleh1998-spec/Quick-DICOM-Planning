@@ -1,10 +1,11 @@
-// The implant library can be downloaded into the browser: implants then load from there (no
-// network), a newer published version is offered as an update, and the download can be removed.
+// No implant library is on the website: a library file is imported from the computer and kept in
+// the browser (loads with no network), a newer version replaces it, an older one is only taken on
+// request, and it can be removed. Uses the made-up test library.
 import { type Page } from '@playwright/test';
-import { clickView, expect, openDemo, test } from './fixtures';
+import { clickView, expect, implantLibraryFile, openDemo, test } from './fixtures';
 
-const box = (page: Page) => page.locator('#lib-box');
 const stores = (page: Page) => page.evaluate(async () => (await caches.keys()).filter((n) => n.startsWith('qdp-implant-library-v')));
+const status = (page: Page) => page.locator('#lib-status');
 
 async function planWithImplant(page: Page) {
   await openDemo(page);
@@ -16,66 +17,73 @@ async function planWithImplant(page: Page) {
   await page.keyboard.press('Enter');
   await page.click('#btn-add-lower');
   await clickView(page, 'pano', 0.4, 0.55);
-  await expect(page.locator('#imp-brand option')).not.toHaveCount(1, { timeout: 15_000 });
 }
 
-test('download the implant library, load from it offline, update to a newer version, remove it', async ({ page }) => {
-  test.setTimeout(240_000);
+test('nothing on the website: import a library file, use it offline, update it, remove it', async ({ page }) => {
+  test.setTimeout(180_000);
+  // the website holds no library (whatever the server answers, it is not a catalogue)
+  const r = await page.request.get('/implants/index.json');
+  expect(r.ok() && /json/.test(r.headers()['content-type'] ?? '')).toBe(false);
+
   await planWithImplant(page);
-  await box(page).locator('summary').click();
-  await expect(page.locator('#lib-status')).toContainText('Version 1');
-  await expect(page.locator('#btn-lib-download')).toHaveText(/^Download \(\d+ MB\)$/);
+  // no library yet: generic only, and the way to import one
+  await expect(page.locator('#lib-box')).toHaveAttribute('open', '');
+  await expect(status(page)).toContainText('No implant library');
+  await expect(page.locator('#lib-badge')).toBeVisible();
+  await expect(page.locator('#imp-brand option')).toHaveText(['Generic', 'Import an implant library…']);
+
+  // import version 1
+  await page.setInputFiles('#lib-input', implantLibraryFile(1));
+  await expect(status(page)).toContainText('Version 1');
+  await expect(status(page)).toContainText('imported');
   await expect(page.locator('#lib-badge')).toBeHidden();
-
-  // download
-  await page.click('#btn-lib-download');
-  await expect(page.locator('#lib-status')).toContainText('downloaded', { timeout: 120_000 });
-  await expect(page.locator('#lib-status')).toContainText('load instantly');
   expect(await stores(page)).toEqual(['qdp-implant-library-v1']);
-  const entries = await page.evaluate(async () => (await (await caches.open('qdp-implant-library-v1')).keys()).length);
-  expect(entries).toBe(64 + 2); // every system, the catalogue and the download record
-  await expect(page.locator('#btn-lib-remove')).toBeVisible();
+  await expect(page.locator('#imp-brand option')).toHaveText(['Generic', 'Testco']);
 
-  // a new session without the network for the library: catalogue and meshes come from the download
-  const fetched: string[] = [];
-  await page.route('**/implants/**', (r) => {
-    fetched.push(r.request().url());
-    return r.abort();
-  });
+  // a new session with no network: the catalogue and the meshes come from the browser
+  await page.route('**/*.qdplib', (r) => r.abort());
   await page.reload();
   await planWithImplant(page);
-  await page.selectOption('#imp-brand', 'Straumann');
-  await page.selectOption('#imp-system', 'BLX SLActive');
+  await page.selectOption('#imp-brand', 'Testco');
+  await page.selectOption('#imp-system', 'Taper TX');
   const id = await page.evaluate(() => window.app.selectedImplant().lib.id as string);
   await expect.poll(() => page.evaluate((id) => window.app.libraryMeshLoaded(id), id)).toBe(true);
-  await box(page).locator('summary').click();
-  await expect(page.locator('#lib-status')).toContainText('could not check for updates');
-  // only the update check went to the server
-  expect(fetched.every((u) => u.endsWith('/implants/index.json'))).toBe(true);
 
-  // version 2 is published: it is offered, downloaded, and replaces version 1
-  await page.unroute('**/implants/**');
-  await page.route('**/implants/index.json', async (r) => {
-    const res = await r.fetch();
-    const ix = await res.json();
-    ix.library = 2;
-    return r.fulfill({ response: res, json: ix });
+  // version 2 replaces version 1
+  await page.setInputFiles('#lib-input', implantLibraryFile(2));
+  await expect(status(page)).toContainText('Version 2');
+  await expect.poll(() => stores(page)).toEqual(['qdp-implant-library-v2']);
+  // the plan's implant keeps its model
+  expect(await page.evaluate(() => window.app.implants[0].lib?.id)).toBe(id);
+
+  // an older version is only taken when asked: declined here
+  await page.evaluate(() => {
+    const w = window as unknown as { confirm: (m: string) => boolean; asked?: string };
+    w.confirm = (m: string) => ((w.asked = m), false);
   });
-  await page.reload();
-  await planWithImplant(page);
-  await expect(page.locator('#lib-badge')).toBeVisible();
-  await box(page).locator('summary').click();
-  await expect(page.locator('#lib-status')).toContainText('Version 2');
-  await expect(page.locator('#lib-status')).toContainText('is available');
-  await expect(page.locator('#btn-lib-download')).toHaveText(/^Update to version 2 \(\d+ MB\)$/);
-  await page.click('#btn-lib-download');
-  await expect(page.locator('#lib-badge')).toBeHidden({ timeout: 120_000 });
-  await expect(page.locator('#lib-status')).toContainText('Version 2');
-  await expect(page.locator('#lib-status')).toContainText('downloaded');
+  await page.setInputFiles('#lib-input', implantLibraryFile(1));
+  await expect.poll(() => page.evaluate(() => (window as unknown as { asked?: string }).asked ?? '')).toContain('older');
+  await expect(status(page)).toContainText('Version 2');
   expect(await stores(page)).toEqual(['qdp-implant-library-v2']);
 
-  // remove: loaded from the server again
+  // not a library file
+  await page.setInputFiles('#lib-input', { name: 'notes.qdplib', mimeType: 'application/octet-stream', buffer: Buffer.from('hello') });
+  await expect(status(page)).toContainText('not an implant library file');
+
+  // remove it (the question is answered yes)
+  await page.evaluate(() => ((window as unknown as { confirm: () => boolean }).confirm = () => true));
   await page.click('#btn-lib-remove');
-  await expect(page.locator('#btn-lib-download')).toHaveText(/^Download \(\d+ MB\)$/);
+  await expect(status(page)).toContainText('No implant library');
   await expect.poll(() => stores(page)).toEqual([]);
+  // the plan keeps the implant's model (drawn as a generic implant until a library is imported)
+  expect(await page.evaluate(() => window.app.implants[0].lib?.id)).toBe(id);
+});
+
+test('a library file dropped on the viewer is imported (the open scan stays)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openDemo(page);
+  const vol = await page.evaluate(() => window.app.vol.id);
+  await page.setInputFiles('#file-input', implantLibraryFile(1));
+  await expect(page.locator('#lib-status')).toContainText('Version 1');
+  expect(await page.evaluate(() => window.app.vol.id)).toBe(vol);
 });

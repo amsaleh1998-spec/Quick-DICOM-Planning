@@ -1,31 +1,51 @@
-"""Draws the app icons (public/icons/*.png): an implant with a crown on a dark tile.
+"""Makes the app icons and the in-app brand mark (public/icons/*.png) from the logo artwork
+(brand/quickdicom-logo.png: the hexagon with the implant, on white). The logo sits on a white
+tile – as drawn – so it reads the same on the dark interface, the desktop and the home screen.
 Run: python3 scripts/make-icons.py"""
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
-def icon(size, maskable=False):
-    s = size / 512
-    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    pad = 0 if maskable else int(24 * s)
-    radius = 0 if maskable else int(96 * s)
-    d.rounded_rectangle([pad, pad, size - pad, size - pad], radius=radius, fill=(19, 26, 38, 255))
-    k = 0.8 if maskable else 1.0  # keep the motif inside the maskable safe zone
-    def X(v): return size / 2 + (v - 256) * s * k
-    def Y(v): return size / 2 + (v - 256) * s * k
-    # crown (tooth) on top
-    d.rounded_rectangle([X(156), Y(92), X(356), Y(206)], radius=int(46 * s * k), fill=(232, 236, 244, 255))
-    # abutment
-    d.polygon([(X(214), Y(206)), (X(298), Y(206)), (X(286), Y(244)), (X(226), Y(244))], fill=(140, 180, 230, 255))
-    # implant body (tapered) with threads
-    d.polygon([(X(206), Y(244)), (X(306), Y(244)), (X(286), Y(420)), (X(226), Y(420))], fill=(79, 179, 255, 255))
-    for i in range(6):
-        y = 268 + i * 26
-        w = 50 - i * 3.2
-        d.line([(X(256 - w - 8), Y(y)), (X(256 + w + 8), Y(y + 10))], fill=(19, 26, 38, 255), width=max(1, int(7 * s * k)))
-    return img
+SRC = 'brand/quickdicom-logo.png'
 
+
+def logo() -> Image.Image:
+    """The artwork cropped to the logo itself (its white margin removed)."""
+    im = Image.open(SRC).convert('RGB')
+    # anything clearly darker than the white background is the logo
+    mask = im.convert('L').point(lambda v: 255 if v < 235 else 0)
+    return im.crop(mask.getbbox())
+
+
+LOGO = logo()
+
+
+def tile(size: int, fill: float, radius: float | None, ss: int = 4) -> Image.Image:
+    """A white tile of `size` px (rounded by `radius` × size, or square) with the logo filling
+    `fill` of it, centred. Drawn large and scaled down for clean edges."""
+    n = size * ss
+    out = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+    shape = Image.new('L', (n, n), 0)
+    d = ImageDraw.Draw(shape)
+    if radius is None:
+        d.rectangle([0, 0, n, n], fill=255)
+    else:
+        d.rounded_rectangle([0, 0, n - 1, n - 1], radius=round(radius * n), fill=255)
+    out.paste((255, 255, 255, 255), (0, 0), shape)
+    w, h = LOGO.size
+    k = fill * n / max(w, h)
+    lg = LOGO.resize((round(w * k), round(h * k)), Image.LANCZOS)
+    out.paste(lg, ((n - lg.width) // 2, (n - lg.height) // 2))
+    out.putalpha(shape)  # nothing outside the tile
+    return out.resize((size, size), Image.LANCZOS)
+
+
+# installed app / browser: a rounded white tile (transparent corners)
 for size in (192, 512):
-    icon(size).save(f'public/icons/icon-{size}.png')
-icon(512, maskable=True).save('public/icons/icon-maskable-512.png')
-icon(180).convert('RGB').save('public/icons/apple-touch-icon.png')
+    tile(size, 0.8, 0.22).save(f'public/icons/icon-{size}.png')
+tile(32, 0.86, 0.2).save('public/icons/favicon-32.png')
+# maskable (Android crops it to its own shape): full square, the logo inside the safe zone
+tile(512, 0.66, None).save('public/icons/icon-maskable-512.png')
+# iOS rounds the corners itself: a full square
+tile(180, 0.76, None).convert('RGB').save('public/icons/apple-touch-icon.png')
+# the brand mark in the app (toolbar, start screen)
+tile(256, 0.82, 0.22).save('public/icons/mark-256.png')
 print('icons written')

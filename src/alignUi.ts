@@ -275,8 +275,8 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     `<header>
       <h2>Align “${esc(scan.name)}” to the CBCT</h2>
       <div class="sa-tabs" role="tablist">
-        <button data-mode="surface" class="active">Surfaces</button>
-        <button data-mode="points">Points</button>
+        <button data-mode="points" class="active">Points</button>
+        <button data-mode="surface">Surfaces</button>
       </div>
       <button class="modal-close" title="Cancel (Esc)">×</button>
     </header>
@@ -309,7 +309,7 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   const left = new MeshViewer('Intraoral scan');
   const right = new MeshViewer('CBCT');
   panes.append(left.el, right.el);
-  let mode: 'points' | 'surface' = 'surface';
+  let mode: 'points' | 'surface' = 'points'; // pairs of points by default; surfaces on the other tab
   // surface patches: patch i on the scan corresponds to patch i on the CBCT
   type Patch = { c: Vec3; r: number };
   const scanPatches: Patch[] = [];
@@ -759,6 +759,6 @@ export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
     close();
   };
   $<HTMLButtonElement>('.modal-close').onclick = close;
-  setMode('surface');
+  setMode('points');
   void loadTarget();
 }

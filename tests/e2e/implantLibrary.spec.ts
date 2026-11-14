@@ -1,7 +1,7 @@
-// Implant libraries: a manufacturer's implant for the selected implant and for new ones, generic
-// again, undo, and the project round trip.
+// Implant libraries (the made-up test library, imported): a manufacturer's implant for the selected
+// implant and for new ones, generic again, undo, and the project round trip.
 import { type Page } from '@playwright/test';
-import { clickView, expect, openDemo, test } from './fixtures';
+import { clickView, expect, importTestLibrary, openDemo, test } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => ((window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = undefined));
@@ -9,6 +9,7 @@ test.beforeEach(async ({ page }) => {
 
 async function curveAndImplant(page: Page) {
   await openDemo(page);
+  await importTestLibrary(page);
   await page.keyboard.press('2');
   for (const [x, y] of [[0.22, 0.72], [0.27, 0.45], [0.38, 0.3], [0.5, 0.26], [0.62, 0.3], [0.73, 0.45], [0.78, 0.72]]) {
     await clickView(page, 'planAxial', x, y);
@@ -32,20 +33,19 @@ test('library implants: choose a model, defaults for new implants, generic again
   await expect(page.locator('#imp-brand option')).not.toHaveCount(1, { timeout: 15_000 });
   await expect(page.locator('#imp-generic')).toBeVisible();
 
-  await page.selectOption('#imp-brand', 'Straumann');
-  await page.selectOption('#imp-system', 'BLX SLActive');
+  await page.selectOption('#imp-brand', 'Testco');
+  await page.selectOption('#imp-system', 'Taper TX');
   let s = (await sel(page))!;
-  expect(s.lib).toMatch(/^Straumann \/ BLX SLActive \/ /);
+  expect(s.lib).toMatch(/^Testco \/ Taper TX \/ /);
   await expect(page.locator('#imp-generic')).toBeHidden();
-  await expect(page.locator('#implant-list li.sel')).toContainText('BLX SLActive');
+  await expect(page.locator('#implant-list li.sel')).toContainText('Taper TX');
 
   await page.selectOption('#imp-size', '4.5 × 12 mm');
   s = (await sel(page))!;
-  expect(s.lib).toBe('Straumann / BLX SLActive / 4.5 × 12 mm');
+  expect(s.lib).toBe('Testco / Taper TX / 4.5 × 12 mm');
   expect(s.L).toBeCloseTo(12, 0);
   expect(s.d).toBeGreaterThan(4.4);
   // the slices show the cut through its mesh once it has loaded
-  await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource').some((r) => r.name.includes('implants/straumann-blx-slactive.json')))).toBe(true);
   // once the mesh is there every view is redrawn with it (the 3D view's render key says so) – no
   // generic cylinder left over until the implant is moved
   await expect.poll(() => page.evaluate(() => window.app.libraryMeshLoaded(window.app.selectedImplant().lib.id))).toBe(true);
@@ -53,7 +53,7 @@ test('library implants: choose a model, defaults for new implants, generic again
 
   // the model chosen last is the default for new implants
   await addLower(page, 0.6);
-  expect((await sel(page))!.lib).toBe('Straumann / BLX SLActive / 4.5 × 12 mm');
+  expect((await sel(page))!.lib).toBe('Testco / Taper TX / 4.5 × 12 mm');
   expect(await page.evaluate(() => window.app.implants.length)).toBe(2);
 
   // generic again: the size is kept and can be typed
@@ -63,7 +63,7 @@ test('library implants: choose a model, defaults for new implants, generic again
   expect(s.L).toBeCloseTo(12, 0);
   await expect(page.locator('#imp-generic')).toBeVisible();
   await page.keyboard.press('Control+z');
-  expect((await sel(page))!.lib).toBe('Straumann / BLX SLActive / 4.5 × 12 mm');
+  expect((await sel(page))!.lib).toBe('Testco / Taper TX / 4.5 × 12 mm');
 
   // saved with the project
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.click('#btn-save-project')]);
@@ -73,15 +73,15 @@ test('library implants: choose a model, defaults for new implants, generic again
   await page.setInputFiles('#project-input', file);
   await page.waitForFunction(() => window.app.implants.length === 2, null, { timeout: 60_000 });
   const libs = await page.evaluate(() => window.app.implants.map((i: { lib?: { id: string } | null }) => i.lib?.id ?? null));
-  expect(libs).toEqual(['Straumann / BLX SLActive / 4.5 × 12 mm', 'Straumann / BLX SLActive / 4.5 × 12 mm']);
+  expect(libs).toEqual(['Testco / Taper TX / 4.5 × 12 mm', 'Testco / Taper TX / 4.5 × 12 mm']);
 });
 
-test('dragging a library implant steps through its sizes (BLX 4 × 10 → 4 × 12 → 4 × 8, Ø → 4.5)', async ({ page }) => {
+test('dragging a library implant steps through its sizes (4 × 10 → 4 × 12 → 4 × 8, Ø → 4.5)', async ({ page }) => {
   test.setTimeout(180_000);
   await curveAndImplant(page);
   await expect(page.locator('#imp-brand option')).not.toHaveCount(1, { timeout: 15_000 });
-  await page.selectOption('#imp-brand', 'Straumann');
-  await page.selectOption('#imp-system', 'BLX SLActive');
+  await page.selectOption('#imp-brand', 'Testco');
+  await page.selectOption('#imp-system', 'Taper TX');
   await page.selectOption('#imp-size', '4 × 10 mm');
   const size = () => page.evaluate(() => window.app.selectedImplant().lib.id.split(' / ')[2]);
   /** a point of the selected implant in the panoramic: h along the axis from the centre, r across it */
@@ -95,7 +95,7 @@ test('dragging a library implant steps through its sizes (BLX 4 × 10 → 4 × 1
       const bx = a.pano.el.getBoundingClientRect();
       // across the axis on screen: the patient-left direction projected (the implant is vertical)
       const sx = Math.sign(q.x - p.x) || 1;
-      return [bx.x + p.x + (sx * r) / a.pano.vs.scale, bx.y + p.y, a.pano.vs.scale] as [number, number, number];
+      return [bx.x + p.x + (sx * r) / a.pano.vs.scale, bx.y + p.y, a.pano.vs.scale, sx] as [number, number, number, number];
     }, [h, r]);
   const len = await page.evaluate(() => window.app.selectedImplant().length);
   // apex: 2.5 mm further
@@ -104,7 +104,7 @@ test('dragging a library implant steps through its sizes (BLX 4 × 10 → 4 × 1
   await page.mouse.down();
   const dir = (await page.evaluate(() => window.app.selectedImplant().axis[2])) < 0 ? 1 : -1; // screen y of "apical"
   await page.mouse.move(x, y + (dir * 2.5) / sc, { steps: 8 });
-  await expect(page.locator('.dim-badge').first()).toContainText('BLX SLActive 4 × 12 mm');
+  await expect(page.locator('.dim-badge').first()).toContainText('Taper TX 4 × 12 mm');
   await page.mouse.up();
   expect(await size()).toBe('4 × 12 mm');
   // and back up (drags move sizes at half speed for control: 7 mm = 3.5 mm shorter)
@@ -117,10 +117,11 @@ test('dragging a library implant steps through its sizes (BLX 4 × 10 → 4 × 1
   expect(await size()).toBe('4 × 8 mm');
   // the side: wider, the length stays
   const d = await page.evaluate(() => window.app.selectedImplant().diameter);
-  [x, y, sc] = await at(-1, d / 2);
-  await page.mouse.move(x, y);
+  const [sxp, syp, scp, side] = await at(-1, d / 2);
+  await page.mouse.move(sxp, syp);
   await page.mouse.down();
-  await page.mouse.move(x + 0.4 / sc, y, { steps: 6 });
+  // outward from the edge that was grabbed (which side that is depends on where the implant sits)
+  await page.mouse.move(sxp + (side * 0.4) / scp, syp, { steps: 6 });
   await page.mouse.up();
   expect(await size()).toMatch(/^4\.5 × 8 mm$/);
 });

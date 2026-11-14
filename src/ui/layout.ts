@@ -1,6 +1,7 @@
 // The two layouts (① Reorient, ② Plan), the mode tabs and the panel rail.
 
 import type { Mode } from '../app';
+import { flipFrom } from './motion';
 import { Rail } from './rail';
 import { mountViewTools } from './viewTools';
 import { $, app } from './shell';
@@ -40,7 +41,10 @@ const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.tab
 // pulse the "Implant planning" tab once after the first volume loads, until it has been opened
 let planOpened = false;
 let planNudged = false;
-export function setMode(m: Mode) {
+app.currentPanel = () => rail.current;
+
+/** `restoring`: a project is being opened – its curves and panel come from the project. */
+export function setMode(m: Mode, { restoring = false } = {}) {
   if (m === 'plan') {
     planOpened = true;
     tabButtons.forEach((b) => b.classList.remove('nudge'));
@@ -50,7 +54,7 @@ export function setMode(m: Mode) {
   planLayout.classList.toggle('hidden', m !== 'plan');
   rail.setMode(m);
   // planning starts with the panoramic curve; once there is one, the last panel used comes back
-  const noCurve = m === 'plan' && !!app.vol && !app.curves.length;
+  const noCurve = !restoring && m === 'plan' && !!app.vol && !app.curves.length;
   if (noCurve) rail.prefer('curve');
   moveView3d(m === 'mpr' ? mprLayout : planLayout);
   if (m !== 'plan' && app.drawing && !app.drawing.length) app.cancelDrawing(); // nothing drawn yet
@@ -109,6 +113,37 @@ rail.onChange = () => {
   app.changed();
 };
 
+// ---- drawing a panoramic curve: the axial view grows ---------------------------------------
+// While a curve is tapped out (the first one when ② Plan opens, an added one, or a redrawn one)
+// the axial view takes the larger part of the window and the other views make room on the right;
+// when the curve is done they all take their places back. Each view moves from where it is on
+// screen to its new tile, scaled evenly (never stretched) – the views keep their field of view
+// across their shorter side, so the picture lines up all the way and the scale stays right.
+let curveLayout = false;
+function syncCurveLayout() {
+  const on = !!app.vol && !!app.drawing;
+  if (on === curveLayout) return;
+  curveLayout = on;
+  const ax = app.planAxial.el;
+  const views = Array.from(planLayout.children).filter((e): e is HTMLElement => e instanceof HTMLElement && e.classList.contains('view'));
+  const before = new Map(views.map((e) => [e, e.getBoundingClientRect()])); // where they are now (mid-flight too)
+  planLayout.classList.toggle('drawing-curve', on);
+  ax.classList.toggle('draw-target', on);
+  let k = 0;
+  for (const el of views) {
+    const b = before.get(el)!;
+    if (el === ax) {
+      // grows with a touch of settle; going back it slides under the views returning over it
+      flipFrom(el, b, on ? { response: 0.5, damping: 0.8, z: 6 } : { response: 0.42, z: 4 });
+    } else {
+      // the others follow one after another; the panoramic of the new curve settles softly
+      const pano = el === app.pano.el && !on;
+      flipFrom(el, b, { response: pano ? 0.5 : 0.42, damping: pano ? 0.85 : 1, delay: 22 * k++, z: 5 });
+    }
+  }
+  app.requestRender();
+}
+
 /** Start screen, rail badges, the unsaved dot on Save, and the one-time nudge towards ② Plan. */
 export function refreshLayout() {
   const vol = app.vol;
@@ -121,6 +156,7 @@ export function refreshLayout() {
   }
 
   $('start-screen').classList.toggle('hidden', !!vol);
+  syncCurveLayout();
   rail.setBadges({
     implants: app.implants.length,
     segments: app.seg.segments.length,

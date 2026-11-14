@@ -283,11 +283,13 @@ void main() {
               if (l == skipLab) { t += uStep; continue; }
               skipLab = 0u;
             }
-            if (l == 0u) {
+            // with the rest of the scan shown, a hidden segment is part of that scan
+            bool asScan = l == 0u || segInfo(l).w < 0.5;
+            if (asScan) {
               if (uShowUnseg == 1 && v >= uLo && v <= uHi) { hit = true; break; }
             } else {
               vec4 si = segInfo(l);
-              if (si.w > 0.5) {
+              {
                 if (segAi(l)) {
                   if (aiField(p, l) >= 0.0) { hit = true; base = si.rgb; lab = l; aiHit = true; alpha = segOpacity(l); break; }
                 } else {
@@ -349,11 +351,10 @@ void main() {
         vec3 tint = vec3(-1.0);
         if (uSegOn == 1) {
           uint l = labAt(p);
-          if (l == 0u) {
+          vec4 si = l == 0u ? vec4(0.0) : segInfo(l);
+          if (l == 0u || si.w < 0.5) {
             if (uShowUnseg == 0) { t += uStep; continue; }
           } else {
-            vec4 si = segInfo(l);
-            if (si.w < 0.5) { t += uStep; continue; }
             tint = si.rgb;
             lo = segAi(l) ? uLo : segLo(l);
           }
@@ -379,7 +380,7 @@ void main() {
         t += uStep;
         if (uSegOn == 1) {
           uint l = labAt(p);
-          if (l == 0u ? uShowUnseg == 0 : segInfo(l).w < 0.5) continue;
+          if ((l == 0u || segInfo(l).w < 0.5) && uShowUnseg == 0) continue;
         } else if (uShowUnseg == 0) continue;
         m = max(m, vol(p));
       }
@@ -634,8 +635,10 @@ export class View3D extends View {
     gl.activeTexture(gl.TEXTURE1);
     gl.uniform3f(u.uLabInv, 1 / seg.gs[0], 1 / seg.gs[1], 1 / seg.gs[2]);
     gl.uniform3i(u.uLabMax, Math.max(0, seg.nx - 1), Math.max(0, seg.ny - 1), Math.max(0, seg.nz - 1));
-    gl.uniform1i(u.uSegOn, segOn ? 1 : 0);
-    gl.uniform1i(u.uShowUnseg, app.showUnsegmented ? 1 : 0);
+    // the whole scan instead of the segments: rendered as before segmenting, with the threshold
+    const segsIn3d = segOn && app.show3dSegments;
+    gl.uniform1i(u.uSegOn, segsIn3d ? 1 : 0);
+    gl.uniform1i(u.uShowUnseg, !segsIn3d || app.showUnsegmented ? 1 : 0);
     // segment table: row 0 = colour + visible, row 1 = threshold
     const tab = new Float32Array(128 * 2 * 4);
     for (const g of seg.segments) {
@@ -1181,19 +1184,18 @@ export class View3D extends View {
     const tf = Math.min(b1[1], b2[1]);
     const step = vol.minSpacing * 0.5;
     const seg = app.seg;
-    const segOn = !!seg.labels && seg.segments.some((g) => g.voxels > 0);
+    const segOn = !!seg.labels && seg.segments.some((g) => g.voxels > 0) && app.show3dSegments;
     const { lo, hi } = app.vr;
     for (let t = tn; t <= tf; t += step) {
       const q = add(ro, scale(rd, t));
       const v = vol.sample(q);
       if (segOn) {
         const l = seg.rawLabelAt(q[0], q[1], q[2]);
-        if (l === 0) {
+        const g = l === 0 ? null : seg.segmentById(l);
+        if (!g || !g.visible) {
+          // the rest of the scan (hidden segments are part of it)
           if (app.showUnsegmented && v >= lo && v <= hi) return q;
-        } else {
-          const g = seg.segmentById(l);
-          if (g && g.visible && seg.segmentHit(g, q, v)) return q;
-        }
+        } else if (seg.segmentHit(g, q, v)) return q;
       } else if (v >= lo && v <= hi) return q;
     }
     return null;

@@ -7,11 +7,13 @@ import { isZipFile, zipEntriesAsFiles } from '../zip';
 import { findScanFolder, parentOf, rememberScanFolder, type FolderHit, type ScanDir } from '../scanFolders';
 import { formatDicomDate, formatPatientName } from '../dicomMeta';
 import { filesFromDataTransfer, loadDicomFiles } from '../dicom';
+import { choosePatient } from './patientChooser';
 import { createPhantom } from '../volume';
 import { closePopovers } from './popover';
 import { RecentEntry, RecentSource, addRecent, ago, handlesFromDrop, listRecent, readRecent, recentFromHandles, removeRecent } from './recent';
 import { $, app, escapeHtml, hideLoading, setStatus, showLoading } from './shell';
-import { setMode } from './layout';
+import { rail, setMode } from './layout';
+import type { PanelId } from './rail';
 import { HELPER_LOG, OS_MAC, showHelperHelp } from './install';
 import { deliverFile, exportHooks } from './save';
 import { showExportStl } from '../exportStl';
@@ -20,6 +22,12 @@ import { importScans } from './scansPanel';
 /** Load DICOM files, a ZIP of them or a project. Resolves to an error message, or null on success. */
 export async function loadFiles(files: File[]): Promise<string | null> {
   if (!files.length) return 'No files received.';
+  // an implant library file: imported, the open scan and plan stay
+  if (files.length === 1 && /\.qdplib$/i.test(files[0].name)) {
+    pendingRecent = null;
+    const { importLibraryFile } = await import('./libraryPanel');
+    return (await importLibraryFile(files[0])) ? null : 'The implant library was not imported.';
+  }
   if (!(await askToSave())) return ((pendingRecent = null), null);
   if (files.length === 1 && (await isZipFile(files[0]))) {
     // a project, or a ZIP of DICOM files (e.g. a whole series handed over by the Windows helper)
@@ -43,20 +51,35 @@ export async function loadFiles(files: File[]): Promise<string | null> {
   }
   try {
     showLoading('Reading files…', 0);
-    const vol = await loadDicomFiles(files, (stage, f) => showLoading(`${stage}…`, f));
+    const vol = await loadDicomFiles(files, (stage, f) => showLoading(`${stage}…`, f), {
+      // a folder with several patients: choose one (or sort them into folders first)
+      choosePatient: async (patients) => {
+        const pick = await choosePatient(patients, { startIn: openedDir ?? undefined });
+        if (pick !== null) showLoading('Reading files…', 1);
+        return pick;
+      },
+    });
     app.setVolume(vol);
     setMode(openInPlan() ? 'plan' : 'mpr');
     setStatus(`Loaded ${vol.nx}×${vol.ny}×${vol.nz} voxels from ${vol.info.source}`);
     noteRecent();
     return null;
   } catch (e) {
+    if ((e as Error).name === 'AbortError') {
+      setStatus('Nothing opened.');
+      return null;
+    }
     console.error(e);
     setStatus((e as Error).message, true);
     return (e as Error).message;
   } finally {
     hideLoading();
+    openedDir = null;
   }
 }
+
+/** The folder the files being opened come from (where patient folders are created by default). */
+let openedDir: FileSystemDirectoryHandle | null = null;
 
 // ---- installed app: open DICOM files from Windows Explorer ------------------------
 // The manifest registers .dcm/.dicom/.dic/.ima; Chrome/Edge hand the double-clicked file to
@@ -212,8 +235,17 @@ export async function openProject(file: File): Promise<string | null> {
     }
     showLoading('Restoring views…', 0.9);
     app.setVolume(volume);
-    setMode(pf.state.mode);
+    setMode(pf.state.mode, { restoring: true });
     applyProjectState(app, pf, entries);
+    // the plan as it was left: the panel that was open (with its implant still selected) – or, in an
+    // older project, the implants when one is selected; a plan without a curve starts drawing one
+    const panel = pf.state.panel as PanelId | undefined;
+    if (panel) rail.select(panel);
+    else if (app.mode === 'plan' && app.selectedImplant()) rail.select('implants');
+    if (app.mode === 'plan' && !app.curves.length) {
+      rail.prefer('curve');
+      if (!app.drawing) app.startDrawing();
+    }
     setStatus(`Project "${file.name}" restored (saved ${new Date(pf.savedAt).toLocaleString()})`);
     noteRecent();
     return null;
@@ -236,7 +268,10 @@ export async function saveProject(): Promise<boolean> {
     const blob = await buildProject(app, (f) => showLoading('Compressing volume…', f));
     hideLoading();
     const name = projectFileName(app);
-    const ok = await deliverFile(blob, name);
+    // saved through the browser's save dialog: listed under Recent right away, like an opened project
+    const ok = await deliverFile(blob, name, undefined, (h) => {
+      void addRecent({ kind: 'project', handles: [h], depth: 0 }, ...recentLabel('project', h.name)).then(() => renderRecent());
+    });
     if (ok) app.markSaved();
     setStatus(ok ? `Project saved as ${name} (${(blob.size / 1e6).toFixed(1)} MB)` : 'Save cancelled');
     return ok;
@@ -291,11 +326,16 @@ let pendingRecent: RecentSource | null = null;
 function noteRecent() {
   const src = pendingRecent;
   pendingRecent = null;
+  if (!src || !app.vol) return;
+  void addRecent(src, ...recentLabel(src.kind, src.handles[0]?.name)).then(() => renderRecent());
+}
+
+/** Name and second line of a Recent entry for the open scan: patient, scan date and kind. */
+function recentLabel(kind: RecentSource['kind'], fileName?: string): [string, string] {
   const info = app.vol?.info;
-  if (!src || !info) return;
-  const name = formatPatientName(info.patientName) || info.seriesDescription?.trim() || src.handles[0]?.name || 'Scan';
-  const sub = [info.studyDate ? formatDicomDate(info.studyDate) : '', src.kind === 'project' ? 'project' : src.kind === 'folder' ? 'folder' : 'file'].filter(Boolean).join(' · ');
-  void addRecent(src, name, sub).then(() => renderRecent());
+  const name = formatPatientName(info?.patientName ?? '') || info?.seriesDescription?.trim() || fileName || 'Scan';
+  const sub = [info?.studyDate ? formatDicomDate(info.studyDate) : '', kind === 'project' ? 'project' : kind === 'folder' ? 'folder' : 'file'].filter(Boolean).join(' · ');
+  return [name, sub];
 }
 
 export async function pickAndOpen(kind: 'files' | 'folder' | 'project') {
@@ -303,6 +343,7 @@ export async function pickAndOpen(kind: 'files' | 'folder' | 'project') {
     if (kind === 'folder') {
       if (!pickers.showDirectoryPicker) return folderInput.click();
       const dir = await pickers.showDirectoryPicker({ id: 'qdp-open', mode: 'read' });
+      openedDir = dir;
       showLoading('Reading folder…', 0);
       const files = await filesFromDirectory(dir as unknown as DirHandle, 4);
       pendingRecent = { kind: 'folder', handles: [dir], depth: 4 };

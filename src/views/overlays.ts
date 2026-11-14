@@ -22,7 +22,7 @@ export function composeSegmentation(
   let anyLabel = false;
   if (app.showSegOverlay && seg.labels) {
     for (const s of seg.segments) {
-      if (s.visible && s.voxels) {
+      if (s.voxels && app.segmentInSlices(s)) {
         colors[s.id] = s.color;
         anyLabel = true;
       }

@@ -12,7 +12,8 @@ self.addEventListener('activate', (e) =>
   e.waitUntil(
     Promise.all([
       self.clients.claim(),
-      // implant library files are kept by the app's own download (src/implantLibrary.ts), not here
+      // implant library files are no longer on the website (people import a library file): drop
+      // copies an earlier version of the app kept here
       caches
         .open(CACHE)
         .then((c) => c.keys().then((keys) => Promise.all(keys.filter((r) => new URL(r.url).pathname.includes('/implants/')).map((r) => c.delete(r)))))
@@ -34,9 +35,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
-  // the AI model and the implant library keep their own caches (downloaded on request): do not
-  // store them twice
-  if (url.pathname.includes('/models/') || url.pathname.includes('/implants/')) {
+  // the AI model keeps its own cache (downloaded on request): do not store it twice
+  if (url.pathname.includes('/models/')) {
     e.respondWith(fetch(req).then(isolated));
     return;
   }

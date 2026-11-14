@@ -9,7 +9,7 @@
 #  so the whole scan opens without any prompt.
 #
 #  Install (Terminal):
-#    curl -fsSL https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/mac/install-helper.sh | bash
+#    curl -fsSL https://quickdicom.app/mac/install-helper.sh | bash
 #  Installs for the current user only (no admin password).
 #  Remove: bash ~/Library/Application\ Support/QuickDICOMPlanning/uninstall.sh
 # =============================================================================
@@ -47,7 +47,7 @@ main() {
   if [ -z "$APP" ]; then
     echo "  The installed $NAME app was not found."
     echo ""
-    echo "  1. Open https://amsaleh1998-spec.github.io/Quick-DICOM-Planning/ in Chrome or Edge"
+    echo "  1. Open https://quickdicom.app/ in Chrome or Edge"
     echo "     and click \"Install app\"."
     echo "  2. Run this command again."
     return 1
