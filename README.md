@@ -154,6 +154,9 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - Panoramic reconstruction along the curve, switchable between a thick **slab** and a thin **slice** (separate adjustable
   thicknesses; switch in the panoramic view's header). The mouse wheel in the panoramic moves the slice
   position buccal (up) / lingual (down); Alt+wheel moves the cross-sections along the curve. *Center* puts it back on the curve.
+  Implants follow the mode: in a **slice** only what the curved surface cuts of them is drawn, exactly as in the
+  cross-sections (the filled section with its outline, threads and all; nothing where the slice passes beside an
+  implant); in a **slab** every implant and abutment is drawn whole as a shaded 3D model, seen from the buccal side.
 - Three cross-sections perpendicular to the curve, or along the selected implant's axis (adjustable spacing); each wheel notch moves them exactly 1 mm along
   the curve. The *Curve* button in the axial view shows / hides the blue curve there (curve points can only be
   edited while it is shown); the *Curve* button in the cross-sections shows / hides their blue guide lines (hidden by default).
@@ -571,7 +574,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/ui/install.ts` | Install app and the Windows / Mac double-click helper |
 | `src/ui/reorientPanel.ts`, `curvePanel.ts`, `implantsPanel.ts`, `segmentsPanel.ts`, `nervesPanel.ts`, `scansPanel.ts` | One module per side panel: its controls and its refresh |
 | `src/ui/viewSettings.ts`, `settings.ts`, `patient.ts` | Settings inside the 3D / panoramic views, the ⚙ Settings popover (input, SpaceMouse), the patient chip |
-| `src/implantLibrary.ts`, `src/ui/libraryPanel.ts`, `src/views/implantSections.ts` | Implant library: catalogue, system meshes, sizes, download into the browser and versions; library implants in the slices and the panoramic |
+| `src/implantLibrary.ts`, `src/ui/libraryPanel.ts`, `src/views/implantSections.ts`, `src/views/panoImplants.ts` | Implant library: catalogue, system meshes, sizes, download into the browser and versions; library implants in the slices and the panoramic |
 | `src/waxup/` | Waxup: tooth library loader, model (arch placement, mirror), chain (contacts, tube, chain / single / tube, pins, setup in contact), sculpting, panel state and setup |
 | `src/views/waxupEdit.ts`, `src/views/waxContours.ts` | Waxup editing with the mouse in every view, tooth outlines in the slices |
 | `src/history.ts`, `src/planHistory.ts` | Undo / redo: one history of the plan, split into channels (implants, curves, segments, nerves, scans, rulers) |
