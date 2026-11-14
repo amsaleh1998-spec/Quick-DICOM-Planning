@@ -114,7 +114,7 @@ export class App {
   s = 0;
   /** height (frame z) of the axial level / focus */
   focusC = 0;
-  crossSpacing = 2;
+  crossSpacing = 1;
   /** panoramic shows either a thick slab or a thin slice */
   panoMode: 'slab' | 'slice' = 'slab';
   panoSlab = 12;

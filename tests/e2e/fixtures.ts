@@ -84,7 +84,9 @@ export { expect };
 
 /** Point at a fraction of a view: `view` is a property path of the app, e.g. 'planAxial' or 'crossViews.1'. */
 export async function inView(page: Page, view: string, fx: number, fy: number): Promise<[number, number]> {
-  // a view moving to a new tile (e.g. the axial view growing while a curve is drawn) is pointed at where it lands
+  // a view moving to a new tile (e.g. the axial view growing while a curve is drawn) is pointed at where it lands;
+  // the layout follows a change on the next frame, so let that frame pass first
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.waitForFunction((path) => {
     const v = path.split('.').reduce((o, k) => o[k], window.app);
     return !(v.el as HTMLElement).getAnimations().some((a) => a.playState === 'running');
