@@ -424,7 +424,10 @@ The type is guessed from the file name (upper / lower / wax-up …) and can be c
   the upper wax-up copy the alignment of the upper jaw scan.
 - **Align to the CBCT** in a two-pane workspace (scan | CBCT). The CBCT side is the surface you choose: any segment
   (e.g. *Maxilla*) or the *3D render at the current threshold* (inside the crop box); closed hollow spaces are filled
-  so only the outer surface is matched.
+  so only the outer surface is matched. **By default it is the scan's own jaw's teeth** from the automatic
+  segmentation (*Upper teeth* for an upper jaw scan, *Lower teeth* for a lower one – the jaw is read from the type, or
+  from the file name for wax-ups and antagonists, e.g. `Waxup_lower.stl`); without them, a segment named like the jaw,
+  else the 3D render.
   - **Points** (the default; like Blue Sky Plan, RealGuide, exoplan): click a point on the scan, then the same point on the CBCT;
     at least 3 pairs. The fit is refined on the surface around the points (or on the painted areas).
   - **Surfaces** (like coDiagnostiX): paint the areas of the scan that are visible in the CBCT (tooth surfaces, not

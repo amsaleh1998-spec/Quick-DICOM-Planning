@@ -10,7 +10,7 @@ import { Marker, MeshViewer, ViewerMesh } from './meshViewer';
 import {
   Affine, FitStats, Target, apply, fitRigid, fitStats, globalMatch, icp, scanOcclusalAxis, subsample, subsampleSame, thinPoints,
 } from './register';
-import { SCAN_KINDS, Scan, ScanKind, originalTransform, placementLabel, scanNormals } from './scans';
+import { SCAN_KINDS, Scan, ScanKind, guessJaw, originalTransform, placementLabel, scanNormals } from './scans';
 import { fillCavities, isoSurface, smoothMesh } from './stl';
 
 export interface AlignHooks {
@@ -99,6 +99,8 @@ export function showPlacement(app: App, scan: Scan, hooks: AlignHooks) {
 interface TargetChoice {
   key: string;
   label: string;
+  /** the automatic segmentation's class (3 = upper teeth, 4 = lower teeth …) */
+  aiCls?: number;
   build: (progress: (f: number) => void) => Promise<{ pos: Float32Array; idx: Uint32Array } | null>;
 }
 
@@ -109,6 +111,7 @@ function targetChoices(app: App): TargetChoice[] {
     out.push({
       key: `seg${sg.id}`,
       label: `Segment: ${sg.name}`,
+      aiCls: sg.ai?.cls,
       build: async (pr) => {
         // full CT resolution, smoothed (same quality as the High STL export)
         const g = app.seg.segmentField(sg, 1, MAX_SAMPLES);
@@ -266,10 +269,14 @@ class PaintLayer {
 export function showAlignment(app: App, scan: Scan, hooks: AlignHooks) {
   if (!app.vol) return;
   const choices = targetChoices(app);
-  const defaultJaw = scan.kind === 'lower' ? 'lower' : 'upper';
-  // prefer a segment named like the jaw
+  // the jaw: from the type, or from the name (e.g. "Waxup_lower.stl")
+  const jaw = scan.kind === 'upper' || scan.kind === 'lower' ? scan.kind : guessJaw(`${scan.fileName} ${scan.name}`);
+  const defaultJaw = jaw ?? 'upper';
+  // align to that jaw's teeth from the automatic segmentation (the surfaces an intraoral scan
+  // shows); otherwise a segment named like the jaw; otherwise the 3D render
   const want = defaultJaw === 'upper' ? /maxill|upper/i : /mandib|lower/i;
-  const defChoice = choices.find((c) => want.test(c.label)) ?? choices[choices.length - 1];
+  const teeth = jaw ? choices.find((c) => c.aiCls === (jaw === 'upper' ? 3 : 4)) : undefined;
+  const defChoice = teeth ?? choices.find((c) => want.test(c.label)) ?? choices[choices.length - 1];
   const { root, close } = modalShell(
     'scan-align',
     `<header>
