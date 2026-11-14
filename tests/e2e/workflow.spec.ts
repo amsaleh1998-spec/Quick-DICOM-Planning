@@ -240,17 +240,18 @@ test('phones get the mobile version, which opens the demo', async ({ browser }) 
   await ctx.close();
 });
 
-test('in the installed app the window title is the patient alone (the browser adds the short app name)', async ({ page }) => {
+test('in the installed app the window title starts with the app name, then the patient (what the taskbar shows)', async ({ page }) => {
   // an installed app window: display-mode standalone
   await page.addInitScript(() => {
     const real = window.matchMedia.bind(window);
     window.matchMedia = (q: string) => (/display-mode:\s*standalone/.test(q) ? ({ ...real(q), matches: true } as MediaQueryList) : real(q));
   });
   await page.goto('./');
-  await expect(page).toHaveTitle('Quick DICOM Planning');
+  await expect(page).toHaveTitle('QDP');
   await page.setInputFiles('#file-input', dicomFiles());
   await page.waitForFunction(() => !!window.app.vol);
-  await expect(page).toHaveTitle(/^TEST, Loader( · [^–]+)?$/);
+  // Chrome / Edge show the page title of an app window only when it begins with the app's name
+  await expect(page).toHaveTitle(/^QDP – TEST, Loader( · .+)?$/);
   // the installed app's name is short, so the taskbar has room for the patient
   const manifest = await (await page.request.get('/manifest.webmanifest')).json();
   expect(manifest.name).toBe('QDP');
