@@ -40,8 +40,10 @@ Everything runs locally in the browser – no data is uploaded anywhere.
   cross-section spacing (*12 mm · sections 1 mm ▾*; 1 mm by default).
 - **Status bar**: a one-line hint for the open panel, messages, and the value under the cursor.
 - **Look and motion**: graphite greys so the greyscale scan reads true; colour belongs to what is planned on it (curve,
-  view planes, implants, nerves, segments). One material stands out – titanium, the implants' own: the brand mark and
-  app icon (an implant with its crown), the prominent action of a panel, checked boxes and slider thumbs. Controls are
+  view planes, implants, nerves, segments). One material stands out – titanium, the implants' own: the prominent action of a
+  panel, checked boxes and slider thumbs. The logo (an implant in a hexagon, in navy and teal) sits on a white tile in
+  the toolbar, the start screen and the app icon (`brand/quickdicom-logo.png`; `python3 scripts/make-icons.py` makes the
+  icon sizes from it). Controls are
   drawn, not the browser's defaults (selects, check boxes, sliders filled up to the thumb, thin scroll bars); the views
   are rounded tiles on the dark window; menus and dialogs float as translucent layers over a blurred backdrop (solid
   when the system asks for less transparency). The start screen says what the app is and that scans stay on the computer. Menus grow out of their button and fold back into it, dialogs rise into
