@@ -175,7 +175,7 @@ async function scans(st, cfg) {
   // Waits are recorded in real time (the editor shows them as a time-lapse): the button is
   // released and the clock runs freely until the app is ready again.
   await st.click('#pl-go', { after: 0 });
-  const ready = (label) => (page) => page.evaluate((label) => /Click a tooth surface/.test(document.querySelector('#sa-help')?.textContent ?? '') && document.querySelectorAll('.sa-panes .mv-title')[1]?.textContent === `CBCT – ${label}`, label);
+  const ready = (label) => (page) => page.evaluate((label) => /Click a point/.test(document.querySelector('#sa-help')?.textContent ?? '') && document.querySelectorAll('.sa-panes .mv-title')[1]?.textContent === `CBCT – ${label}`, label);
   await st.realtime(ready('Segment: Maxilla & upper skull'), { label: 'surface', every: 200 });
   await st.rect('alignDialog', '.modal.scan-align');
   await st.hold(0.5);
@@ -187,7 +187,7 @@ async function scans(st, cfg) {
   const panes = await st.page.evaluate(() => [...document.querySelectorAll('.sa-panes > .mv')].map((e) => { const b = e.getBoundingClientRect(); return [b.x, b.y, b.width, b.height]; }));
   await st.rect('paneScan', panes[0]);
   await st.rect('paneCbct', panes[1]);
-  // Three patches: the same tooth on the scan and on the CBCT. Each scan point is picked on the scan
+  // Pairs of points: the same spot on the scan and on the CBCT. Each scan point is picked on the scan
   // surface; where it lies in the CBCT is known from the scan's alignment (plan.scanToCbct).
   // (The app exposes the two 3D panes of this window for its own tests.)
   const pick = (fx, fy) =>
@@ -206,7 +206,7 @@ async function scans(st, cfg) {
   const T = plan.scanToCbct;
   const toWorld = (p) => [T[0] * p[0] + T[1] * p[1] + T[2] * p[2] + T[3], T[4] * p[0] + T[5] * p[1] + T[6] * p[2] + T[7], T[8] * p[0] + T[9] * p[1] + T[10] * p[2] + T[11]];
   st.mark('scans.patches');
-  for (const [fx, fy] of plan.scanPatches) {
+  for (const [fx, fy] of plan.scanPoints) {
     const p = await pick(fx, fy);
     if (!p) throw new Error(`no scan surface at ${fx}, ${fy}`);
     await st.click(await project(0, p), { after: 0.1 });
@@ -219,6 +219,7 @@ async function scans(st, cfg) {
   // what the app says about the fit (the editor quotes it in a caption)
   st.log.info = { ...(st.log.info ?? {}), match: await st.page.evaluate(() => document.querySelector('#sa-result').textContent) };
   console.log('  match:', st.log.info.match);
+  if (!/^✓/.test(st.log.info.match.trim())) throw new Error('the app is not sure of the match');
   await st.rect('alignResult', '#sa-result');
   await st.hold(1.3);
   await st.click('#sa-accept');
@@ -235,16 +236,16 @@ async function scans(st, cfg) {
   await st.hold(1.3);
 }
 
-/** Plan: the panoramic curve, drawn in one stroke along the maxillary ridge. */
+/** Plan: the panoramic curve, drawn in one stroke along the maxillary ridge (the axial view is larger while it is drawn). */
 async function curve(st) {
   st.begin('curve');
+  await st.rect('planTiles', '#viewport');
   await st.click('.tabs [data-mode="plan"]');
-  await st.hold(0.5);
-  await st.rect('planAxialTile', await viewRect(st.page, 'planAxial'));
-  await st.click(await viewButton(st.page, 'planAxial', '.max-btn'));
-  await st.hold(0.55);
+  // the views move apart for the drawing: wait until they have landed
+  await st.hold(1.0);
   const r = await viewRect(st.page, 'planAxial');
   await st.rect('planArea', r);
+  st.mark('curve.open');
   await st.moveTo([r[0] + r[2] * 0.5, r[1] + r[3] * 0.42]);
   await st.wheel(-plan.levelNotches, { dur: 1.1 });
   await st.hold(0.3);
@@ -256,12 +257,14 @@ async function curve(st) {
       return [b.x + s[0], b.y + s[1]];
     });
   }, spline(plan.arch, 0.25));
-  await st.drag(stroke, { dur: 1.7, before: 0.15, after: 0.5 });
+  await st.drag(stroke, { dur: 1.7, before: 0.15, after: 0 });
   st.mark('curve.drawn');
-  await st.click(await viewButton(st.page, 'planAxial', '.max-btn'));
-  await st.hold(1.1);
+  // the views take their places back, the new panoramic among them
+  await st.hold(1.6);
+  st.mark('curve.settled');
+  await st.hold(0.9);
   for (const [name, v] of [['pano', 'pano'], ['cs1', 'crossViews.0'], ['cs2', 'crossViews.1'], ['cs3', 'crossViews.2'], ['tang', 'tang'], ['plan3d', 'view3d'], ['planAxialTile', 'planAxial']]) await st.rect(name, await viewRect(st.page, v));
-  console.log('  curve:', await st.page.evaluate(() => ({ len: +window.app.curve.length.toFixed(1), n: window.app.curve.ctrl.length, level: +window.app.focusC.toFixed(2) })));
+  console.log('  curve:', await st.page.evaluate(() => (window.app.curve ? { len: +window.app.curve.length.toFixed(1), n: window.app.curve.ctrl.length, level: +window.app.focusC.toFixed(2) } : { drawing: window.app.drawing && window.app.drawing.length })));
 }
 
 // ---- implants: helpers ---------------------------------------------------------------------------

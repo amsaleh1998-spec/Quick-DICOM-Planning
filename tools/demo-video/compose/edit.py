@@ -178,7 +178,8 @@ def build(S, report_pages=None):
     if 'scans' in S:
         s = S['scans']
         t0 = tl.n
-        c = s.clicks  # 0 Continue, 1 CBCT surface, 2 "Upper teeth", 3..8 patches, 9 Match, 10 Accept, 11 copy the alignment, 12 Continue
+        # clicks: 0 Continue, then the CBCT surface list, the pairs of points; here the first point, Match, Accept, copy the alignment, Continue
+        c = {0: s.clicks[0], 3: s.after('patches'), 9: s.before('matched'), 10: s.after('matched'), 11: s.clicks[-2], 12: s.clicks[-1]}
         la, lb, _ = s.lapse('surface')
         tl.clip(s.cap, s.a + s.d(8), la, 2.0, xfade=X)
         mv.badge(*tl.lapse(s.cap, min(la + 1, lb), lb, 0.6))  # (its first picture is from before the click took effect)
@@ -195,7 +196,7 @@ def build(S, report_pages=None):
         cam.to(at(s, s.dragstarts[1], t0) + 10, WIDE, move=28)
         cam.to(at(s, c[11], t0) - 2, dialog, move=34)
         cam.to(at(s, c[12], t0) + 52, view_of(s.r('mpr3d'), fill=0.92, zmax=2.2), move=50)  # both scans in the jaw
-        mv.caption(t0 + 16, at(s, c[9], t0) - 4, 'Match the intraoral scan', 'Match')
+        mv.caption(t0 + 16, at(s, c[9], t0) - 4, 'Match the intraoral scan by points', 'by points')
         mv.caption(at(s, c[9], t0) + 8, at(s, c[10], t0) + 14, 'Colour-coded fit check', 'fit check')
         mv.caption(at(s, s.dragstarts[1], t0), at(s, c[12], t0) + 30, 'The lower scan copies the alignment', 'copies the alignment')
 
@@ -203,13 +204,14 @@ def build(S, report_pages=None):
     if 'curve' in S:
         s = S['curve']
         t0 = tl.n
-        c = s.clicks  # 0 Plan, 1 maximize the axial view, 2 restore
-        down, up = s.downs[2], s.ups[2]  # the stroke along the arch
-        tl.clip(s.cap, s.a, s.b, [(s.a, 1.9), (down - s.d(40), 1.25), (up + s.d(8), 1.7), (c[2] + s.d(14), 1.15)], xfade=X)
+        down, up = s.before('drawn', 'down'), s.m('drawn')  # the stroke along the arch
+        # the views moving apart for the drawing and back afterwards are shown as recorded, with the whole window in view
+        tl.clip(s.cap, s.a, s.b, [(s.a, 1.6), (s.clicks[0] - s.d(4), 1.0), (s.m('open'), 1.9), (down - s.d(40), 1.25), (up - s.d(6), 1.0), (s.m('settled'), 1.15)], xfade=X)
         cam.cut(t0, WIDE)
-        cam.to(at(s, c[1], t0) + 44, view_of(s.r('planArea'), fill=0.98, zmax=1.5), move=40)
+        cam.to(at(s, s.m('open'), t0) + 40, view_of(s.r('planArea'), fill=0.98, zmax=1.5), move=36)
         cam.to(at(s, down, t0) + 4, view_of(grow(s.path_box(down, up), 110, 70), fill=0.9, zmax=1.9), move=36)
-        cam.to(at(s, c[2], t0) + 48, view_of(grow(s.r('pano'), 16, 20), fill=1.0, zmax=1.7, dy=10), move=46)  # the panoramic that came of it
+        cam.to(at(s, up, t0) - 2, WIDE, move=40)
+        cam.to(at(s, min(s.m('settled'), s.b - 1), t0) + 44, view_of(grow(s.r('pano'), 16, 20), fill=1.0, zmax=1.7, dy=10), move=40)  # the panoramic that came of it
         mv.caption(t0 + 16, tl.n - 4, 'Draw the arch. Get the panoramic.', 'Draw the arch.')
 
     # ---- implants ---------------------------------------------------------------------------------
@@ -235,7 +237,7 @@ def build(S, report_pages=None):
         cam.to(at(s, s.m('done'), t0) + 30, WIDE, move=40)
         k = [at(s, f, t0) for f in (brand, s.m('sized24'), s.m('tilted24'), add26)]
         mv.caption(t0 + 16, k[0] - 10, 'Place the implant', 'Place')
-        mv.caption(k[0] - 2, k[1] - 8, 'Real implants: 14 brands, 1,260+ sizes', 'Real implants:')
+        mv.caption(k[0] - 2, k[1] - 8, 'Real implants, from your own library', 'Real implants,')
         mv.caption(k[1], k[2] - 8, 'Set position and angle in the sections', 'position and angle')
         mv.caption(k[2], k[3] - 12, 'Add the multi-unit abutment', 'multi-unit abutment')
         mv.caption(k[3] - 4, tl.n - 4, 'Same steps for the next one', 'next one')
