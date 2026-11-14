@@ -57,7 +57,7 @@ python3 timeline.py out/rec                  # scene and caption times, fastest 
 ```
 
 The video is encoded with a silent audio track. `compose/music.py` synthesises an original
-cinematic soundtrack of the same length (nothing sampled or licensed; 32 bars that build up to the 3D shot):
+instrumental soundtrack of the same length (modelled guitar, piano, bass, strings and percussion; nothing sampled or licensed):
 
 ```bash
 python3 compose/music.py 68.4 music.wav 51.3        # length of the video, start of the 3D shot (s)
