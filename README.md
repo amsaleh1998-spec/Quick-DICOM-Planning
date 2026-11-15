@@ -167,7 +167,9 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - Editing in any planning view: drag the body to move; drag the side outline to change the diameter; drag the apical end
   to change the length (the platform stays fixed). Dragging is damped (half speed) for fine control, and the value
   being changed is shown live on the implant for 5 seconds – click it to type an exact value. The selected implant has two rotation handles placed beyond its ends:
-  **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform.
+  **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform. With the prosthetic axis shown,
+  its top (pink ring) is a handle too: drag it to move the coronal part (the implant tilts around its apex) – in any
+  view, also for an implant that is not selected.
 - *Show prosthetic axis* (per implant): a Ø3 × 15 mm guide from the MUA top, or from the implant platform along the
   implant axis when there is no MUA. Adding an MUA switches it on; it can be turned off.
 - Implants are tapered by default (apex 1 mm narrower than the platform; untick *New implants tapered* for cylinders).
@@ -594,7 +596,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/spacemouse.ts` | 3Dconnexion SpaceMouse input (WebHID reports, game-controller fallback) |
 | `src/views/overlays.ts` | 2D overlays: segment tint/outlines, cut traces, nerve tube sections and projections |
 | `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
-| `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles, diameter/length dragging |
+| `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles and the prosthetic axis top, diameter/length dragging |
 | `src/meshio.ts`, `src/scans.ts` | STL / PLY / OBJ readers, scan model (placement, appearance, world-space cache) |
 | `src/register.ts`, `src/alignUi.ts`, `src/meshViewer.ts`, `src/meshgl.ts` | Scan alignment: point pairs (Horn), k-d tree ICP, automatic surface matching; placement dialog and two-pane alignment workspace; WebGL mesh rendering |
 | `src/views/scanContours.ts` | Scan outlines in planar views and the panoramic |

@@ -35,6 +35,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['Implant outline', 'Drag side = diameter · drag apical end = length (click the live value to type it); a library implant steps through its system’s sizes'],
       ['Implant library', 'Implants panel → Implant: Generic or a brand, then system and size · the model chosen last is used for new implants'],
       ['C / A handles', 'C rotates around the apex, A around the platform'],
+      ['Top of the prosthetic axis', 'Drag it to move the coronal part (tilts around the apex)'],
       ['Del', 'Delete the selected implant'],
       ['Ctrl+Z / Ctrl+Y', 'Undo / redo any change of the plan: implants, curves, segments, nerves, scans, rulers'],
       ['Esc', 'Cancel / deselect'],
