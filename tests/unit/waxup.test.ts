@@ -8,7 +8,7 @@ import { applyPart, brush, startPart } from '../../src/waxup/sculpt';
 import { IDENTITY, applyV, compose } from '../../src/register';
 import type { Frame, Vec2, Vec3 } from '../../src/math';
 
-const lib = parseLibrary(await unpackLibrary(JSON.parse(readFileSync('public/library/teeth-generic.json', 'utf8'))));
+const lib = parseLibrary(await unpackLibrary(JSON.parse(readFileSync('public/library/teeth-bodyparts3d.json', 'utf8'))));
 
 /** a U-shaped patient curve (planning a = left, b = posterior): front at b = 0 */
 const curve: Vec2[] = [];
@@ -34,6 +34,15 @@ function waxup() {
 }
 
 describe('tooth library', () => {
+  it('is the BodyParts3D crowns and carries their credit and licence', () => {
+    expect(lib.name).toBe('BodyParts3D');
+    expect(lib.credit?.source).toContain('BodyParts3D');
+    expect(lib.credit?.source).toContain('Database Center for Life Science');
+    expect(lib.credit?.license).toBe('CC BY-SA 2.1 JP');
+    expect(lib.credit?.licenseUrl).toBe('https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en');
+    expect(lib.credit?.changes).toMatch(/roots/);
+  });
+
   it('has 32 closed crowns with FDI numbers and parts', () => {
     expect(lib.teeth.size).toBe(32);
     for (const fdi of [...jawOrder('upper'), ...jawOrder('lower')]) {

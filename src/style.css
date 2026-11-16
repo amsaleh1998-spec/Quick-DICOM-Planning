@@ -3468,3 +3468,14 @@ details.sub[open] > summary::before {
 .help-cols dd {
   color: var(--muted);
 }
+
+/* credit of the tooth library (BodyParts3D, CC BY-SA) at the foot of the Waxup panel */
+.wax-credit {
+  margin: 14px 0 4px;
+  line-height: 1.45;
+}
+.wax-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

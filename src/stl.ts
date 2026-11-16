@@ -457,12 +457,13 @@ export function transformTris(tris: Tris, m: number[]) {
 }
 
 /** Binary STL (little endian), facet normals from the vertex order. */
-export function stlBytes(tris: Tris, name: string, space: 'LPS' | null = null): Uint8Array {
+export function stlBytes(tris: Tris, name: string, space: 'LPS' | null = null, credit = ''): Uint8Array {
   const n = tris.length / 9;
   const buf = new ArrayBuffer(84 + n * 50);
   const bytes = new Uint8Array(buf);
   // "SPACE=LPS" tells 3D Slicer (and similar) which patient coordinate convention the file uses
-  const header = `${space ? `SPACE=${space} ` : ''}Quick DICOM Planning - ${name}`.slice(0, 79);
+  // a credit (e.g. the source and licence of library teeth) comes first, so it is never cut off
+  const header = (credit ? `${space ? `SPACE=${space} ` : ''}${name}; ${credit}` : `${space ? `SPACE=${space} ` : ''}Quick DICOM Planning - ${name}`).slice(0, 80);
   for (let i = 0; i < header.length; i++) bytes[i] = header.charCodeAt(i) & 0x7f;
   const dv = new DataView(buf);
   dv.setUint32(80, n, true);

@@ -413,8 +413,16 @@ the future teeth.
   opens with it) – a drag on empty space still rotates the view, and an implant under the cursor comes first. In the
   slices the teeth react while the Waxup panel is open; their outlines stay in every slice. Undo / redo, projects and *Export ▾ → STL* (one file per jaw, DICOM patient
   coordinates) include the waxup.
-- The library (`public/library/teeth-generic.json`, 32 crowns) is built from a generic exocad tooth set by
-  `scripts/make-tooth-library.py` (split into teeth, FDI numbers, decimated to ~0.35 mm edges, cusp tips).
+- **Tooth library**: `public/library/teeth-bodyparts3d.json`, 32 crowns made from the teeth of
+  [BodyParts3D](https://dbarchive.biosciencedbc.jp/en/bodyparts3d/), © The Database Center for Life Science, licensed
+  under [CC BY-SA 2.1 Japan](https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en). Changes: each tooth cut across
+  its long axis at the average crown height and the cut closed (crowns only, no roots); the wisdom teeth (not in
+  BodyParts3D) derived from the second molars; simplified to ~0.35 mm edges, FDI numbers and cusp tips added
+  (`scripts/make-bodyparts3d-crowns.py`, then `scripts/make-tooth-library.py`). The tooth library is shared under the
+  same licence (CC BY-SA 2.1 JP) – see [`public/library/LICENSE-BodyParts3D.txt`](public/library/LICENSE-BodyParts3D.txt);
+  waxups made with it, e.g. exported tooth STL files, are adaptations of it too (the STL header and the export ZIP
+  carry the credit and the licence). The credit is shown in the Waxup panel. The licence covers the tooth library
+  only, not the rest of the app.
 
 ## Intraoral scans
 
@@ -580,7 +588,7 @@ static – scans are processed in the visitor's browser and never uploaded.
 | `src/ui/reorientPanel.ts`, `curvePanel.ts`, `implantsPanel.ts`, `segmentsPanel.ts`, `nervesPanel.ts`, `scansPanel.ts` | One module per side panel: its controls and its refresh |
 | `src/ui/viewSettings.ts`, `settings.ts`, `patient.ts` | Settings inside the 3D / panoramic views, the ⚙ Settings popover (input, SpaceMouse), the patient chip |
 | `src/implantLibrary.ts`, `src/ui/libraryPanel.ts`, `src/views/implantSections.ts`, `src/views/panoImplants.ts` | Implant library: catalogue, system meshes, sizes, download into the browser and versions; library implants in the slices and the panoramic |
-| `src/waxup/` | Waxup: tooth library loader, model (arch placement, mirror), chain (contacts, tube, chain / single / tube, pins, setup in contact), sculpting, panel state and setup |
+| `src/waxup/` | Waxup: tooth library loader (BodyParts3D crowns, CC BY-SA 2.1 JP), model (arch placement, mirror), chain (contacts, tube, chain / single / tube, pins, setup in contact), sculpting, panel state and setup |
 | `src/views/waxupEdit.ts`, `src/views/waxContours.ts` | Waxup editing with the mouse in every view, tooth outlines in the slices |
 | `src/history.ts`, `src/planHistory.ts` | Undo / redo: one history of the plan, split into channels (implants, curves, segments, nerves, scans, rulers) |
 | `src/ui/undoUi.ts`, `keyboard.ts` | Undo / redo buttons and keyboard shortcuts |

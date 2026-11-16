@@ -72,8 +72,9 @@ test('a dropped folder is listed under Recent and reopens from the start screen'
 test('a project saved through the save dialog is listed under Recent at once, and reopens from there', async () => {
   // the save dialog (Chrome / Edge) gives the saved file: here a file in the page's private file system
   await page.addInitScript(() => {
-    (window as unknown as { showSaveFilePicker: (o: { suggestedName: string }) => Promise<FileSystemFileHandle> }).showSaveFilePicker = async (o) =>
-      (await navigator.storage.getDirectory()).getFileHandle(o.suggestedName, { create: true });
+    // the person picks the same file each time (the suggested name changes with the minute)
+    (window as unknown as { showSaveFilePicker: (o: { suggestedName: string }) => Promise<FileSystemFileHandle> }).showSaveFilePicker = async () =>
+      (await navigator.storage.getDirectory()).getFileHandle('TEST plan.qdp.zip', { create: true });
   });
   await page.goto('./');
   // open the scan from the previous test
