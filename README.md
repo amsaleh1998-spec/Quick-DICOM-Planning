@@ -209,7 +209,8 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   *Undo point*, *Done*; drag a curve point to adjust it, *Clear curve* to start over.
 - **3D** tab: the 3D view full screen.
 - **Ruler** (MPR and Plan toolbars): drag from the start to the end point, or tap the start, then the end – in any slice
-  or the panoramic. Drag a ruler end to adjust it, double-tap a ruler to delete it, *Clear rulers* removes all.
+  or the panoramic. Drag a ruler end to adjust it, double-tap a ruler to delete it (with a mouse: right-click it, or click it and press
+  Backspace / Delete), *Clear rulers* removes all.
   Measurements are shared with the desktop version through project files.
 - Touch: swipe to scroll slices (panoramic: left/right along the arch, up/down buccal/lingual; cross-sections: along the
   arch; axial planning view: level), tap to move the crosshair / pick a position, pinch to zoom, two fingers to pan,
@@ -236,8 +237,10 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 **Measurements**
 - *Ruler* (top bar or **R**): click the first point, then the second point on any slice – MPR, axial, cross-sections,
   tangential, or the panoramic (distances on the developed panoramic surface). The tool then switches off; ruler ends can
-  be dragged at any time to adjust them. Hover a ruler and press Delete (or double-click it) to remove it, *Clear* removes
-  all, Esc cancels a ruler in progress. A ruler shows on the slice it was drawn on.
+  be dragged at any time to adjust them. To remove a ruler: **right-click it**, or **click it** (it is highlighted) and
+  press **Backspace / Delete** – also once the mouse has moved on; hovering it and pressing Delete, or double-clicking it,
+  works too. Esc or a click elsewhere lets a selected ruler go; a right-drag that starts on a ruler still zooms.
+  *Clear* removes all, Esc cancels a ruler in progress. A ruler shows on the slice it was drawn on.
 - Abutments: generic multi-unit abutments (straight, 17°, 30°) with 1–5 mm gingival height and adjustable rotation.
   Profile: Ø3.5 mm at the implant widening to Ø4.8 mm at the gingival level, then a 2.5 mm head tapering to Ø3 mm,
   followed by a Ø3 × 15 mm prosthetic axis (shown translucent, not clickable) along the abutment direction; *Auto-align* picks angulation + rotation that bring the abutment closest to vertical. Abutment-to-abutment
