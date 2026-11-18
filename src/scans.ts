@@ -4,17 +4,19 @@ import type { MeshData } from './meshio';
 import { vertexNormals } from './meshio';
 import { Affine, invert } from './register';
 
-export type ScanKind = 'upper' | 'lower' | 'antagonist' | 'waxup' | 'other';
+export type ScanKind = 'upper' | 'lower' | 'antagonist' | 'waxup' | 'denture' | 'other';
 
 export const SCAN_KINDS: { kind: ScanKind; label: string; color: [number, number, number] }[] = [
   { kind: 'upper', label: 'Upper jaw', color: [242, 196, 178] },
   { kind: 'lower', label: 'Lower jaw', color: [178, 210, 242] },
   { kind: 'antagonist', label: 'Antagonist', color: [205, 205, 212] },
   { kind: 'waxup', label: 'Wax-up', color: [250, 226, 140] },
+  { kind: 'denture', label: 'Denture (dual scan)', color: [244, 168, 196] },
   { kind: 'other', label: 'Other', color: [186, 236, 190] },
 ];
 
-export type PlacementMethod = 'original' | 'points' | 'surface' | 'copy';
+/** markers: a dual-scan denture, placed by its radiopaque markers */
+export type PlacementMethod = 'original' | 'points' | 'surface' | 'copy' | 'markers';
 
 export interface Placement {
   method: PlacementMethod;
@@ -25,6 +27,8 @@ export interface Placement {
   within05?: number;
   /** target surface used for matching */
   target?: string;
+  /** markers: how many radiopaque markers were matched */
+  markers?: number;
 }
 
 export interface Scan {
@@ -148,6 +152,8 @@ export function placementLabel(s: Scan): string {
       return `alignment of ${p.from ?? 'another scan'}`;
     case 'points':
       return `matched by points${fit}`;
+    case 'markers':
+      return `placed by ${p.markers ?? '?'} radiopaque markers${p.rms != null ? ` · fit ${p.rms.toFixed(2)} mm` : ''}`;
     default:
       return `matched by surfaces${fit}`;
   }

@@ -468,6 +468,12 @@
           <section id="panel-scans" class="panel" data-panel="scans">
             <div class="ph"><h2>Intraoral scans</h2><button id="btn-scan-import" class="primary" title="Import an intraoral scan, antagonist or wax-up (STL, PLY, OBJ) – or drop the file on the viewer">Import…</button></div>
             <input id="scan-input" type="file" accept=".stl,.ply,.obj" multiple hidden />
+            <input id="dual-files" type="file" multiple hidden />
+            <input id="dual-folder" type="file" webkitdirectory multiple hidden />
+            <div class="dual-box">
+              <div class="dual-head"><b>Dual scan</b><button id="btn-dual-scan" title="Dual scan protocol: open the CBCT of the denture alone (with its radiopaque markers) – the denture is segmented from it and placed in this CBCT by its markers">Denture CBCT…</button></div>
+              <div class="muted small">The denture scanned alone, with radiopaque markers: matched on its markers and placed in this patient's CBCT.</div>
+            </div>
             <ul id="scan-list" class="obj-list"></ul>
             <div id="scan-edit" class="hidden edit-box">
               <div class="row">

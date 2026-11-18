@@ -3479,3 +3479,105 @@ details.sub[open] > summary::before {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* ---- dual scan ---- */
+.dual-box {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.dual-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.modal.dual-scan {
+  max-width: 760px;
+}
+.dual-scan .ds-pick {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+.dual-scan .ds-result {
+  margin: 8px 0 12px;
+}
+.dual-scan .ds-result .ok {
+  color: #4ade80;
+}
+.dual-scan .ds-result .err {
+  color: #ff8a5c;
+}
+.dual-scan .ds-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+}
+.dual-scan figure {
+  margin: 0;
+}
+.dual-scan canvas {
+  display: block;
+  background: #000;
+  border-radius: 6px;
+  image-rendering: auto;
+}
+.dual-scan figcaption {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.dual-scan .ds-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0 10px;
+}
+.ds-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #4ade80;
+  display: inline-block;
+}
+.ds-dot.miss {
+  border-color: #fb923c;
+  margin-left: 8px;
+}
+.ds-swatch {
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+  background: rgb(244, 140, 180);
+  display: inline-block;
+  margin-left: 8px;
+}
+.dual-scan .ds-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dual-scan .ds-controls .ds-thr {
+  flex: 1;
+}
+.dual-scan .ds-controls details {
+  margin-top: 8px;
+}
+.dual-scan .ds-controls details label {
+  display: inline-flex;
+  margin: 6px 8px 6px 0;
+}
+.dual-scan .ds-mthr {
+  width: 90px;
+}
+.dual-scan footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}

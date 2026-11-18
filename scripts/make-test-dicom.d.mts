@@ -9,4 +9,12 @@ export function makeTestSeries(opts?: {
   /** file name prefix */
   prefix?: string;
   slices?: number;
+  cols?: number;
+  rows?: number;
+  /** pixel and slice spacing (mm) */
+  ps?: number;
+  dz?: number;
+  /** custom content: HU at (x, y, height above the lowest slice), mm */
+  voxel?: ((x: number, y: number, z: number) => number) | null;
+  description?: string;
 }): { name: string; data: Uint8Array }[];

@@ -18,14 +18,27 @@ export const TEST_SERIES = { cols: 80, rows: 70, slices: 50, ps: 0.4, dz: 0.5, i
  * `patient`: the made-up patient written into the files; `uid` / `prefix`: another series (a
  * second patient in the same folder needs its own series UID and file names).
  */
-export function makeTestSeries({ noExt = false, raw = null, patient = null, uid = null, prefix = 'IMG', slices: nSlices = 50 } = {}) {
+export function makeTestSeries({
+  noExt = false,
+  raw = null,
+  patient = null,
+  uid = null,
+  prefix = 'IMG',
+  slices: nSlices = 50,
+  cols: nCols = 80,
+  rows: nRows = 70,
+  ps: pixel = 0.4,
+  dz: sliceGap = 0.5,
+  voxel = null,
+  description = 'Synthetic test series',
+} = {}) {
   const pat = { name: 'Test^Loader', id: 'PAT-0042', birth: '19800615', sex: 'F', ...(patient ?? {}) };
   const files = [];
-  const cols = 80;
-  const rows = 70;
+  const cols = nCols;
+  const rows = nRows;
   const slices = nSlices;
-  const ps = 0.4; // pixel spacing
-  const dz = 0.5; // slice spacing
+  const ps = pixel; // pixel spacing
+  const dz = sliceGap; // slice spacing
   const intercept = -1000;
   const seriesUid = uid ?? '1.2.826.0.1.3680043.8.498.1';
 
@@ -96,9 +109,12 @@ export function makeTestSeries({ noExt = false, raw = null, patient = null, uid 
         const y = j * ps;
         const zz = (slices - 1 - k) * dz; // height above the lowest slice
         let v = 0; // air (-1000 after rescale)
-        if (Math.hypot(x - 16, y - 14, zz - 12.25) < 8) v = 2000;
-        // marker: patient left (high x), anterior (low y), superior (high z)
-        if (x > 26 && y < 4 && zz > 20) v = 3500;
+        if (voxel) v = Math.max(0, Math.round(voxel(x, y, zz) + 1000)); // custom content (HU)
+        else {
+          if (Math.hypot(x - 16, y - 14, zz - 12.25) < 8) v = 2000;
+          // marker: patient left (high x), anterior (low y), superior (high z)
+          if (x > 26 && y < 4 && zz > 20) v = 3500;
+        }
         px[j * cols + i] = v;
       }
     }
@@ -116,7 +132,7 @@ export function makeTestSeries({ noExt = false, raw = null, patient = null, uid 
     groupLen.writeUInt32LE(meta.length, 8);
     const ds = Buffer.concat([
       el(0x0008, 0x0060, 'CS', 'CT'),
-      el(0x0008, 0x103e, 'LO', 'Synthetic test series'),
+      el(0x0008, 0x103e, 'LO', description),
       el(0x0008, 0x0070, 'LO', 'Synthetic Imaging Inc.'),
       el(0x0008, 0x1090, 'LO', 'CBCT-Test 3000'),
       el(0x0009, 0x0010, 'LO', 'PRIVATE CREATOR'),

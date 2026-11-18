@@ -458,6 +458,25 @@ cross-sections, the tangential view and the panoramic; colour, opacity, scan col
 changed per scan. They are saved in projects, follow *Apply rotate + crop*, and can be exported with *Export STL*
 (aligned, in DICOM coordinates).
 
+### Dual scan protocol
+
+For a denture-based plan (e.g. an edentulous jaw with a radiographic guide), the denture is scanned twice: **alone**,
+and **in the patient's mouth** with the patient. Both scans show the denture's radiopaque markers (e.g. gutta-percha
+dots). Open the patient's CBCT, then Scans panel → *Dual scan* → *Denture CBCT…* (DICOM files, a ZIP or a folder; the
+open case stays as it is):
+
+- **Markers** – small, compact, very bright blobs (0.15–60 mm³, under 7 mm across) are found in both scans and matched
+  by the distances between them, which do not change when the denture moves. Extra blobs in the patient's scan
+  (metal, artefacts) and markers hidden there are tolerated; at least 3 must match, 5 or more spread around the arch
+  give a reliable placement. The dialog shows how many matched and the fit (mm); the threshold for the markers can be
+  changed under *Markers* if they are not found.
+- **Denture** – the acrylic is segmented from the denture-only scan (air and acrylic are the only materials there):
+  the threshold is set automatically and can be changed on the slider, with a live preview from above and from the
+  front. Only the largest object is kept (no scanning supports or loose bits), inner hollows are filled.
+- *Segment and place the denture* adds it as a scan of type *Denture (dual scan)*, placed in the patient's CBCT by
+  the markers – shown in 3D and as outlines in every slice, saved with the project and exported with *Export STL*
+  like any scan (and it can be refined with *Align…* if needed).
+
 ## Export STL
 
 **Export ▾ → STL** (top bar) writes binary STL files in millimetres in the **original DICOM patient coordinates**
@@ -536,6 +555,8 @@ npm run build      # static build in dist/ (relative paths, can be hosted anywhe
 ```
 
 `node scripts/make-test-dicom.mjs <dir>` writes a small synthetic DICOM series for testing the loader.
+`node scripts/make-dual-scan-test.mjs <dir>` writes a synthetic dual scan (a denture with 7 markers alone, and in a
+"patient" moved by a known transform, with bone, a metal crown, marker-like artefacts and noise).
 `python3 scripts/make-compressed-dicom.py <dir>` (python-gdcm, pydicom) turns it into compressed variants of every
 supported transfer syntax; the lossless ones must load with identical voxels.
 
