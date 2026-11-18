@@ -13,6 +13,7 @@ import { scanWorld } from './scans';
 import { invert } from './register';
 import { ScalarGrid, Tris, concatTris, coneMesh, fillCavities, isoSurface, meshToTris, smoothMesh, stlBytes, transformTris, tubeMesh } from './stl';
 import type { Volume } from './volume';
+import { LIBRARY_LICENSE_URL } from './waxup/library';
 import { toothWorld } from './waxup/waxup';
 import { writeZip } from './zip';
 
@@ -127,6 +128,24 @@ function implantSolid(app: App, imp: Implant, kind: 'implant' | 'abutment'): Tri
   return concatTris(
     parts.map((p) => coneMesh(addScaled(p.center, p.axis, -p.half), addScaled(p.center, p.axis, p.half), p.r0, p.r1)),
   );
+}
+
+/** Credit for library teeth in STL headers (80 characters at most with the file's name). */
+const TEETH_CREDIT = 'teeth: BodyParts3D (c) DBCLS, CC BY-SA 2.1 JP';
+
+/** The tooth library's licence text (as served with the app), or the credit when it cannot be read. */
+async function teethLicence(): Promise<Uint8Array> {
+  let text = '';
+  try {
+    const r = await fetch(LIBRARY_LICENSE_URL);
+    if (r.ok) text = await r.text();
+  } catch {
+    /* offline without a cached copy */
+  }
+  text ||=
+    'The waxup teeth are made from BodyParts3D, (c) The Database Center for Life Science (DBCLS),\n' +
+    'licensed under Creative Commons Attribution-Share Alike 2.1 Japan:\nhttps://creativecommons.org/licenses/by-sa/2.1/jp/deed.en\n';
+  return new TextEncoder().encode(text);
 }
 
 function collectItems(app: App): { groups: { title: string; items: Item[] }[]; base: string } {
@@ -356,7 +375,7 @@ export function showExportStl(app: App, hooks: ExportHooks, preset?: { scanId: n
     const affine = inScan ? invert(inScan.transform!) : app.vol?.info.patientAffine;
     const space = !inScan && affine ? 'LPS' : null;
     try {
-      const meshes: { name: string; tris: Tris }[] = [];
+      const meshes: { name: string; tris: Tris; credit: string }[] = [];
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         const label = `Building ${it.label}…`;
@@ -364,7 +383,8 @@ export function showExportStl(app: App, hooks: ExportHooks, preset?: { scanId: n
         await new Promise((r) => setTimeout(r, 0));
         const tris = await it.build(opts, (f) => hooks.showLoading(label, (i + f) / items.length));
         if (affine) transformTris(tris, affine);
-        if (tris.length) meshes.push({ name: it.name, tris });
+        // library teeth (waxup): BodyParts3D, CC BY-SA – the credit goes with them
+        if (tris.length) meshes.push({ name: it.name, tris, credit: it.key.startsWith('wax-') ? TEETH_CREDIT : '' });
       }
       if (!meshes.length) {
         hooks.setStatus('Nothing to export – the selected objects are empty.', true);
@@ -380,7 +400,8 @@ export function showExportStl(app: App, hooks: ExportHooks, preset?: { scanId: n
       if (combined || meshes.length === 1) {
         const tris = meshes.length === 1 ? meshes[0].tris : concatTris(meshes.map((x) => x.tris));
         const nm = meshes.length === 1 ? meshes[0].name : 'export';
-        blob = new Blob([stlBytes(tris, nm, space) as BlobPart], { type: 'model/stl' });
+        const credit = meshes.some((x) => x.credit) ? TEETH_CREDIT : '';
+        blob = new Blob([stlBytes(tris, nm, space, credit) as BlobPart], { type: 'model/stl' });
         filename = `${base}_${safe(nm)}.stl`;
         type = stlType;
       } else {
@@ -389,8 +410,10 @@ export function showExportStl(app: App, hooks: ExportHooks, preset?: { scanId: n
           let fn = `${base}_${safe(x.name)}.stl`;
           for (let n = 2; used.has(fn); n++) fn = `${base}_${safe(x.name)}_${n}.stl`;
           used.add(fn);
-          return { name: fn, data: stlBytes(x.tris, x.name, space) };
+          return { name: fn, data: stlBytes(x.tris, x.name, space, x.credit) };
         });
+        // waxup teeth: the licence and credit of the tooth library go into the ZIP with them
+        if (meshes.some((x) => x.credit)) entries.push({ name: 'LICENSE-teeth-BodyParts3D.txt', data: await teethLicence() });
         blob = await writeZip(entries, (f) => hooks.showLoading('Compressing…', 0.95 + 0.05 * f));
         filename = `${base}_STL${inScan ? `_${safe(inScan.name)}-coords` : ''}.zip`;
         type = { description: 'ZIP of STL files', accept: { 'application/zip': ['.zip'] } };

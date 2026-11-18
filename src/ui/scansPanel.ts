@@ -6,6 +6,7 @@ import { showAlignment, showPlacement } from '../alignUi';
 import { showExportStl } from '../exportStl';
 import { $, app, fromHex, hideLoading, rgbCss, setList, setStatus, showLoading, toHex, escapeHtml } from './shell';
 import { exportHooks } from './save';
+import { editMesh } from './meshEditor';
 
 const scanList = $('scan-list');
 const scanInput = $<HTMLInputElement>('scan-input');
@@ -94,6 +95,15 @@ $('btn-scan-align').onclick = () => {
 $('btn-scan-place').onclick = () => {
   const s = activeScan();
   if (s) showPlacement(app, s, alignHooks);
+};
+$('btn-scan-mesh').onclick = async () => {
+  const s = activeScan();
+  if (!s) return;
+  const edited = await editMesh(s.mesh, { title: `Edit mesh – ${s.name}`, color: s.color, okLabel: 'Apply' });
+  if (!edited || edited === s.mesh) return;
+  s.mesh = edited;
+  app.changed();
+  setStatus(`“${s.name}” edited: ${(edited.idx.length / 3).toLocaleString()} triangles – Ctrl+Z undoes it.`);
 };
 $('btn-scan-export').onclick = () => {
   const s = activeScan();

@@ -41,7 +41,9 @@ main() {
       case "$a" in *"whole series"*) continue ;; esac
       APP="$a"
       break
-    done < <(find "$d" -maxdepth 3 -type d -name "$NAME.app" -print0 2>/dev/null)
+    # the app is called QDP (short, so the patient's name shows in the window list), or by its
+    # full name in installs made before that
+    done < <(find "$d" -maxdepth 3 -type d \( -name "$NAME.app" -o -name "QDP.app" \) -print0 2>/dev/null)
     [ -n "$APP" ] && break
   done
   if [ -z "$APP" ]; then

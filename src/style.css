@@ -3468,3 +3468,278 @@ details.sub[open] > summary::before {
 .help-cols dd {
   color: var(--muted);
 }
+
+/* credit of the tooth library (BodyParts3D, CC BY-SA) at the foot of the Waxup panel */
+.wax-credit {
+  margin: 14px 0 4px;
+  line-height: 1.45;
+}
+.wax-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---- dual scan ---- */
+.dual-box {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.dual-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.modal.dual-scan {
+  max-width: 760px;
+}
+.dual-scan .ds-pick {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+.dual-scan .ds-result {
+  margin: 8px 0 12px;
+}
+.dual-scan .ds-result .ok {
+  color: #4ade80;
+}
+.dual-scan .ds-result .err {
+  color: #ff8a5c;
+}
+.dual-scan .ds-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+}
+.dual-scan figure {
+  margin: 0;
+}
+.dual-scan .ds-views canvas {
+  display: block;
+  background: #000;
+  border-radius: 6px;
+  image-rendering: auto;
+}
+.dual-scan figcaption {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.dual-scan .ds-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0 10px;
+}
+.ds-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #4ade80;
+  display: inline-block;
+}
+.ds-dot.miss {
+  border-color: #fb923c;
+  margin-left: 8px;
+}
+.ds-swatch {
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+  background: rgb(244, 140, 180);
+  display: inline-block;
+  margin-left: 8px;
+}
+.dual-scan .ds-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dual-scan .ds-controls .ds-thr {
+  flex: 1;
+}
+.dual-scan .ds-controls details {
+  margin-top: 8px;
+}
+.dual-scan .ds-controls details label {
+  display: inline-flex;
+  margin: 6px 8px 6px 0;
+}
+.dual-scan .ds-mthr {
+  width: 90px;
+}
+.dual-scan footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* ---- mesh editor ---- */
+.modal.mesh-editor {
+  max-width: 1280px;
+  height: min(880px, 92vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mesh-editor .me-intro {
+  margin: 6px 0 0;
+}
+.mesh-editor .me-body,
+.dual-big .ds-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+.me-tools {
+  width: 236px;
+  flex: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.me-tools section,
+.ds-side section {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.me-tools h3,
+.ds-side h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.me-tools p {
+  margin: 2px 0 6px;
+}
+.me-tools section > button {
+  width: 100%;
+  margin-bottom: 4px;
+}
+.me-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.me-modes button {
+  width: 100%;
+  margin: 0;
+}
+.me-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 4px 0;
+}
+.me-size input {
+  flex: 1;
+  min-width: 0;
+}
+.me-size output {
+  min-width: 44px;
+  text-align: right;
+}
+.me-undo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.me-undo-row button {
+  flex: 1;
+  margin: 0;
+}
+.me-stats {
+  margin: 0 2px;
+}
+.mesh-editor .me-view {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.mesh-editor .me-view .mv,
+.dual-big .ds-3d .mv {
+  flex: 1;
+}
+.mesh-editor footer,
+.dual-big footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* dual scan: one large window – markers and threshold | the 3D denture | the editing tools */
+.modal.dual-big {
+  max-width: 1720px;
+  height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dual-big .ds-side {
+  width: 300px;
+  flex: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dual-big .ds-result {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.dual-big .ds-views {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.dual-big .ds-legend {
+  margin: 6px 0;
+}
+.dual-big .ds-thr-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.dual-big .ds-thr {
+  width: 100%;
+}
+.dual-big .ds-mrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 6px 0;
+}
+.dual-big .ds-3d {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  position: relative;
+}
+.dual-big .ds-busy {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 3;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  pointer-events: none;
+}

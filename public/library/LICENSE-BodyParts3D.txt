@@ -1,0 +1,42 @@
+Tooth library of Quick DICOM Planning (teeth-bodyparts3d.json)
+================================================================
+
+The tooth crowns in teeth-bodyparts3d.json are made from BodyParts3D:
+
+  BodyParts3D, (c) The Database Center for Life Science (DBCLS),
+  licensed under Creative Commons Attribution-Share Alike 2.1 Japan (CC BY-SA 2.1 JP)
+  https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en
+  Source: https://dbarchive.biosciencedbc.jp/en/bodyparts3d/ (BodyParts3D / Anatomography)
+
+Changes made to the BodyParts3D teeth:
+  - each of the 28 permanent teeth cut across its long axis at the average crown height from the
+    incisal edge / cusp tips, the root removed and the cut closed with a flat cap (crowns only);
+  - wisdom teeth 18, 28, 38, 48 (not in BodyParts3D) derived from the second molars (92 %, set
+    behind them);
+  - turned into the library's axes, simplified (about 0.35 mm edges), numbered (FDI) and the cusp
+    tips / incisal edges marked for the waxup.
+  Scripts: scripts/make-bodyparts3d-crowns.py and scripts/make-tooth-library.py
+  (https://github.com/amsaleh1998-spec/Quick-DICOM-Planning).
+
+This tooth library is a derivative work of BodyParts3D and is licensed under the same licence,
+Creative Commons Attribution-Share Alike 2.1 Japan. Waxups designed with it (e.g. exported STL
+files of the library teeth) are adaptations of it too: share them under the same licence and
+keep this credit. The licence covers the tooth library only - not the rest of the app.
+
+----------------------------------------------------------------
+The BodyParts3D licence statement (LICENSE_content of the BodyParts3D files):
+
+Summary: Creative Commons License Creative Commons Attribution-Inheritance 2.1 Japan (CC BY-SA)
+
+Original: http://lifesciencedb.jp/bp3d/info_en/license/index.html
+
+Translation: https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en
+
+About terms of use and credit description:
+The standard licenses for the contents (including images created by Anatomography) published on this site (http://lifesciencedb.jp/bp3d, http://lifesciencedb.jp/ag) are as follows.
+
+Creative Commons License Creative Commons Attribution-Inheritance 2.1 Japan
+
+Please be sure to display the following credits before using.
+
+BodyParts3D, Copyrightc 2008 Life Science Integrated Database Center licensed by CC Display-Inheritance 2.1 Japan

@@ -16,13 +16,21 @@ function updatePatientBadge() {
   $('patient-chip').classList.toggle('empty', !info);
   updateWindowTitle();
 }
-/** Window / tab title starts with the patient (and scan date), so several open scans are easy to tell apart. */
+/**
+ * Window / tab title starts with the patient (and scan date), so several open scans are easy to tell
+ * apart. In the installed app it starts with the app's name instead ("QDP – DOE, Jane · 12.03.2025"):
+ * Chrome and Edge show an installed app's window title only when it begins with the app's name –
+ * otherwise just the name (one window) or "QDP - title" – and that title is what the taskbar shows.
+ */
+const APP_NAME = 'QDP'; // the installed app's name (manifest.webmanifest)
+const installedWindow = () =>
+  typeof matchMedia === 'function' && ['standalone', 'window-controls-overlay', 'minimal-ui'].some((m) => matchMedia(`(display-mode: ${m})`).matches);
 function updateWindowTitle() {
   const info = app.vol?.info;
   const who = info ? formatPatientName(info.patientName) || info.seriesDescription?.trim() || '' : '';
   const date = info?.studyDate ? formatDicomDate(info.studyDate) : '';
   const lead = [who, date].filter(Boolean).join(' · ');
-  const title = lead ? `${lead} – Quick DICOM Planning` : 'Quick DICOM Planning';
+  const title = installedWindow() ? (lead ? `${APP_NAME} – ${lead}` : APP_NAME) : lead ? `${lead} – Quick DICOM Planning` : 'Quick DICOM Planning';
   if (document.title !== title) document.title = title;
 }
 const onNameInput = () => {

@@ -17,6 +17,7 @@ import { refreshWaxupPanel } from './ui/waxupPanel';
 import { refreshSegmentsPanel } from './ui/segmentsPanel';
 import { refreshNervesPanel } from './ui/nervesPanel';
 import { refreshScanUi } from './ui/scansPanel';
+import './ui/dualScanUi';
 import { refreshViewSettings } from './ui/viewSettings';
 import { refreshUndo } from './ui/undoUi';
 import { refreshObjects } from './ui/objectsPanel';

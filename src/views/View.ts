@@ -131,6 +131,8 @@ export abstract class View {
   }
   /** Which kind of measurements this view shows/creates (null = no ruler). */
   protected measureKind: 'plane' | 'pano' | null = null;
+  /** ruler under a right-button press (deleted on release when the mouse did not move) */
+  private rightOnRuler: number | null = null;
   private rulerDrag: { m: Measurement; end: 'a' | 'b'; created: boolean } | null = null;
   /** time the last ruler was completed (ignore the dblclick of a fast double click) */
   private rulerDoneAt = 0;
@@ -506,7 +508,14 @@ export abstract class View {
       o.moveTo(a[0], a[1]);
       o.lineTo(b[0], b[1]);
       o.stroke();
-      const hot = m.id === this.app.hoverMeasurementId || m === this.app.pendingMeasurement?.m;
+      const sel = m.id === this.app.selectedMeasurementId;
+      const hot = sel || m.id === this.app.hoverMeasurementId || m === this.app.pendingMeasurement?.m;
+      if (sel) {
+        // selected: a soft glow around it (Delete / Backspace removes it)
+        o.strokeStyle = 'rgba(255,225,77,0.35)';
+        o.lineWidth = 8;
+        o.stroke();
+      }
       o.strokeStyle = '#ffe14d';
       o.lineWidth = hot ? 2.5 : 1.5;
       o.stroke();
@@ -775,6 +784,11 @@ export abstract class View {
       const button = IS_MAC && e.button === 2 && e.ctrlKey ? 0 : e.button;
       this.middleDown = button === 1;
       const wax = this.app.wax;
+      // a ruler under the pointer: a click selects it (Delete / Backspace removes it), a right click
+      // without moving deletes it; a click anywhere else lets it go
+      const onRuler = this.measureKind ? (this.hitMeasureEnd(p)?.m ?? this.hitMeasureLine(p)) : null;
+      this.rightOnRuler = button === 2 ? (onRuler?.id ?? null) : null;
+      if (button === 0) this.app.selectMeasurement(onRuler?.id ?? null);
       if (button === 2) this.drag = 'right';
       // waxup panel open: a press on a tooth goes to the waxup first (Shift = scale, Ctrl = rotate)
       else if (
@@ -792,6 +806,10 @@ export abstract class View {
         // edit an existing ruler end without the tool
         this.rulerDrag = { ...this.hitMeasureEnd(p)!, created: false };
         this.drag = 'ruler';
+      } else if (button === 0 && onRuler) {
+        // (selected above – the click does not also move the crosshair or pick what lies under it)
+        this.drag = 'none';
+        e.preventDefault();
       } else if (button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
       if (this.drag !== 'none') {
         c.setPointerCapture(e.pointerId);
@@ -905,6 +923,12 @@ export abstract class View {
         const moved = Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) > 3;
         this.onLeftUp(p, e, moved);
       }
+      // right click on a ruler (no drag): delete it
+      if (this.drag === 'right' && this.rightOnRuler !== null && e.type === 'pointerup') {
+        const p = this.pos(e);
+        if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= 3) this.app.deleteMeasurement(this.rightOnRuler);
+      }
+      this.rightOnRuler = null;
       if (this.drag === 'pan' && this.middleDown && e.type === 'pointerup') {
         const p = this.pos(e);
         if (Math.hypot(p[0] - this.downPos[0], p[1] - this.downPos[1]) <= 3) this.onMiddleClick(p);

@@ -138,6 +138,8 @@ export class App {
   pendingMeasurement: { m: Measurement; view: object } | null = null;
   /** measurement under the mouse (Delete removes it) */
   hoverMeasurementId: number | null = null;
+  /** measurement clicked last (Delete / Backspace removes it, also when the mouse has moved on) */
+  selectedMeasurementId: number | null = null;
   /** what right-drag does */
   rightDrag: 'zoom' | 'wl' = 'zoom';
   /** mouse-wheel events are ignored until then (the SpaceMouse driver also emits wheel events) */
@@ -1551,7 +1553,15 @@ export class App {
     this.measurements = this.measurements.filter((m) => m.id !== id);
     if (this.pendingMeasurement?.m.id === id) this.pendingMeasurement = null;
     if (this.hoverMeasurementId === id) this.hoverMeasurementId = null;
+    if (this.selectedMeasurementId === id) this.selectedMeasurementId = null;
     this.changed();
+  }
+
+  /** Select a measurement (null: none). */
+  selectMeasurement(id: number | null) {
+    if (this.selectedMeasurementId === id) return;
+    this.selectedMeasurementId = id;
+    this.requestRender();
   }
 
   /** Drop a ruler that only has its first point. */
@@ -1567,6 +1577,7 @@ export class App {
     this.measurements = ms;
     this.pendingMeasurement = null;
     this.hoverMeasurementId = null;
+    this.selectedMeasurementId = null;
     nextMeasurementId = Math.max(nextMeasurementId, ...ms.map((m) => m.id + 1));
     this.changed();
   }

@@ -4,17 +4,19 @@ import type { MeshData } from './meshio';
 import { vertexNormals } from './meshio';
 import { Affine, invert } from './register';
 
-export type ScanKind = 'upper' | 'lower' | 'antagonist' | 'waxup' | 'other';
+export type ScanKind = 'upper' | 'lower' | 'antagonist' | 'waxup' | 'denture' | 'other';
 
 export const SCAN_KINDS: { kind: ScanKind; label: string; color: [number, number, number] }[] = [
   { kind: 'upper', label: 'Upper jaw', color: [242, 196, 178] },
   { kind: 'lower', label: 'Lower jaw', color: [178, 210, 242] },
   { kind: 'antagonist', label: 'Antagonist', color: [205, 205, 212] },
   { kind: 'waxup', label: 'Wax-up', color: [250, 226, 140] },
+  { kind: 'denture', label: 'Denture (dual scan)', color: [244, 168, 196] },
   { kind: 'other', label: 'Other', color: [186, 236, 190] },
 ];
 
-export type PlacementMethod = 'original' | 'points' | 'surface' | 'copy';
+/** markers: a dual-scan denture, placed by its radiopaque markers */
+export type PlacementMethod = 'original' | 'points' | 'surface' | 'copy' | 'markers';
 
 export interface Placement {
   method: PlacementMethod;
@@ -25,6 +27,8 @@ export interface Placement {
   within05?: number;
   /** target surface used for matching */
   target?: string;
+  /** markers: how many radiopaque markers were matched */
+  markers?: number;
 }
 
 export interface Scan {
@@ -54,9 +58,15 @@ export function guessKind(name: string): ScanKind {
   const n = name.toLowerCase();
   if (/wax|diag|setup|set-up|prosth|design|crown/.test(n)) return 'waxup';
   if (/antag/.test(n)) return 'antagonist';
+  return guessJaw(n) ?? 'other';
+}
+
+/** The jaw a file name names (upper / lower), if any – also for wax-ups and antagonists. */
+export function guessJaw(name: string): 'upper' | 'lower' | null {
+  const n = name.toLowerCase();
   if (/upper|maxill|oberk|\bmx\b|_ok\b|\bok_|superior|\bu[-_ ]?jaw/.test(n)) return 'upper';
   if (/lower|mandib|unterk|\bmd\b|_uk\b|\buk_|inferior|\bl[-_ ]?jaw/.test(n)) return 'lower';
-  return 'other';
+  return null;
 }
 
 export function createScan(fileName: string, mesh: MeshData, kind = guessKind(fileName)): Scan {
@@ -89,6 +99,18 @@ interface WorldCache {
   nrm: Float32Array;
 }
 const cache = new WeakMap<Scan, WorldCache>();
+const meshIds = new WeakMap<MeshData, number>();
+let nextMeshId = 1;
+/** A number for each mesh object: a scan's mesh is replaced (never changed in place) when it is edited. */
+export function meshId(m: MeshData): number {
+  let id = meshIds.get(m);
+  if (!id) meshIds.set(m, (id = nextMeshId++));
+  return id;
+}
+/** Key of a scan's geometry in world space: its mesh and its placement (for caches). */
+export function geometryKey(s: Scan): string {
+  return `${meshId(s.mesh)}:${s.transform ? s.transform.join(',') : '-'}`;
+}
 const localNormals = new WeakMap<MeshData, Float32Array>();
 
 export function scanNormals(m: MeshData): Float32Array {
@@ -104,7 +126,7 @@ export function scanNormals(m: MeshData): Float32Array {
 export function scanWorld(s: Scan): { pos: Float32Array; nrm: Float32Array } | null {
   const T = s.transform;
   if (!T) return null;
-  const key = T.join(',');
+  const key = geometryKey(s);
   const c = cache.get(s);
   if (c && c.key === key) return c;
   const src = s.mesh.pos;
@@ -128,7 +150,7 @@ export function scanWorld(s: Scan): { pos: Float32Array; nrm: Float32Array } | n
 
 /** Changes that affect drawing (for view caches). */
 export function scansKey(scans: Scan[]): string {
-  return JSON.stringify(scans.map((s) => [s.id, s.visible, s.color, s.opacity, s.vertexColors, s.transform]));
+  return JSON.stringify(scans.map((s) => [s.id, s.visible, s.color, s.opacity, s.vertexColors, s.transform, meshId(s.mesh)]));
 }
 
 export function placementLabel(s: Scan): string {
@@ -142,6 +164,8 @@ export function placementLabel(s: Scan): string {
       return `alignment of ${p.from ?? 'another scan'}`;
     case 'points':
       return `matched by points${fit}`;
+    case 'markers':
+      return `placed by ${p.markers ?? '?'} radiopaque markers${p.rms != null ? ` · fit ${p.rms.toFixed(2)} mm` : ''}`;
     default:
       return `matched by surfaces${fit}`;
   }

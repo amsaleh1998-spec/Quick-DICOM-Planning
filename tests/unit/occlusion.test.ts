@@ -7,7 +7,7 @@ import { HeightField, abrade, adaptTooth, cutTooth, jawFrame, reliefScale } from
 import { IDENTITY } from '../../src/register';
 import type { Frame, Vec2 } from '../../src/math';
 
-const lib = parseLibrary(await unpackLibrary(JSON.parse(readFileSync('public/library/teeth-generic.json', 'utf8'))));
+const lib = parseLibrary(await unpackLibrary(JSON.parse(readFileSync('public/library/teeth-bodyparts3d.json', 'utf8'))));
 const curve: Vec2[] = [];
 for (let a = -34; a <= 34; a += 4) curve.push([a, 0.045 * a * a]);
 const F: Frame = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];

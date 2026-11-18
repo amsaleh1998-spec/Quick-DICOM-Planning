@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-Build the waxup tooth library (public/library/teeth-generic.bin) from two STL files exported from a
-dental CAD: the upper teeth (18-28) and the lower teeth (48-38), one closed shell per tooth, in the
-usual CAD orientation (+z superior / occlusal plane roughly horizontal, +y anterior, right-handed).
+Build the waxup tooth library (public/library/teeth-*.json) from two STL files: the upper teeth
+(18-28) and the lower teeth (48-38), one closed crown per tooth, in the usual CAD orientation
+(+z superior / occlusal plane roughly horizontal, +y anterior, right-handed) - e.g. the output of
+scripts/make-bodyparts3d-crowns.py.
 
     pip install numpy pyfqmr
-    python3 scripts/make-tooth-library.py upper.stl lower.stl public/library/teeth-generic.json
+    python3 scripts/make-tooth-library.py upper.stl lower.stl public/library/teeth-bodyparts3d.json BodyParts3D
+
+The library's name (last argument) goes into the file; for BodyParts3D its source and licence too.
 
 What it does
   - splits each file into its teeth (connected shells) and numbers them (FDI) along the arch;
@@ -28,6 +31,18 @@ import numpy as np
 import pyfqmr
 
 QUANT = 2000.0  # positions in 1/2000 mm
+
+# what the library file says about where its teeth come from (and under which licence)
+CREDITS = {
+    'BodyParts3D': {
+        'source': 'BodyParts3D, (c) The Database Center for Life Science (DBCLS)',
+        'license': 'CC BY-SA 2.1 JP',
+        'licenseUrl': 'https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en',
+        'sourceUrl': 'https://dbarchive.biosciencedbc.jp/en/bodyparts3d/',
+        'changes': 'Crowns only (roots cut off at the average crown height and the cut closed), wisdom teeth derived '
+                   'from the second molars, simplified and numbered (FDI) for the Quick DICOM Planning waxup.',
+    },
+}
 
 
 def load_stl(path):
@@ -150,7 +165,7 @@ def jaw_frame(teeth, fdi, upper):
     return R, origin
 
 
-def main(upper_path, lower_path, out_path):
+def main(upper_path, lower_path, out_path, name='Library'):
     teeth_out = []
     blobs = []
     offset = 0
@@ -211,7 +226,8 @@ def main(upper_path, lower_path, out_path):
     header = {
         'format': 'qdp-tooth-library',
         'version': 1,
-        'name': 'Generic',
+        'name': name,
+        **CREDITS.get(name, {}),
         'axes': 'per jaw: x patient left, y posterior, z superior; midline x = 0, front y = 0, occlusal plane z = 0; mm',
         'quant': 1 / QUANT,
         'arch': arches,
@@ -227,4 +243,4 @@ def main(upper_path, lower_path, out_path):
 
 
 if __name__ == '__main__':
-    main(*sys.argv[1:4])
+    main(*sys.argv[1:5])

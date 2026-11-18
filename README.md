@@ -154,6 +154,9 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - Panoramic reconstruction along the curve, switchable between a thick **slab** and a thin **slice** (separate adjustable
   thicknesses; switch in the panoramic view's header). The mouse wheel in the panoramic moves the slice
   position buccal (up) / lingual (down); Alt+wheel moves the cross-sections along the curve. *Center* puts it back on the curve.
+  Implants follow the mode: in a **slice** only what the curved surface cuts of them is drawn, exactly as in the
+  cross-sections (the filled section with its outline, threads and all; nothing where the slice passes beside an
+  implant); in a **slab** every implant and abutment is drawn whole as a shaded 3D model, seen from the buccal side.
 - Three cross-sections perpendicular to the curve, or along the selected implant's axis (adjustable spacing); each wheel notch moves them exactly 1 mm along
   the curve. The *Curve* button in the axial view shows / hides the blue curve there (curve points can only be
   edited while it is shown); the *Curve* button in the cross-sections shows / hides their blue guide lines (hidden by default).
@@ -164,7 +167,9 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - Editing in any planning view: drag the body to move; drag the side outline to change the diameter; drag the apical end
   to change the length (the platform stays fixed). Dragging is damped (half speed) for fine control, and the value
   being changed is shown live on the implant for 5 seconds – click it to type an exact value. The selected implant has two rotation handles placed beyond its ends:
-  **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform.
+  **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform. With the prosthetic axis shown,
+  its top (pink ring) is a handle too: drag it to move the coronal part (the implant tilts around its apex) – in any
+  view, also for an implant that is not selected.
 - *Show prosthetic axis* (per implant): a Ø3 × 15 mm guide from the MUA top, or from the implant platform along the
   implant axis when there is no MUA. Adding an MUA switches it on; it can be turned off.
 - Implants are tapered by default (apex 1 mm narrower than the platform; untick *New implants tapered* for cylinders).
@@ -204,7 +209,8 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   *Undo point*, *Done*; drag a curve point to adjust it, *Clear curve* to start over.
 - **3D** tab: the 3D view full screen.
 - **Ruler** (MPR and Plan toolbars): drag from the start to the end point, or tap the start, then the end – in any slice
-  or the panoramic. Drag a ruler end to adjust it, double-tap a ruler to delete it, *Clear rulers* removes all.
+  or the panoramic. Drag a ruler end to adjust it, double-tap a ruler to delete it (with a mouse: right-click it, or click it and press
+  Backspace / Delete), *Clear rulers* removes all.
   Measurements are shared with the desktop version through project files.
 - Touch: swipe to scroll slices (panoramic: left/right along the arch, up/down buccal/lingual; cross-sections: along the
   arch; axial planning view: level), tap to move the crosshair / pick a position, pinch to zoom, two fingers to pan,
@@ -231,8 +237,10 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 **Measurements**
 - *Ruler* (top bar or **R**): click the first point, then the second point on any slice – MPR, axial, cross-sections,
   tangential, or the panoramic (distances on the developed panoramic surface). The tool then switches off; ruler ends can
-  be dragged at any time to adjust them. Hover a ruler and press Delete (or double-click it) to remove it, *Clear* removes
-  all, Esc cancels a ruler in progress. A ruler shows on the slice it was drawn on.
+  be dragged at any time to adjust them. To remove a ruler: **right-click it**, or **click it** (it is highlighted) and
+  press **Backspace / Delete** – also once the mouse has moved on; hovering it and pressing Delete, or double-clicking it,
+  works too. Esc or a click elsewhere lets a selected ruler go; a right-drag that starts on a ruler still zooms.
+  *Clear* removes all, Esc cancels a ruler in progress. A ruler shows on the slice it was drawn on.
 - Abutments: generic multi-unit abutments (straight, 17°, 30°) with 1–5 mm gingival height and adjustable rotation.
   Profile: Ø3.5 mm at the implant widening to Ø4.8 mm at the gingival level, then a 2.5 mm head tapering to Ø3 mm,
   followed by a Ø3 × 15 mm prosthetic axis (shown translucent, not clickable) along the abutment direction; *Auto-align* picks angulation + rotation that bring the abutment closest to vertical. Abutment-to-abutment
@@ -408,8 +416,16 @@ the future teeth.
   opens with it) – a drag on empty space still rotates the view, and an implant under the cursor comes first. In the
   slices the teeth react while the Waxup panel is open; their outlines stay in every slice. Undo / redo, projects and *Export ▾ → STL* (one file per jaw, DICOM patient
   coordinates) include the waxup.
-- The library (`public/library/teeth-generic.json`, 32 crowns) is built from a generic exocad tooth set by
-  `scripts/make-tooth-library.py` (split into teeth, FDI numbers, decimated to ~0.35 mm edges, cusp tips).
+- **Tooth library**: `public/library/teeth-bodyparts3d.json`, 32 crowns made from the teeth of
+  [BodyParts3D](https://dbarchive.biosciencedbc.jp/en/bodyparts3d/), © The Database Center for Life Science, licensed
+  under [CC BY-SA 2.1 Japan](https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en). Changes: each tooth cut across
+  its long axis at the average crown height and the cut closed (crowns only, no roots); the wisdom teeth (not in
+  BodyParts3D) derived from the second molars; simplified to ~0.35 mm edges, FDI numbers and cusp tips added
+  (`scripts/make-bodyparts3d-crowns.py`, then `scripts/make-tooth-library.py`). The tooth library is shared under the
+  same licence (CC BY-SA 2.1 JP) – see [`public/library/LICENSE-BodyParts3D.txt`](public/library/LICENSE-BodyParts3D.txt);
+  waxups made with it, e.g. exported tooth STL files, are adaptations of it too (the STL header and the export ZIP
+  carry the credit and the licence). The credit is shown in the Waxup panel. The licence covers the tooth library
+  only, not the rest of the app.
 
 ## Intraoral scans
 
@@ -424,7 +440,10 @@ The type is guessed from the file name (upper / lower / wax-up …) and can be c
   the upper wax-up copy the alignment of the upper jaw scan.
 - **Align to the CBCT** in a two-pane workspace (scan | CBCT). The CBCT side is the surface you choose: any segment
   (e.g. *Maxilla*) or the *3D render at the current threshold* (inside the crop box); closed hollow spaces are filled
-  so only the outer surface is matched.
+  so only the outer surface is matched. **By default it is the scan's own jaw's teeth** from the automatic
+  segmentation (*Upper teeth* for an upper jaw scan, *Lower teeth* for a lower one – the jaw is read from the type, or
+  from the file name for wax-ups and antagonists, e.g. `Waxup_lower.stl`); without them, a segment named like the jaw,
+  else the 3D render.
   - **Points** (the default; like Blue Sky Plan, RealGuide, exoplan): click a point on the scan, then the same point on the CBCT;
     at least 3 pairs. The fit is refined on the surface around the points (or on the painted areas).
   - **Surfaces** (like coDiagnostiX): paint the areas of the scan that are visible in the CBCT (tooth surfaces, not
@@ -438,6 +457,43 @@ Placed scans are drawn in the 3D view (composited with the volume and implants) 
 cross-sections, the tangential view and the panoramic; colour, opacity, scan colours, visibility and outlines can be
 changed per scan. They are saved in projects, follow *Apply rotate + crop*, and can be exported with *Export STL*
 (aligned, in DICOM coordinates).
+
+### Dual scan protocol
+
+For a denture-based plan (e.g. an edentulous jaw with a radiographic guide), the denture is scanned twice: **alone**,
+and **in the patient's mouth** with the patient. Both scans show the denture's radiopaque markers (e.g. gutta-percha
+dots). Open the patient's CBCT, then Scans panel → *Dual scan* → *Denture CBCT…* (DICOM files, a ZIP or a folder; the
+open case stays as it is):
+
+- **Markers** – small, compact, very bright blobs (0.15–60 mm³, under 7 mm across) are found in both scans and matched
+  by the distances between them, which do not change when the denture moves. Extra blobs in the patient's scan
+  (metal, artefacts) and markers hidden there are tolerated; at least 3 must match, 5 or more spread around the arch
+  give a reliable placement. The dialog shows how many matched and the fit (mm); the threshold for the markers can be
+  changed under *Markers* if they are not found.
+- **One window** – markers and their previews on the left, the **3D denture** in the middle and the editing tools
+  (below) on the right. The acrylic is segmented from the denture-only scan (air and acrylic are the only materials
+  there); the threshold is set automatically and the 3D denture **follows the slider live** (a quick preview while
+  it moves, full detail when it is let go). Only the largest object is kept (no scanning supports or loose bits),
+  inner hollows are filled. Edits made so far are applied again to the new segmentation.
+- *Place in the patient's CBCT* adds it as a scan of type *Denture (dual scan)*, placed by the markers – shown in 3D
+  and as outlines in every slice, saved with the project and exported with *Export STL* like any scan (and it can be
+  refined with *Align…* if needed).
+
+### Mesh editor
+
+The 3D view with clean-up tools – in the dual scan window, and for any scan (Scans panel → *Edit mesh…*):
+
+- **Select** (Esc) – **double-click** the part to keep, then *Remove the islands* (loose pieces are shown in orange);
+  or *Delete the selected part* (also Delete / Backspace), or *Keep the largest part*.
+- **Lasso** (T) – draw around what to cut away: through the whole mesh, or with *only what is visible* just the
+  surface seen from where you look.
+- **Cut brush** (B) – brush over what to cut away.
+- **Smooth brush** (S) – brush over an area to smooth just there (it keeps its size); the rest stays as it is.
+- Brush size: the slider or `[` / `]`. With a tool on, right-drag rotates and the wheel zooms.
+- **Holes** – their edges are drawn in orange; *Close the holes* fills them (watertight, facing the same way as the
+  surface around them).
+- *Undo* / *Redo* (Ctrl+Z / Ctrl+Y) inside the editor; leaving with changes asks once more. An applied edit of a
+  scan is one step of the app's undo.
 
 ## Export STL
 
@@ -465,9 +521,12 @@ oriented.
 The app can be installed from Chrome or Microsoft Edge and then registered for `.dcm`, `.dicom`, `.dic` and `.ima` files:
 
 1. Open the app in Chrome or Edge and click **Install app** in ⚙ Settings (or the install icon in the address bar /
-   ⋯ → *Apps* → *Install this site as an app*).
+   ⋯ → *Apps* → *Install this site as an app*). The installed app is called **QDP**, and its window title is
+   *QDP – DOE, Jane · 12.03.2025* – what the taskbar shows, so several open scans are easy to tell apart. (Chrome and
+   Edge show an installed app's window title only when it begins with the app's name; otherwise just the name.) (Apps installed before the rename may ask once to
+   accept the new name; the helpers below find the app under either name.)
 2. Double-click a `.dcm` file in Explorer. The first time, Windows asks which app to use: choose
-   **Quick DICOM Planning** and tick *Always*. The browser may also ask once to allow the app to open these files.
+   **QDP** and tick *Always*. The browser may also ask once to allow the app to open these files.
 3. **One-time setup:** the first time, the app asks you to choose the folder where your scans are saved
    (e.g. `D:\CBCT` – the higher up, the better). The app remembers it. From then on, double-clicking any scan inside
    that folder loads the whole series straight away – no question, no folder window. (A web app is never handed the
@@ -514,6 +573,8 @@ npm run build      # static build in dist/ (relative paths, can be hosted anywhe
 ```
 
 `node scripts/make-test-dicom.mjs <dir>` writes a small synthetic DICOM series for testing the loader.
+`node scripts/make-dual-scan-test.mjs <dir>` writes a synthetic dual scan (a denture with 7 markers alone, and in a
+"patient" moved by a known transform, with bone, a metal crown, marker-like artefacts and noise).
 `python3 scripts/make-compressed-dicom.py <dir>` (python-gdcm, pydicom) turns it into compressed variants of every
 supported transfer syntax; the lossless ones must load with identical voxels.
 
@@ -576,8 +637,8 @@ The scan is not part of the repository. See `tools/demo-video/README.md`.
 | `src/ui/install.ts` | Install app and the Windows / Mac double-click helper |
 | `src/ui/reorientPanel.ts`, `curvePanel.ts`, `implantsPanel.ts`, `segmentsPanel.ts`, `nervesPanel.ts`, `scansPanel.ts` | One module per side panel: its controls and its refresh |
 | `src/ui/viewSettings.ts`, `settings.ts`, `patient.ts` | Settings inside the 3D / panoramic views, the ⚙ Settings popover (input, SpaceMouse), the patient chip |
-| `src/implantLibrary.ts`, `src/ui/libraryPanel.ts`, `src/views/implantSections.ts` | Implant library: catalogue, system meshes, sizes, download into the browser and versions; library implants in the slices and the panoramic |
-| `src/waxup/` | Waxup: tooth library loader, model (arch placement, mirror), chain (contacts, tube, chain / single / tube, pins, setup in contact), sculpting, panel state and setup |
+| `src/implantLibrary.ts`, `src/ui/libraryPanel.ts`, `src/views/implantSections.ts`, `src/views/panoImplants.ts` | Implant library: catalogue, system meshes, sizes, download into the browser and versions; library implants in the slices and the panoramic |
+| `src/waxup/` | Waxup: tooth library loader (BodyParts3D crowns, CC BY-SA 2.1 JP), model (arch placement, mirror), chain (contacts, tube, chain / single / tube, pins, setup in contact), sculpting, panel state and setup |
 | `src/views/waxupEdit.ts`, `src/views/waxContours.ts` | Waxup editing with the mouse in every view, tooth outlines in the slices |
 | `src/history.ts`, `src/planHistory.ts` | Undo / redo: one history of the plan, split into channels (implants, curves, segments, nerves, scans, rulers) |
 | `src/ui/undoUi.ts`, `keyboard.ts` | Undo / redo buttons and keyboard shortcuts |
@@ -593,7 +654,7 @@ The scan is not part of the repository. See `tools/demo-video/README.md`.
 | `src/spacemouse.ts` | 3Dconnexion SpaceMouse input (WebHID reports, game-controller fallback) |
 | `src/views/overlays.ts` | 2D overlays: segment tint/outlines, cut traces, nerve tube sections and projections |
 | `src/implant.ts` | Implant/abutment model (platform/apex, MUA geometry) |
-| `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles, diameter/length dragging |
+| `src/views/implantEdit.ts` | Shared implant editing: move, C/A rotation handles and the prosthetic axis top, diameter/length dragging |
 | `src/meshio.ts`, `src/scans.ts` | STL / PLY / OBJ readers, scan model (placement, appearance, world-space cache) |
 | `src/register.ts`, `src/alignUi.ts`, `src/meshViewer.ts`, `src/meshgl.ts` | Scan alignment: point pairs (Horn), k-d tree ICP, automatic surface matching; placement dialog and two-pane alignment workspace; WebGL mesh rendering |
 | `src/views/scanContours.ts` | Scan outlines in planar views and the panoramic |

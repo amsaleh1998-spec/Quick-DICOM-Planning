@@ -12,11 +12,15 @@ self.addEventListener('activate', (e) =>
   e.waitUntil(
     Promise.all([
       self.clients.claim(),
-      // implant library files are no longer on the website (people import a library file): drop
-      // copies an earlier version of the app kept here
+      // implant library files are no longer on the website (people import a library file), and the
+      // earlier tooth library was replaced: drop copies an earlier version of the app kept here
       caches
         .open(CACHE)
-        .then((c) => c.keys().then((keys) => Promise.all(keys.filter((r) => new URL(r.url).pathname.includes('/implants/')).map((r) => c.delete(r)))))
+        .then((c) =>
+          c.keys().then((keys) =>
+            Promise.all(keys.filter((r) => /\/implants\/|teeth-generic/.test(new URL(r.url).pathname)).map((r) => c.delete(r))),
+          ),
+        )
         .catch(() => {}),
     ]),
   ),

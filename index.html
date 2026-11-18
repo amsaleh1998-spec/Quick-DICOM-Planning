@@ -138,7 +138,7 @@
           </section>
 
           <section id="panel-waxup" class="panel" data-panel="waxup">
-            <div class="ph"><h2>Waxup</h2><span class="muted small">Generic library</span></div>
+            <div class="ph"><h2>Waxup</h2><span class="muted small">BodyParts3D library</span></div>
             <div id="wax-chart" class="wax-chart" title="Click a position to add or remove the tooth"></div>
             <div class="row">
               <button id="wax-all-upper" title="Add every upper tooth (17–27)">Upper arch</button>
@@ -267,6 +267,9 @@
                 <button id="wax-refit-lower" title="Set the lower teeth up again on the current curve (their changes are lost)">Re-fit lower</button>
               </div>
             </details>
+            <p class="muted small wax-credit" id="wax-credit">Teeth: <a href="https://dbarchive.biosciencedbc.jp/en/bodyparts3d/" target="_blank" rel="noopener">BodyParts3D</a>, © The Database Center for Life Science,
+              <a href="https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en" target="_blank" rel="noopener">CC BY-SA 2.1 JP</a> – crowns cut from its teeth, wisdom teeth derived
+              (<a href="./library/LICENSE-BodyParts3D.txt" target="_blank" rel="noopener">licence &amp; changes</a>). The tooth library and waxups made with it are shared under the same licence.</p>
           </section>
 
           <section id="panel-plan" class="panel" data-panel="implants">
@@ -465,6 +468,12 @@
           <section id="panel-scans" class="panel" data-panel="scans">
             <div class="ph"><h2>Intraoral scans</h2><button id="btn-scan-import" class="primary" title="Import an intraoral scan, antagonist or wax-up (STL, PLY, OBJ) – or drop the file on the viewer">Import…</button></div>
             <input id="scan-input" type="file" accept=".stl,.ply,.obj" multiple hidden />
+            <input id="dual-files" type="file" multiple hidden />
+            <input id="dual-folder" type="file" webkitdirectory multiple hidden />
+            <div class="dual-box">
+              <div class="dual-head"><b>Dual scan</b><button id="btn-dual-scan" title="Dual scan protocol: open the CBCT of the denture alone (with its radiopaque markers) – the denture is segmented from it and placed in this CBCT by its markers">Denture CBCT…</button></div>
+              <div class="muted small">The denture scanned alone, with radiopaque markers: matched on its markers and placed in this patient's CBCT.</div>
+            </div>
             <ul id="scan-list" class="obj-list"></ul>
             <div id="scan-edit" class="hidden edit-box">
               <div class="row">
@@ -482,6 +491,7 @@
               <div class="row">
                 <button id="btn-scan-align" title="Align to the CBCT by matching points or surfaces">Align…</button>
                 <button id="btn-scan-place" title="Original position, or copy the alignment of another scan">Place…</button>
+                <button id="btn-scan-mesh" title="Edit the mesh in 3D: remove islands, trim, close holes, smooth">Edit mesh…</button>
                 <button id="btn-scan-delete" class="danger">Delete</button>
               </div>
               <div class="row">

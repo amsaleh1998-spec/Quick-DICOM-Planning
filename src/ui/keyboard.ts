@@ -31,8 +31,9 @@ window.addEventListener('keydown', (e) => {
     undoRedo(redo);
     return;
   }
-  // waxup panel open: Del removes the selected tooth, Esc deselects it
-  if (app.wax.editing && app.wax.selected !== null && !app.ruler && !app.drawing) {
+  // waxup panel open: Del removes the selected tooth, Esc deselects it (a ruler picked since comes first)
+  const rulerPicked = app.selectedMeasurementId !== null || app.hoverMeasurementId !== null;
+  if (app.wax.editing && app.wax.selected !== null && !app.ruler && !app.drawing && !rulerPicked) {
     if (e.key === 'Delete' || e.key === 'Backspace') {
       removeTooth(app, app.wax.selected);
       return;
@@ -57,7 +58,8 @@ window.addEventListener('keydown', (e) => {
     else if (app.placing) {
       app.placing = null;
       app.changed();
-    } else app.selectImplant(null, false);
+    } else if (app.selectedMeasurementId !== null) app.selectMeasurement(null);
+    else app.selectImplant(null, false);
   } else if (e.key === 'Enter' && app.drawing) {
     // the Draw button usually still has focus: don't let Enter also "press" it (that restarted drawing)
     e.preventDefault();
@@ -65,6 +67,8 @@ window.addEventListener('keydown', (e) => {
     app.finishCurve();
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && app.hoverMeasurementId !== null) {
     app.deleteMeasurement(app.hoverMeasurementId);
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && app.selectedMeasurementId !== null) {
+    app.deleteMeasurement(app.selectedMeasurementId);
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && app.selectedId !== null && app.mode === 'plan') {
     app.deleteImplant(app.selectedId);
   } else if (e.key === 'f' || e.key === 'F') {

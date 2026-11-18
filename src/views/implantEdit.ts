@@ -17,7 +17,8 @@ import { findModel, modelId, nearestSize } from '../implantLibrary';
 import { Vec3, add, addScaled, clamp, rotate, scale } from '../math';
 import type { Pt } from './View';
 
-export type EditMode = 'move' | 'rotCoronal' | 'rotApical' | 'diameter' | 'apicalDiameter' | 'length';
+/** rotProsthetic: the top of the prosthetic axis guide, dragged like the coronal handle (pivot: apex) */
+export type EditMode = 'move' | 'rotCoronal' | 'rotApical' | 'rotProsthetic' | 'diameter' | 'apicalDiameter' | 'length';
 
 /** What the editor needs to know about a view. */
 export interface ImplantViewAdapter {
@@ -89,6 +90,13 @@ export class ImplantEditor {
     };
   }
 
+  /** Top of the implant's prosthetic axis guide (null when the guide is not shown). */
+  prostheticTop(imp: Implant): Vec3 | null {
+    if (!imp.showProstheticAxis || imp.hidden) return null;
+    const g = this.app.allParts().find((c) => c.kind === 'prosthetic' && c.implant === imp);
+    return g ? addScaled(g.center, g.axis, g.half) : null;
+  }
+
   hit(p: Pt): { imp: Implant; mode: EditMode } | null {
     const app = this.app;
     const sel = app.selectedImplant();
@@ -101,6 +109,16 @@ export class ImplantEditor {
         const s = this.ad.project(w);
         if (Math.hypot(s.x - p[0], s.y - p[1]) <= HANDLE_R + 3) return { imp: sel, mode };
       }
+    }
+    // the top of a prosthetic axis (the selected implant's first): tilts that implant
+    for (const imp of sel ? [sel, ...app.implants.filter((i) => i !== sel)] : app.implants) {
+      if (!this.ad.visible(imp)) continue;
+      const top = this.prostheticTop(imp);
+      if (!top) continue;
+      const s = this.ad.project(top);
+      if (Math.hypot(s.x - p[0], s.y - p[1]) <= HANDLE_R + 3) return { imp, mode: 'rotProsthetic' };
+    }
+    if (sel && !sel.hidden && this.ad.visible(sel)) {
       const tol = 5 * this.ad.scale();
       const { rad, h } = this.ad.radialAxial(p, sel);
       const hl = sel.length / 2;
@@ -116,7 +134,7 @@ export class ImplantEditor {
 
   cursorFor(mode: EditMode, imp: Implant): string {
     if (mode === 'move') return 'move';
-    if (mode === 'rotCoronal' || mode === 'rotApical') return 'grab';
+    if (mode === 'rotCoronal' || mode === 'rotApical' || mode === 'rotProsthetic') return 'grab';
     const a = this.ad.project(platformOf(imp));
     const b = this.ad.project(apexOf(imp));
     const vertical = Math.abs(b.y - a.y) >= Math.abs(b.x - a.x);
@@ -155,9 +173,10 @@ export class ImplantEditor {
         imp.center = add(imp.center, add(scale(d.basis.u, (p[0] - last[0]) * sc), scale(d.basis.v, (p[1] - last[1]) * sc)));
         break;
       case 'rotCoronal':
+      case 'rotProsthetic':
       case 'rotApical': {
-        // coronal handle pivots around the apex, apical handle around the platform
-        const pivotW = d.mode === 'rotCoronal' ? apexOf(imp) : platformOf(imp);
+        // coronal handle (and the prosthetic axis top) pivots around the apex, apical handle around the platform
+        const pivotW = d.mode === 'rotApical' ? platformOf(imp) : apexOf(imp);
         const c = this.ad.project(pivotW);
         let da = Math.atan2(p[1] - c.y, p[0] - c.x) - Math.atan2(last[1] - c.y, last[0] - c.x);
         if (da > Math.PI) da -= 2 * Math.PI;
@@ -376,6 +395,13 @@ export class ImplantEditor {
     this.renderBadgeText();
   }
 
+  private drawProstheticHandle(o: CanvasRenderingContext2D, imp: Implant, sel: boolean) {
+    const top = this.prostheticTop(imp);
+    if (!top) return;
+    const s = this.ad.project(top);
+    drawProstheticRing(o, s.x, s.y, sel);
+  }
+
   /** Dashed axis through every visible implant and rotation handles for the selected one. */
   draw(o: CanvasRenderingContext2D) {
     this.placeBadge();
@@ -401,6 +427,7 @@ export class ImplantEditor {
       o.lineWidth = 1.2;
       o.stroke();
       o.restore();
+      this.drawProstheticHandle(o, imp, sel);
       if (!sel) continue;
       for (const [w, label] of [
         [hd.coronal, 'C'],
@@ -435,6 +462,31 @@ export class ImplantEditor {
       }
     }
   }
+}
+
+/** Pink ring at the top of a prosthetic axis guide: drag it to tilt the implant (around its apex). */
+function drawProstheticRing(o: CanvasRenderingContext2D, x: number, y: number, sel: boolean) {
+  o.beginPath();
+  o.arc(x, y, sel ? HANDLE_R : HANDLE_R - 2, 0, Math.PI * 2);
+  o.fillStyle = 'rgba(20,24,32,0.8)';
+  o.fill();
+  o.strokeStyle = sel ? 'rgb(232,121,249)' : 'rgba(232,121,249,0.75)';
+  o.lineWidth = sel ? 2 : 1.5;
+  o.stroke();
+  if (!sel) return;
+  // small rotation arrow, as on the C / A handles
+  o.beginPath();
+  o.arc(x, y, HANDLE_R + 4, -2.2, -0.3);
+  o.strokeStyle = 'rgba(232,121,249,0.8)';
+  o.lineWidth = 1.5;
+  o.stroke();
+  const ex = x + Math.cos(-0.3) * (HANDLE_R + 4);
+  const ey = y + Math.sin(-0.3) * (HANDLE_R + 4);
+  o.beginPath();
+  o.moveTo(ex - 4, ey - 3);
+  o.lineTo(ex, ey);
+  o.lineTo(ex + 1, ey - 5);
+  o.stroke();
 }
 
 /** Screen-space radial/axial coordinates for projected views (e.g. panoramic). */

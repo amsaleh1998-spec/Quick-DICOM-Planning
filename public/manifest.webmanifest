@@ -1,6 +1,6 @@
 {
-  "name": "Quick DICOM Planning",
-  "short_name": "DICOM Planning",
+  "name": "QDP",
+  "short_name": "QDP",
   "description": "CBCT viewer for quick dental implant planning – runs locally, scans never leave your computer.",
   "id": "./",
   "start_url": "./",

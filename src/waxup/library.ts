@@ -1,5 +1,7 @@
-// Tooth library for the waxup: one closed crown per FDI position (18–28, 48–38), built from a
-// generic exocad set by scripts/make-tooth-library.py. Coordinates per jaw: x = patient left,
+// Tooth library for the waxup: one closed crown per FDI position (18–28, 48–38), made from the
+// BodyParts3D teeth (© The Database Center for Life Science, CC BY-SA 2.1 JP – crowns cut from the
+// teeth, see public/library/LICENSE-BodyParts3D.txt) by scripts/make-bodyparts3d-crowns.py and
+// scripts/make-tooth-library.py. Coordinates per jaw: x = patient left,
 // y = posterior, z = superior; the jaw's occlusal plane at z = 0, midline x = 0, front y = 0.
 
 import type { Vec2, Vec3 } from '../math';
@@ -22,14 +24,26 @@ export interface ToothTemplate {
 
 export interface ToothLibrary {
   name: string;
+  /** where the teeth come from and under which licence (shown wherever the library is used) */
+  credit: LibraryCredit | null;
   /** arch through the crown centroids, patient right -> left (x, y) */
   arch: Record<Jaw, Vec2[]>;
   teeth: Map<number, ToothTemplate>;
 }
 
-export const LIBRARY_URL = './library/teeth-generic.json';
+export interface LibraryCredit {
+  source: string;
+  license: string;
+  licenseUrl: string;
+  sourceUrl: string;
+  changes: string;
+}
 
-interface Header {
+export const LIBRARY_URL = './library/teeth-bodyparts3d.json';
+/** the library's licence and credit, served next to it */
+export const LIBRARY_LICENSE_URL = './library/LICENSE-BodyParts3D.txt';
+
+interface Header extends Partial<LibraryCredit> {
   format: string;
   name: string;
   quant: number;
@@ -62,7 +76,8 @@ export function parseLibrary(buf: ArrayBuffer): ToothLibrary {
       partRadius: t.partRadius,
     });
   }
-  return { name: h.name, arch: h.arch, teeth };
+  const credit = h.source && h.license ? { source: h.source, license: h.license, licenseUrl: h.licenseUrl ?? '', sourceUrl: h.sourceUrl ?? '', changes: h.changes ?? '' } : null;
+  return { name: h.name, credit, arch: h.arch, teeth };
 }
 
 /** The library file: the compressed binary, base64 in a small JSON wrapper. */
