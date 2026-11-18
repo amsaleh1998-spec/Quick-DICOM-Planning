@@ -20,6 +20,35 @@ export interface ViewerMesh {
   visible?: boolean;
 }
 
+/** A camera position, to repeat a view-dependent edit (a lasso) later. */
+export interface Camera {
+  target: Vec3;
+  dist: number;
+  right: Vec3;
+  up: Vec3;
+  fwd: Vec3;
+  /** viewer size (CSS px) */
+  w: number;
+  h: number;
+}
+
+/** Screen position (CSS px) of a world point seen from a camera; null behind it. */
+export function projectWith(cam: Camera, p: Vec3): [number, number] | null {
+  const c = [cam.target[0] - cam.fwd[0] * cam.dist, cam.target[1] - cam.fwd[1] * cam.dist, cam.target[2] - cam.fwd[2] * cam.dist];
+  const q = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+  const z = q[0] * cam.fwd[0] + q[1] * cam.fwd[1] + q[2] * cam.fwd[2];
+  if (z <= 0) return null;
+  const t = Math.tan(FOV / 2);
+  const x = (q[0] * cam.right[0] + q[1] * cam.right[1] + q[2] * cam.right[2]) / (z * t * (cam.w / cam.h));
+  const y = (q[0] * cam.up[0] + q[1] * cam.up[1] + q[2] * cam.up[2]) / (z * t);
+  return [(cam.w / 2) * (1 + x), (cam.h / 2) * (1 - y)];
+}
+
+/** Camera position (world) of a camera. */
+export function eyeOf(cam: Camera): Vec3 {
+  return [cam.target[0] - cam.fwd[0] * cam.dist, cam.target[1] - cam.fwd[1] * cam.dist, cam.target[2] - cam.fwd[2] * cam.dist];
+}
+
 export interface Marker {
   p: Vec3;
   label: string;
@@ -47,6 +76,11 @@ export class MeshViewer {
   markers: Marker[] = [];
   /** left button paints instead of orbiting */
   paintMode = false;
+  /** while painting: a stroke ended */
+  onPaintEnd: (() => void) | null = null;
+  /** painting with a brush of this radius (mm): its ring follows the pointer on the surface */
+  brushRadius: number | null = null;
+  private ring: Vec3 | null = null;
   /** left button draws a lasso (closed on release, then onLasso) instead of orbiting */
   lassoMode = false;
   onLasso: ((poly: [number, number][]) => void) | null = null;
@@ -234,6 +268,20 @@ export class MeshViewer {
       }
       o.stroke();
     }
+    if (this.ring && this.brushRadius && this.paintMode) {
+      const r = this.brushRadius;
+      o.beginPath();
+      for (let i = 0; i <= 48; i++) {
+        const a = (i / 48) * Math.PI * 2, c = Math.cos(a) * r, d = Math.sin(a) * r;
+        const s = this.project([this.ring[0] + this.right[0] * c + this.up[0] * d, this.ring[1] + this.right[1] * c + this.up[1] * d, this.ring[2] + this.right[2] * c + this.up[2] * d], w, h);
+        if (!s) continue;
+        if (i) o.lineTo(s[0], s[1]);
+        else o.moveTo(s[0], s[1]);
+      }
+      o.strokeStyle = 'rgba(255,255,255,0.9)';
+      o.lineWidth = 1.5;
+      o.stroke();
+    }
     if (this.lasso && this.lasso.length > 1) {
       o.beginPath();
       o.moveTo(this.lasso[0][0], this.lasso[0][1]);
@@ -287,29 +335,52 @@ export class MeshViewer {
     return best;
   }
 
+  /** The current camera. */
+  camera(): Camera {
+    return { target: [...this.target], dist: this.dist, right: [...this.right], up: [...this.up], fwd: [...this.fwd], w: this.el.clientWidth, h: this.el.clientHeight };
+  }
+
   /**
-   * Distance from the camera to the nearest visible surface, per screen position (read back
-   * once from the GPU): for "only what can be seen" tools. Null without WebGL.
+   * Distance from a camera to the nearest surface of a mesh, per screen position of that camera
+   * (rendered off screen and read back once): for "only what can be seen" edits. Null without WebGL.
    */
-  depthMap(): ((x: number, y: number) => number | null) | null {
+  depthMapFor(cam: Camera, pos: Float32Array, idx: Uint32Array): ((x: number, y: number) => number | null) | null {
     const gl = this.gl;
     if (!gl || !this.mg) return null;
-    const w = this.el.clientWidth, h = this.el.clientHeight;
     const W = this.canvas.width, H = this.canvas.height;
-    this.pickAt(w / 2, h / 2); // sets up the pick buffer at this size
+    if (!this.pickFbo) {
+      this.pickFbo = gl.createFramebuffer();
+      this.pickTex = gl.createTexture();
+      this.pickDepth = gl.createRenderbuffer();
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.pickFbo);
+    if (`${W}x${H}` !== this.pickSize) {
+      gl.bindTexture(gl.TEXTURE_2D, this.pickTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.pickTex, 0);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, this.pickDepth);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, W, H);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.pickDepth);
+      this.pickSize = `${W}x${H}`;
+    }
+    const key = {};
+    this.mg.upload(key, pos, new Float32Array(pos.length), idx, null);
     gl.viewport(0, 0, W, H);
+    gl.disable(gl.SCISSOR_TEST);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
-    const pos = this.camPos();
-    const far = this.dist * 20;
-    const mvp = viewProjection(pos, this.right, this.up, this.fwd, FOV, w / h, Math.max(0.1, this.dist * 0.01), far);
-    this.meshes.filter((m) => m.visible !== false).forEach((m, i) => drawPick(this.mg!, m.key, mvp, pos, far, i + 1));
+    const eye = eyeOf(cam);
+    const far = cam.dist * 20;
+    const mvp = viewProjection(eye, cam.right, cam.up, cam.fwd, FOV, cam.w / cam.h, Math.max(0.1, cam.dist * 0.01), far);
+    drawPick(this.mg, key, mvp, eye, far, 1);
     const px = new Uint8Array(W * H * 4);
     gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.mg.delete(key);
+    this.request();
+    const { w, h } = cam;
     return (x, y) => {
       const i = Math.floor((x / w) * W), j = H - 1 - Math.floor((y / h) * H);
       if (i < 0 || j < 0 || i >= W || j >= H) return null;
@@ -421,7 +492,31 @@ export class MeshViewer {
       }
     });
     let paintQueued: PointerEvent | null = null;
+    let hoverQueued: PointerEvent | null = null;
+    const hoverRing = (e: PointerEvent) => {
+      if (!this.paintMode || !this.brushRadius) {
+        if (this.ring) {
+          this.ring = null;
+          this.request();
+        }
+        return;
+      }
+      if (!hoverQueued)
+        requestAnimationFrame(() => {
+          const ev = hoverQueued;
+          hoverQueued = null;
+          if (!ev) return;
+          this.ring = this.pickAt(...local(ev))?.p ?? null;
+          this.request();
+        });
+      hoverQueued = e;
+    };
+    el.addEventListener('pointerleave', () => {
+      this.ring = null;
+      this.request();
+    });
     el.addEventListener('pointermove', (e) => {
+      if (!drag || (this.paintMode && drag.btn === 0)) hoverRing(e);
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
@@ -494,6 +589,7 @@ export class MeshViewer {
           return;
         }
       }
+      if (drag && drag.btn === 0 && this.paintMode) this.onPaintEnd?.();
       if (drag && !drag.moved && drag.btn === 0 && !this.paintMode && this.onPick) {
         const r = el.getBoundingClientRect();
         const hit = this.pickAt(e.clientX - r.left, e.clientY - r.top);

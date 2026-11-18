@@ -1,10 +1,9 @@
 // Editing triangle meshes (the dual scan denture, intraoral scans): connected parts, keeping /
-// deleting triangles, trimming with a screen lasso, finding and closing holes, smoothing.
+// deleting triangles, trimming with a screen lasso, finding and closing holes, cut and smooth brushes.
 // Every operation returns a new mesh – meshes are never changed in place (undo keeps them).
 
 import type { MeshData } from './meshio';
 import type { Vec3 } from './math';
-import { smoothMesh } from './stl';
 
 /** Connected parts (triangles sharing a vertex): part per triangle, triangle count per part. */
 export function components(m: MeshData): { part: Int32Array; sizes: number[] } {
@@ -259,9 +258,119 @@ export function fillHoles(m: MeshData, loops = boundaryLoops(m)): MeshData {
   return { pos: m.pos, idx, col: m.col };
 }
 
-/** Smoothed copy (Taubin: smooths without shrinking). */
-export async function smoothed(m: MeshData, iterations = 4): Promise<MeshData> {
-  const copy = { pos: new Float32Array(m.pos), idx: m.idx };
-  await smoothMesh(copy, iterations, 0.5, -0.53);
-  return { pos: copy.pos, idx: m.idx, col: m.col };
+/** Part of the triangle nearest to a point (by triangle centre). */
+export function partNear(m: MeshData, part: Int32Array, p: Vec3): number {
+  const { pos, idx } = m;
+  let best = -1, bd = Infinity;
+  for (let t = 0; t < part.length; t++) {
+    const a = idx[t * 3] * 3, b = idx[t * 3 + 1] * 3, c = idx[t * 3 + 2] * 3;
+    const dx = (pos[a] + pos[b] + pos[c]) / 3 - p[0], dy = (pos[a + 1] + pos[b + 1] + pos[c + 1]) / 3 - p[1], dz = (pos[a + 2] + pos[b + 2] + pos[c + 2]) / 3 - p[2];
+    const d = dx * dx + dy * dy + dz * dz;
+    if (d < bd) {
+      bd = d;
+      best = part[t];
+    }
+  }
+  return best;
+}
+
+/** Cut brush: the triangles touching any of the brush spheres (centres `pts`, radius r) removed. */
+export function brushCut(m: MeshData, pts: Vec3[], r: number): MeshData {
+  const { pos, idx } = m;
+  const nv = pos.length / 3;
+  const hit = new Uint8Array(nv);
+  const r2 = r * r;
+  let any = false;
+  for (const p of pts) {
+    for (let v = 0; v < nv; v++) {
+      if (hit[v]) continue;
+      const dx = pos[v * 3] - p[0], dy = pos[v * 3 + 1] - p[1], dz = pos[v * 3 + 2] - p[2];
+      if (dx * dx + dy * dy + dz * dz <= r2) {
+        hit[v] = 1;
+        any = true;
+      }
+    }
+  }
+  if (!any) return m;
+  return keepTriangles(m, (t) => !hit[idx[t * 3]] && !hit[idx[t * 3 + 1]] && !hit[idx[t * 3 + 2]]);
+}
+
+/** Neighbouring vertices of every vertex (compressed rows). */
+export function neighbours(m: MeshData): { start: Uint32Array; nb: Uint32Array } {
+  const nv = m.pos.length / 3;
+  const idx = m.idx;
+  const deg = new Uint32Array(nv + 1);
+  for (let t = 0; t < idx.length; t++) deg[idx[t]] += 2;
+  const start = new Uint32Array(nv + 1);
+  for (let v = 0; v < nv; v++) start[v + 1] = start[v] + deg[v];
+  const fill = start.slice(0, nv);
+  const nb = new Uint32Array(start[nv]);
+  for (let t = 0; t < idx.length; t += 3)
+    for (let k = 0; k < 3; k++) {
+      const a = idx[t + k];
+      nb[fill[a]++] = idx[t + ((k + 1) % 3)];
+      nb[fill[a]++] = idx[t + ((k + 2) % 3)];
+    }
+  return { start, nb };
+}
+
+/**
+ * Smooth brush, one dab: the surface within r of p smoothed (Taubin steps – no shrinking), most
+ * in the middle of the brush. Changes `pos` in place.
+ */
+export function smoothAt(pos: Float32Array, nbrs: { start: Uint32Array; nb: Uint32Array }, p: Vec3, r: number, iterations = 3) {
+  const nv = pos.length / 3;
+  const verts: number[] = [], wts: number[] = [];
+  const r2 = r * r;
+  for (let v = 0; v < nv; v++) {
+    const dx = pos[v * 3] - p[0], dy = pos[v * 3 + 1] - p[1], dz = pos[v * 3 + 2] - p[2];
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > r2) continue;
+    verts.push(v);
+    wts.push((1 - d2 / r2) ** 2);
+  }
+  if (!verts.length) return;
+  const tmp = new Float32Array(verts.length * 3);
+  const { start, nb } = nbrs;
+  const step = (f: number) => {
+    for (let i = 0; i < verts.length; i++) {
+      const v = verts[i];
+      const s = start[v], e = start[v + 1];
+      if (e === s) {
+        tmp[i * 3] = pos[v * 3];
+        tmp[i * 3 + 1] = pos[v * 3 + 1];
+        tmp[i * 3 + 2] = pos[v * 3 + 2];
+        continue;
+      }
+      let ax = 0, ay = 0, az = 0;
+      for (let j = s; j < e; j++) {
+        const u = nb[j] * 3;
+        ax += pos[u];
+        ay += pos[u + 1];
+        az += pos[u + 2];
+      }
+      const n = e - s, w = f * wts[i];
+      tmp[i * 3] = pos[v * 3] + w * (ax / n - pos[v * 3]);
+      tmp[i * 3 + 1] = pos[v * 3 + 1] + w * (ay / n - pos[v * 3 + 1]);
+      tmp[i * 3 + 2] = pos[v * 3 + 2] + w * (az / n - pos[v * 3 + 2]);
+    }
+    for (let i = 0; i < verts.length; i++) {
+      const v = verts[i] * 3;
+      pos[v] = tmp[i * 3];
+      pos[v + 1] = tmp[i * 3 + 1];
+      pos[v + 2] = tmp[i * 3 + 2];
+    }
+  };
+  for (let it = 0; it < iterations; it++) {
+    step(0.6);
+    step(-0.63);
+  }
+}
+
+/** Smooth brush stroke: a smoothed copy (dabs at `pts`). */
+export function brushSmooth(m: MeshData, pts: Vec3[], r: number): MeshData {
+  const pos = new Float32Array(m.pos);
+  const nbrs = neighbours(m);
+  for (const p of pts) smoothAt(pos, nbrs, p, r);
+  return { pos, idx: m.idx, col: m.col };
 }

@@ -5,8 +5,7 @@
 import { autoDentureThreshold, autoMarkerThreshold, dentureMask, dentureSurface, findMarkers, matchMarkers, Marker, MarkerMatch } from '../dualScan';
 import { loadDicomFiles } from '../dicom';
 import { SCAN_KINDS, createScan } from '../scans';
-import type { MeshData } from '../meshio';
-import { editMesh } from './meshEditor';
+import { MeshEditor, guardedCancel } from './meshEditor';
 import type { Volume } from '../volume';
 import type { Vec3 } from '../math';
 import { isZipFile, zipEntriesAsFiles } from '../zip';
@@ -163,26 +162,36 @@ function showDualScan(denture: Volume, patient: Volume, found: Found) {
   const m = document.createElement('div');
   m.className = 'modal-backdrop';
   m.innerHTML = `
-    <div class="modal dual-scan" role="dialog" aria-modal="true" aria-labelledby="ds-title">
-      <header><h2 id="ds-title">Dual scan – place the denture</h2><button class="modal-close" title="Cancel (Esc)">×</button></header>
-      <p class="ds-result" role="status"></p>
-      <div class="ds-views">
-        <figure><canvas class="ds-top"></canvas><figcaption>Denture scan from above</figcaption></figure>
-        <figure><canvas class="ds-front"></canvas><figcaption>From the front</figcaption></figure>
-      </div>
-      <div class="ds-legend muted small"><span class="ds-dot ok"></span> marker matched <span class="ds-dot miss"></span> marker not found in the patient's CBCT <span class="ds-swatch"></span> denture (segmented)</div>
-      <div class="ds-controls">
-        <label>Denture (acrylic) threshold <input class="ds-thr" type="range" step="1" /> <output class="ds-thr-v"></output></label>
-        <details>
-          <summary>Markers</summary>
-          <label>Marker threshold <input class="ds-mthr" type="number" step="10" /></label>
-          <button class="ds-refind">Find again</button>
-          <p class="muted small">Markers are small, very bright blobs (0.15–60 mm³, under 7 mm across), found in both scans and matched by the distances between them. At least 3 are needed; 5 or more, spread around the arch, give a reliable placement.</p>
-        </details>
+    <div class="modal dual-scan dual-big" role="dialog" aria-modal="true" aria-labelledby="ds-title">
+      <header><h2 id="ds-title">Dual scan – segment the denture and place it</h2><button class="modal-close" title="Cancel (Esc)">×</button></header>
+      <div class="ds-body">
+        <aside class="ds-side">
+          <section>
+            <h3>Markers</h3>
+            <p class="ds-result" role="status"></p>
+            <div class="ds-views">
+              <figure><canvas class="ds-top"></canvas><figcaption>Denture scan from above</figcaption></figure>
+              <figure><canvas class="ds-front"></canvas><figcaption>From the front</figcaption></figure>
+            </div>
+            <div class="ds-legend muted small"><span class="ds-dot ok"></span> matched <span class="ds-dot miss"></span> not found in the patient's CBCT <span class="ds-swatch"></span> denture</div>
+            <details>
+              <summary>Marker threshold</summary>
+              <label class="ds-mrow">Threshold <input class="ds-mthr" type="number" step="10" /> <button class="ds-refind">Find again</button></label>
+              <p class="muted small">Markers are small, very bright blobs (0.15–60 mm³, under 7 mm across), found in both scans and matched by the distances between them. At least 3 are needed; 5 or more, spread around the arch, give a reliable placement.</p>
+            </details>
+          </section>
+          <section>
+            <h3>Segmentation</h3>
+            <label class="ds-thr-row">Denture (acrylic) threshold <output class="ds-thr-v"></output></label>
+            <input class="ds-thr" type="range" step="1" />
+            <p class="muted small">The 3D denture follows the slider. Your edits are applied again to the new segmentation.</p>
+          </section>
+        </aside>
+        <div class="ds-3d"><span class="ds-busy hidden">Segmenting…</span></div>
       </div>
       <footer>
         <button class="ds-cancel">Cancel</button><span class="grow"></span>
-        <button class="primary ds-create" title="Segment the denture at this threshold, check and edit it in 3D, then place it">Segment the denture…</button>
+        <button class="primary ds-create" title="Add the denture as a scan, placed in this patient's CBCT by its markers">Place in the patient’s CBCT</button>
       </footer>
     </div>`;
   const $m = <T extends HTMLElement>(s: string) => m.querySelector<T>(s)!;
@@ -193,27 +202,57 @@ function showDualScan(denture: Volume, patient: Volume, found: Found) {
   const create = $m<HTMLButtonElement>('.ds-create');
   const cTop = $m<HTMLCanvasElement>('.ds-top');
   const cFront = $m<HTMLCanvasElement>('.ds-front');
+  const busy = $m<HTMLElement>('.ds-busy');
   thr.min = String(Math.round(lo));
   thr.max = String(found.tD - 1);
   thr.value = String(tAcrylic);
+  thrV.textContent = `${tAcrylic}`;
   mthr.value = String(found.tD);
   /** the slider's track is filled up to its thumb (style.css) */
   const fill = () => thr.style.setProperty('--fill', `${((Number(thr.value) - Number(thr.min)) / Math.max(1, Number(thr.max) - Number(thr.min))) * 100}%`);
   fill();
 
+  // the 3D denture and its editor
+  const editor = new MeshEditor({ pos: new Float32Array(0), idx: new Uint32Array(0), col: null }, { color: DENTURE_COLOUR });
+  $m('.ds-3d').prepend(editor.view);
+  $m('.ds-body').append(editor.tools);
+  /** the base mesh in the editor is the full-resolution segmentation at tAcrylic */
+  let fullAt: number | null = null;
+  let gen = 0;
+  let firstShown = false;
+  const segment = async (full: boolean) => {
+    const my = ++gen;
+    busy.classList.remove('hidden');
+    busy.textContent = full ? 'Segmenting…' : 'Preview…';
+    await new Promise((r) => setTimeout(r, 0));
+    if (my !== gen) return;
+    const t = tAcrylic;
+    const mesh = await dentureSurface(denture, t, undefined, full ? 30_000_000 : 2_500_000);
+    if (my !== gen) return; // the slider moved on
+    editor.setBase(mesh, !firstShown);
+    firstShown = true;
+    fullAt = full ? t : null;
+    busy.classList.add('hidden');
+    refreshCreate();
+  };
+  const refreshCreate = () => {
+    create.disabled = (found.match?.pairs.length ?? 0) < 3 || !editor.mesh.idx.length;
+  };
+  editor.onChange = refreshCreate;
+
   const showResult = () => {
     const { D, P, match } = found;
     const n = match?.pairs.length ?? 0;
-    create.disabled = n < 3;
-    if (D.length < 3) result.innerHTML = `<b class="err">Only ${D.length} marker${D.length === 1 ? '' : 's'} found in the denture scan</b> – at least 3 are needed. Try a lower marker threshold under <i>Markers</i>.`;
-    else if (n < 3) result.innerHTML = `<b class="err">The markers could not be matched</b> – ${D.length} in the denture scan, ${P.length} candidate${P.length === 1 ? '' : 's'} in this CBCT. Is the denture worn in this scan? Try another marker threshold under <i>Markers</i>.`;
+    refreshCreate();
+    if (D.length < 3) result.innerHTML = `<b class="err">Only ${D.length} marker${D.length === 1 ? '' : 's'} found in the denture scan</b> – at least 3 are needed. Try a lower marker threshold below.`;
+    else if (n < 3) result.innerHTML = `<b class="err">The markers could not be matched</b> – ${D.length} in the denture scan, ${P.length} candidate${P.length === 1 ? '' : 's'} in this CBCT. Is the denture worn in this scan? Try another marker threshold below.`;
     else
       result.innerHTML = `<b class="ok">${n} of ${D.length} markers matched</b> · fit ${match!.rms.toFixed(2)} mm${n < 5 ? ' · <span class="warn">few markers – check the placement</span>' : ''}${match!.rms > 0.5 ? ' · <span class="warn">loose fit – check the placement</span>' : ''}`;
   };
 
   // previews: the projections, the segmented denture tinted, the markers circled
   const sx = sp[0], sy = sp[1], sz = sp[2];
-  const scale = Math.min(320 / (nx * sx), 260 / (ny * sy));
+  const scale = Math.min(268 / (nx * sx), 190 / (ny * sy));
   const setup = (c: HTMLCanvasElement, w: number, h: number, hmm: number) => {
     c.width = w;
     c.height = h;
@@ -222,7 +261,6 @@ function showDualScan(denture: Volume, patient: Volume, found: Found) {
   };
   setup(cTop, nx, ny, ny * sy);
   setup(cFront, nx, nz, nz * sz);
-  let maskTimer = 0;
   const draw = () => {
     const mask = dentureMask(denture, tAcrylic, 1_500_000);
     const st = mask.step;
@@ -266,13 +304,23 @@ function showDualScan(denture: Volume, patient: Volume, found: Found) {
       ring(cTop, p[0] / sx, p[1] / sy, matched.has(i));
       ring(cFront, p[0] / sx, nz - 1 - p[2] / sz, matched.has(i));
     });
-    thrV.textContent = `${tAcrylic}`;
   };
+  // the slider: a quick preview while it moves, full detail when it is let go
+  let previewTimer = 0;
   thr.oninput = () => {
     tAcrylic = Number(thr.value);
     thrV.textContent = `${tAcrylic}`;
-    clearTimeout(maskTimer);
-    maskTimer = window.setTimeout(draw, 60);
+    clearTimeout(previewTimer);
+    previewTimer = window.setTimeout(() => {
+      draw();
+      void segment(false);
+    }, 40);
+  };
+  thr.onchange = () => {
+    tAcrylic = Number(thr.value);
+    clearTimeout(previewTimer);
+    draw();
+    void segment(true);
   };
   $m<HTMLButtonElement>('.ds-refind').onclick = () => {
     const t = Number(mthr.value);
@@ -282,6 +330,8 @@ function showDualScan(denture: Volume, patient: Volume, found: Found) {
     if (tAcrylic >= found.tD) {
       tAcrylic = autoDentureThreshold(denture, found.tD);
       thr.value = String(tAcrylic);
+      thrV.textContent = `${tAcrylic}`;
+      void segment(true);
     }
     fill();
     showResult();
@@ -289,62 +339,54 @@ function showDualScan(denture: Volume, patient: Volume, found: Found) {
   };
 
   const done = () => {
+    gen++; // drop a segmentation on its way
     window.removeEventListener('keydown', onKey, true);
-    clearTimeout(maskTimer);
+    clearTimeout(previewTimer);
+    editor.dispose();
     m.remove();
   };
+  const cancel = guardedCancel($m<HTMLButtonElement>('.ds-cancel'), () => editor.edited, done);
   const onKey = (e: KeyboardEvent) => {
-    if (e.key !== 'Escape') return;
+    if (!editor.key(e)) {
+      if (e.key !== 'Escape') return;
+      cancel();
+    }
     e.preventDefault();
     e.stopImmediatePropagation();
-    done();
   };
   window.addEventListener('keydown', onKey, true);
-  $m<HTMLButtonElement>('.modal-close').onclick = done;
-  $m<HTMLButtonElement>('.ds-cancel').onclick = done;
+  $m<HTMLButtonElement>('.modal-close').onclick = cancel;
+  $m<HTMLButtonElement>('.ds-cancel').onclick = cancel;
   create.onclick = async () => {
     const match = found.match;
     if (!match || match.pairs.length < 3) return;
     create.disabled = true;
-    let mesh: MeshData;
     try {
-      showLoading('Segmenting the denture…', 0);
-      await new Promise((r) => setTimeout(r, 30));
-      mesh = await dentureSurface(denture, tAcrylic, (f) => showLoading('Segmenting the denture…', f));
-      if (!mesh.idx.length) throw new Error('nothing above the threshold – lower the denture threshold');
-    } catch (e) {
-      console.error(e);
-      setStatus(`Denture: ${(e as Error).message}`, true);
-      create.disabled = false;
-      return;
+      // the full-resolution segmentation (if the last one was a preview), with the edits
+      if (fullAt !== tAcrylic) {
+        showLoading('Segmenting the denture…', 0.5);
+        await segment(true);
+      }
     } finally {
       hideLoading();
     }
-    // check and clean up the segmented denture in 3D before it is placed
-    m.classList.add('hidden');
-    window.removeEventListener('keydown', onKey, true);
-    const edited = await editMesh(mesh, {
-      title: 'Dual scan – the segmented denture',
-      intro: 'Check the denture and clean it up: double-click the denture to select it and remove the islands, trim what does not belong to it, close holes. Then place it in the patient’s CBCT.',
-      color: DENTURE_COLOUR,
-      okLabel: 'Place in the patient’s CBCT',
-      cancelLabel: 'Back',
-    });
-    m.classList.remove('hidden');
-    window.addEventListener('keydown', onKey, true);
-    create.disabled = false;
-    if (!edited) return; // back to the threshold
-    const scan = createScan(denture.info.seriesDescription || 'Denture CBCT', edited, 'denture');
+    const mesh = editor.mesh;
+    if (!mesh.idx.length) {
+      refreshCreate();
+      return;
+    }
+    const scan = createScan(denture.info.seriesDescription || 'Denture CBCT', mesh, 'denture');
     scan.transform = match.T;
     scan.placement = { method: 'markers', rms: match.rms, markers: match.pairs.length };
     app.scans.push(scan);
     app.activeScanId = scan.id;
     done();
     app.changed();
-    setStatus(`Denture placed by ${match.pairs.length} radiopaque markers (fit ${match.rms.toFixed(2)} mm) – ${(edited.idx.length / 3).toLocaleString()} triangles.`);
+    setStatus(`Denture placed by ${match.pairs.length} radiopaque markers (fit ${match.rms.toFixed(2)} mm) – ${(mesh.idx.length / 3).toLocaleString()} triangles.`);
   };
   document.body.append(m);
   showResult();
   draw();
+  void segment(true);
   create.focus();
 }

@@ -38,49 +38,76 @@ test('the denture is segmented from its own CBCT and placed in the patient’s b
   await expect(result).toContainText('7 of 7 markers matched', { timeout: 60_000 });
   // the patient's scan is still the open one
   expect(await page.evaluate(() => window.app.vol!.nz)).toBe(110);
-  // the acrylic threshold: between air and acrylic
-  const thr = Number(await page.locator('.dual-scan .ds-thr').inputValue());
+  // one window: markers, the threshold, the 3D denture and its editing tools
+  const win = page.locator('.dual-big');
+  await expect(win.locator('.mv')).toBeVisible();
+  // the overlay over the 3D drawing stays see-through (a black one hid the denture once)
+  expect(await win.locator('.mv-ov').evaluate((c) => getComputedStyle(c).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+  const thr = Number(await win.locator('.ds-thr').inputValue());
   expect(thr).toBeGreaterThan(-700);
   expect(thr).toBeLessThan(120);
-  await page.click('.dual-scan .ds-create');
-  // the segmented denture opens in the mesh editor first
-  const ed = page.locator('.mesh-editor');
-  await expect(ed).toBeVisible({ timeout: 60_000 });
-  await expect(ed.locator('.me-parts')).toContainText('One part');
-  await expect(ed.locator('.me-holes')).toContainText('No holes');
-  const tris = async () => Number((await ed.locator('.me-stats').textContent())!.replace(/\D/g, ''));
+  const tris = async () => Number(((await win.locator('.me-stats').textContent()) ?? '').replace(/\D/g, ''));
+  await expect.poll(tris, { timeout: 60_000 }).toBeGreaterThan(1000);
+  await expect(win.locator('.ds-busy')).toBeHidden({ timeout: 60_000 });
+  await expect(win.locator('.me-parts')).toContainText('One part');
+  await expect(win.locator('.me-holes')).toContainText('No holes');
   const before = await tris();
-  // trim through the middle with a lasso: the denture is cut open
-  await ed.locator('.me-trim').click();
-  const box = (await ed.locator('.mv').boundingBox())!;
+  const box = (await win.locator('.mv').boundingBox())!;
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
-  await page.mouse.move(cx - 30, cy - 200);
-  await page.mouse.down();
-  for (const [x, y] of [[cx + 30, cy - 200], [cx + 30, cy + 200], [cx - 30, cy + 200], [cx - 30, cy - 200]]) await page.mouse.move(x, y, { steps: 8 });
-  await page.mouse.up();
+  const drag = async (pts: number[][]) => {
+    await page.mouse.move(pts[0][0], pts[0][1]);
+    await page.mouse.down();
+    for (const [x, y] of pts.slice(1)) await page.mouse.move(x, y, { steps: 10 });
+    await page.mouse.up();
+  };
+  // lasso through the middle: the arch is cut in two
+  await win.locator('[data-mode="lasso"]').click();
+  await drag([[cx - 30, cy - 260], [cx + 30, cy - 260], [cx + 30, cy + 260], [cx - 30, cy + 260], [cx - 30, cy - 260]]);
   await expect.poll(tris).toBeLessThan(before);
-  await expect(ed.locator('.me-holes')).toContainText(/\d+ holes?/);
-  // two parts now (the arch cut in two): double-click one, remove the other
-  await expect(ed.locator('.me-parts')).toContainText('2 parts');
-  await ed.locator('.me-trim').click(); // trimming off
-  await ed.locator('.me-fill').click();
-  await expect(ed.locator('.me-holes')).toContainText('No holes');
-  // undo / redo inside the editor
-  await page.keyboard.press('Control+z');
-  await expect(ed.locator('.me-holes')).toContainText(/\d+ holes?/);
+  await expect(win.locator('.me-parts')).toContainText('2 parts');
+  const afterLasso = await tris();
+  // the threshold changes: the denture is segmented again, live, and the cut is applied again
+  const setThr = async (v: number, release: boolean) =>
+    win.locator('.ds-thr').evaluate(
+      (el: HTMLInputElement, [v, release]) => {
+        el.value = String(v);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        if (release) el.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+      [v, release] as const,
+    );
+  await setThr(thr + 200, false); // while dragging: a quick preview
+  await expect(win.locator('.ds-thr-v')).toHaveText(String(thr + 200));
+  await expect.poll(tris).not.toBe(afterLasso);
+  await setThr(thr + 200, true); // let go: full detail
+  await expect(win.locator('.ds-busy')).toBeHidden({ timeout: 60_000 });
+  await expect(win.locator('.me-parts')).toContainText('2 parts');
+  await setThr(thr, true);
+  await expect(win.locator('.ds-busy')).toBeHidden({ timeout: 60_000 });
+  await expect.poll(tris).toBe(afterLasso);
+  // cut brush across the view
+  await win.locator('[data-mode="cut"]').click();
+  await drag([[cx - 220, cy + 40], [cx + 220, cy + 120]]);
+  await expect.poll(tris).toBeLessThan(afterLasso);
+  const afterCut = await tris();
+  // smooth brush: same triangles, one more step to undo
+  await win.locator('[data-mode="smooth"]').click();
+  await drag([[cx - 220, cy - 60], [cx + 220, cy - 20]]);
+  await page.keyboard.press('Control+z'); // the smoothing undone
+  await expect.poll(tris).toBe(afterCut);
+  await page.keyboard.press('Control+z'); // the cut undone
+  await expect.poll(tris).toBe(afterLasso);
   await page.keyboard.press('Control+y');
-  await expect(ed.locator('.me-holes')).toContainText('No holes');
-  // back to the threshold, and on again
-  await ed.locator('.me-cancel').click();
-  await expect(ed.locator('.me-cancel')).toHaveText('Discard the changes?');
-  await ed.locator('.me-cancel').click();
-  await expect(ed).toBeHidden();
-  await expect(page.locator('.dual-scan')).toBeVisible();
-  await page.click('.dual-scan .ds-create');
-  await expect(ed).toBeVisible({ timeout: 60_000 });
-  expect(await tris()).toBe(before);
-  await ed.locator('.me-ok').click();
-  await expect(page.locator('.dual-scan')).toBeHidden({ timeout: 60_000 });
+  await expect.poll(tris).toBe(afterCut);
+  // islands and holes
+  await page.keyboard.press('Escape'); // back to Select (the window stays open)
+  await expect(win.locator('[data-mode="select"]')).toHaveClass(/active/);
+  await win.locator('.me-largest').click();
+  await expect(win.locator('.me-parts')).toContainText('One part');
+  await win.locator('.me-fill').click();
+  await expect(win.locator('.me-holes')).toContainText('No holes');
+  await win.locator('.ds-create').click();
+  await expect(win).toBeHidden({ timeout: 60_000 });
   const scan = await page.evaluate(() => {
     const s = window.app.scans[window.app.scans.length - 1];
     return { kind: s.kind, name: s.name, T: s.transform, placement: s.placement, tris: s.mesh.idx.length / 3 };

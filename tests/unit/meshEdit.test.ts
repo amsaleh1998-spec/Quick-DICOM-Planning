@@ -1,7 +1,7 @@
 // Mesh editing: parts, removing islands, trimming with a lasso, closing holes watertight and
 // facing the right way.
 import { describe, expect, it } from 'vitest';
-import { boundaryLoops, components, fillHoles, keepTriangles, trimLasso } from '../../src/meshEdit';
+import { boundaryLoops, brushCut, brushSmooth, components, fillHoles, keepTriangles, trimLasso } from '../../src/meshEdit';
 import type { MeshData } from '../../src/meshio';
 import type { Vec3 } from '../../src/math';
 
@@ -124,5 +124,36 @@ describe('mesh editing', () => {
     const closed = fillHoles(cut);
     expect(closedAndOriented(closed)).toBe(true);
     expect(volume(closed)).toBeCloseTo(1000, 3);
+  });
+
+  it('the cut brush removes the surface under it (and the hole closes again)', () => {
+    const cut = brushCut(big, [[5, 5, 10], [6, 5, 10]], 2);
+    expect(cut.idx.length).toBeLessThan(big.idx.length);
+    // only near the brush: the bottom is untouched
+    let bottom = 0;
+    for (let t = 0; t < cut.idx.length; t += 3) if ([0, 1, 2].every((k) => cut.pos[cut.idx[t + k] * 3 + 2] < 0.01)) bottom++;
+    expect(bottom).toBe(6 * 6 * 2);
+    expect(boundaryLoops(cut).length).toBeGreaterThanOrEqual(1);
+    expect(closedAndOriented(fillHoles(cut))).toBe(true);
+    // nowhere near the mesh: the same mesh back
+    expect(brushCut(big, [[50, 50, 50]], 2)).toBe(big);
+  });
+
+  it('the smooth brush smooths only where it is brushed', () => {
+    // a bump on the top face
+    const bumpy = { ...big, pos: new Float32Array(big.pos) };
+    let bump = -1;
+    for (let v = 0; v < bumpy.pos.length / 3; v++)
+      if (Math.abs(bumpy.pos[v * 3] - 5) < 0.01 && Math.abs(bumpy.pos[v * 3 + 1] - 5) < 0.01 && bumpy.pos[v * 3 + 2] > 9.99) bump = v;
+    expect(bump).toBeGreaterThanOrEqual(0);
+    bumpy.pos[bump * 3 + 2] = 12;
+    const far = (m: MeshData) => Array.from(m.pos).filter((_, i) => i % 3 === 2 && m.pos[i] < 0.01).length;
+    const sm = brushSmooth(bumpy, [[5, 5, 11]], 3);
+    expect(sm.pos[bump * 3 + 2]).toBeLessThan(11.2); // the bump is flattened
+    expect(bumpy.pos[bump * 3 + 2]).toBe(12); // a copy: the original is unchanged
+    // far from the brush nothing moved
+    for (let i = 0; i < sm.pos.length; i += 3) if (sm.pos[i + 2] < 0.01) expect(sm.pos[i + 2]).toBe(bumpy.pos[i + 2]);
+    expect(far(sm)).toBe(far(bumpy));
+    expect(sm.idx).toBe(bumpy.idx);
   });
 });

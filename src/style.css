@@ -3521,7 +3521,7 @@ details.sub[open] > summary::before {
 .dual-scan figure {
   margin: 0;
 }
-.dual-scan canvas {
+.dual-scan .ds-views canvas {
   display: block;
   background: #000;
   border-radius: 6px;
@@ -3584,8 +3584,8 @@ details.sub[open] > summary::before {
 
 /* ---- mesh editor ---- */
 .modal.mesh-editor {
-  max-width: 1180px;
-  height: min(860px, 92vh);
+  max-width: 1280px;
+  height: min(880px, 92vh);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -3593,69 +3593,153 @@ details.sub[open] > summary::before {
 .mesh-editor .me-intro {
   margin: 6px 0 0;
 }
-.mesh-editor .me-body {
+.mesh-editor .me-body,
+.dual-big .ds-body {
   flex: 1;
   min-height: 0;
   display: flex;
   gap: 12px;
   margin-top: 12px;
 }
-.mesh-editor .me-tools {
+.me-tools {
   width: 236px;
   flex: none;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
-.mesh-editor .me-tools section {
+.me-tools section,
+.ds-side section {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-2);
 }
-.mesh-editor .me-tools h3 {
-  margin: 0 0 4px;
+.me-tools h3,
+.ds-side h3 {
+  margin: 0 0 6px;
   font-size: 13px;
 }
-.mesh-editor .me-tools p {
+.me-tools p {
   margin: 2px 0 6px;
 }
-.mesh-editor .me-tools button {
+.me-tools section > button {
   width: 100%;
   margin-bottom: 4px;
 }
-.mesh-editor .me-undo-row {
-  display: flex;
-  flex-wrap: wrap;
+.me-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 4px;
+  margin-bottom: 8px;
 }
-.mesh-editor .me-undo-row button {
-  width: auto;
-  flex: 1;
+.me-modes button {
+  width: 100%;
   margin: 0;
 }
-.mesh-editor .me-vis {
+.me-row {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  margin: 2px 0;
+  margin: 4px 0;
+}
+.me-size input {
+  flex: 1;
+  min-width: 0;
+}
+.me-size output {
+  min-width: 44px;
+  text-align: right;
+}
+.me-undo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.me-undo-row button {
+  flex: 1;
+  margin: 0;
+}
+.me-stats {
+  margin: 0 2px;
 }
 .mesh-editor .me-view {
   flex: 1;
   min-width: 0;
   display: flex;
 }
-.mesh-editor .me-view .mv {
+.mesh-editor .me-view .mv,
+.dual-big .ds-3d .mv {
   flex: 1;
 }
-.mesh-editor .mv.lasso {
-  cursor: crosshair;
-}
-.mesh-editor footer {
+.mesh-editor footer,
+.dual-big footer {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* dual scan: one large window – markers and threshold | the 3D denture | the editing tools */
+.modal.dual-big {
+  max-width: 1720px;
+  height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dual-big .ds-side {
+  width: 300px;
+  flex: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dual-big .ds-result {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.dual-big .ds-views {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.dual-big .ds-legend {
+  margin: 6px 0;
+}
+.dual-big .ds-thr-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.dual-big .ds-thr {
+  width: 100%;
+}
+.dual-big .ds-mrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 6px 0;
+}
+.dual-big .ds-3d {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  position: relative;
+}
+.dual-big .ds-busy {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 3;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  pointer-events: none;
 }
