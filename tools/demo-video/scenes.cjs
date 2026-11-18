@@ -514,4 +514,4 @@ async function report(st, cfg) {
   console.log('  report:', file, fs.statSync(file).size);
 }
 
-module.exports = { open, ai, scans, curve, implants, hero, report, viewRect, implantState, scrollToOption, optionPoint };
+module.exports = { open, ai, scans, curve, implants, hero, report, viewRect, implantState, scrollToOption, optionPoint, ...require('./dual.cjs') };

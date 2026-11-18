@@ -385,6 +385,8 @@ function showDualScan(denture: Volume, patient: Volume, found: Found) {
     setStatus(`Denture placed by ${match.pairs.length} radiopaque markers (fit ${match.rms.toFixed(2)} mm) – ${(mesh.idx.length / 3).toLocaleString()} triangles.`);
   };
   document.body.append(m);
+  // (for the browser tests and the demo recording: the window's mesh editor)
+  (m as unknown as { __editor: MeshEditor }).__editor = editor;
   showResult();
   draw();
   void segment(true);

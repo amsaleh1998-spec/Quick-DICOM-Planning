@@ -1,6 +1,6 @@
 """The soundtrack: an original piece synthesised here (no samples, nothing licensed), cut to the video.
 
-  python3 music.py <seconds> <out.wav> [drop_seconds]
+  python3 music.py <seconds> <out.wav> [drop_seconds [bars]]
 
 32 bars over the length of the video, Am - F - C - G: a pad and a pluck to open, kick and bass under the
 first steps, hats and an arpeggio through the planning, everything with a lead from `drop` (the 3D shot),
@@ -15,7 +15,7 @@ from scipy.signal import butter, lfilter
 SR = 48000
 DUR = float(sys.argv[1]) if len(sys.argv) > 1 else 68.4
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'music.wav'
-BARS = 32
+BARS = int(sys.argv[4]) if len(sys.argv) > 4 else 32  # 32 bars for 70 s; fewer for a shorter video keep the tempo
 BAR = DUR / BARS
 BEAT = BAR / 4
 N = int(DUR * SR)

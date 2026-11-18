@@ -85,3 +85,19 @@ one (`edit.py out/rec out/rec2`).
 Node with the repository's dev dependencies (Playwright and its Chromium), Python 3 with `numpy`,
 `opencv-python-headless`, `Pillow` and `scipy` (music), `ffmpeg`, `pdftoppm` (poppler, for the report pages) and
 the Inter font (DejaVu Sans is used when it is missing).
+
+## The dual scan video
+
+`dual.cjs` (scenes `dopen, dcurve, dscan, dclean, dplace`), `lib/plan-dual.cjs` and
+`compose/edit_dual.py` are a second video on the same recorder: the dual scan protocol on a case
+with two CBCTs (`--data` is the folder that holds `patient with denture/` and `denture only/`).
+
+```bash
+node capture.cjs --data "/path/to/Dual Scan Example" --out out/dual --scenes dopen,dcurve,dscan,dclean,dplace
+python3 compose/edit_dual.py out/dual --out dual.mp4
+python3 compose/music.py 50.2 music.wav 39.6 24        # 24 bars keep the tempo at this length
+```
+
+The window with the DICOM files at the start is an illustration drawn by the editor (the app is
+opened by a double-click on a file only where it is installed); everything after it is the app.
+

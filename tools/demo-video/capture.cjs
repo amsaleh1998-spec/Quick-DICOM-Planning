@@ -44,6 +44,7 @@ const checkpoints = !!arg('checkpoints', false);
   });
   const cfg = {
     outDir,
+    dataDir: DATA,
     dicomFiles: fs.readdirSync(DATA).filter((f) => f.endsWith('.dcm')).sort().map((f) => path.join(DATA, f)),
     upperStl: path.join(DATA, 'upper.stl'),
     lowerStl: path.join(DATA, 'lower.stl'),
@@ -72,7 +73,7 @@ const checkpoints = !!arg('checkpoints', false);
       await page.waitForTimeout(500);
       await tidy(page);
     });
-  } else if (list[0] !== 'open') {
+  } else if (list[0] !== 'open' && list[0] !== 'dopen') {
     await st.offcam(async (page) => {
       await page.setInputFiles('#file-input', cfg.dicomFiles);
       await idle(page);
