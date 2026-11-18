@@ -117,27 +117,30 @@ async function dclean(st) {
   await st.click('.me-tools [data-mode="cut"]', { after: 0.3 });
   for (const [i, l] of lines.entries()) {
     const pts = (await project(page, l)).filter(Boolean);
-    await st.drag(pts, { dur: i ? 0.5 : 1.6, before: 0.2, after: 0.35 });
+    await st.drag(pts, { dur: 1.3, before: 0.3, after: 0.4 });
   }
   st.mark('dclean.cut');
   let s = await editorState(page);
   console.log('  after the cut:', s.parts, '|', s.holes);
   if (!/parts/.test(s.parts) || /One part/.test(s.parts)) throw new Error('the sheet is still attached');
   await st.hold(0.4);
-  await st.click('.me-keep', { after: 0.8 });
+  await st.click('.me-keep', { after: 1.1 });
   st.mark('dclean.islands');
   s = await editorState(page);
   console.log('  islands removed:', s.parts, '|', s.holes, '|', s.stats);
-  if (!(await page.evaluate(() => document.querySelector('.me-fill').disabled))) await st.click('.me-fill', { after: 0.8 });
+  if (!(await page.evaluate(() => document.querySelector('.me-fill').disabled))) await st.click('.me-fill', { after: 1.2 });
   st.mark('dclean.holes');
   console.log('  holes closed:', (await editorState(page)).holes);
   // smooth where the sheet was: a larger brush, two passes
   await st.click('.me-tools [data-mode="smooth"]', { after: 0.25 });
   const slider = async (v) => page.evaluate((v) => { const e = document.querySelector('.me-radius'), b = e.getBoundingClientRect(), th = 16; return [b.x + th / 2 + ((v - +e.min) / (+e.max - +e.min)) * (b.width - th), b.y + b.height / 2]; }, v);
   await st.drag([await slider(await page.evaluate(() => +document.querySelector('.me-radius').value)), await slider(plan.smoothRadius)], { dur: 0.5, before: 0.1, after: 0.25 });
-  for (let pass = 0; pass < 2; pass++) {
-    const l = pass ? [...lines[0]].reverse() : lines[0];
-    const pts = (await project(page, l)).filter(Boolean);
+  // back and forth over the closed hole, a little to each side of the line and beyond its ends
+  const [la, lb] = plan.sheet.lines[0], len = Math.hypot(lb[0] - la[0], lb[1] - la[1]), dir = [(lb[0] - la[0]) / len, (lb[1] - la[1]) / len];
+  for (const [pass, off] of [-0.9, 0.9, -0.3, 0.5].entries()) {
+    const n = Math.ceil((len + 5) / 0.5);
+    const l = Array.from({ length: n + 1 }, (_, i) => { const t = -2.5 + ((len + 5) * i) / n; return [la[0] + dir[0] * t - dir[1] * off, la[1] + dir[1] * t + dir[0] * off, plan.sheet.z]; });
+    const pts = (await project(page, pass % 2 ? l.reverse() : l)).filter(Boolean);
     await st.drag(pts, { dur: 1.0, before: 0.15, after: 0.2 });
   }
   st.mark('dclean.smooth');

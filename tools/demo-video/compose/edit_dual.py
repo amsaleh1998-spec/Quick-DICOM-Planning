@@ -24,17 +24,17 @@ def build(S):
     def at(sc, f, start=0):
         return tl.at(sc.cap, f, start)
 
-    tl.card(cards.titled('Dual Scan Protocol'), 2.4)
+    tl.card(cards.titled('Dual Scan Protocol'), 2.8)
     # ---- a DICOM file is double-clicked; the app opens it --------------------------------------
     t0 = tl.n
-    tl.card(cards.file_window, 2.5, xfade=X)
+    tl.card(cards.file_window, 3.0, xfade=X)
     mv.caption(t0 + 14, tl.n - 2, 'Double-click a DICOM file', 'Double-click')
     if 'dopen' in S:
         s = S['dopen']
         t0 = tl.n
         la, lb, _ = s.lapse('load')
-        tl.lapse(s.cap, min(la + 2, lb), lb, 1.3, xfade=X)
-        tl.clip(s.cap, lb + 1, s.b, 1.0)
+        tl.lapse(s.cap, min(la + 2, lb), lb, 1.6, xfade=X)
+        tl.clip(s.cap, lb + 1, s.b, 0.8)
         vp = view_of(s.r('viewport'), fill=1.0, zmax=1.32)
         cam.cut(t0, WIDE)
         cam.to(at(s, s.m('loaded'), t0) + 44, (vp[0] - 40, vp[1], vp[2]), move=44)
@@ -45,7 +45,7 @@ def build(S):
         s = S['dcurve']
         t0 = tl.n
         down, up = s.before('drawn', 'down'), s.m('drawn')
-        tl.clip(s.cap, s.a, s.b, [(s.a, 1.6), (s.clicks[0] - s.d(4), 1.0), (s.m('open'), 1.6), (down - s.d(30), 1.25), (up - s.d(6), 1.0), (s.m('settled'), 1.3)], xfade=X)
+        tl.clip(s.cap, s.a, s.b, [(s.a, 1.3), (s.clicks[0] - s.d(4), 1.0), (s.m('open'), 1.2), (down - s.d(30), 1.0), (s.m('settled'), 0.8)], xfade=X)
         cam.cut(t0, WIDE)
         cam.to(at(s, s.m('open'), t0) + 36, view_of(s.r('planArea'), fill=0.98, zmax=1.5), move=34)
         cam.to(at(s, up, t0) - 2, WIDE, move=40)
@@ -58,10 +58,10 @@ def build(S):
         t0 = tl.n
         c = s.clicks  # 0 Scans, 1 Denture CBCT…, 2 Folder…
         la, lb, _ = s.lapse('denture')
-        tl.clip(s.cap, s.a, la, [(s.a, 1.5), (c[1] - s.d(10), 1.2)], xfade=X)
-        mv.badge(*tl.lapse(s.cap, min(la + 1, lb), lb, 1.2))
+        tl.clip(s.cap, s.a, la, [(s.a, 1.1), (c[1] - s.d(10), 0.85)], xfade=X)
+        mv.badge(*tl.lapse(s.cap, min(la + 1, lb), lb, 1.6))
         t1 = tl.n
-        tl.clip(s.cap, lb + 1, s.b, 1.0)
+        tl.clip(s.cap, lb + 1, s.b, 0.75)
         side = s.r('dualSide')
         cam.cut(t0, view_of(grow(s.r('pano'), 16, 20), fill=1.0, zmax=1.7, dy=10) if 'dcurve' in S else WIDE)
         cam.to(at(s, c[0], t0) + 30, within(view_of(grow(s.r('sidebar'), 260, 0), fill=0.9, zmax=1.9), [0, -40, 1664, 940], top=True), move=36)
@@ -78,17 +78,26 @@ def build(S):
         s = S['dclean']
         t0 = tl.n
         cut, keep, fill, smooth = s.after('below'), s.after('cut'), s.before('holes'), s.after('holes')
-        tl.clip(s.cap, s.a, s.b, [(s.a, 1.3), (cut - s.d(6), 1.5), (s.m('cut') - s.d(4), 1.2), (smooth - s.d(6), 2.0), (s.m('smooth'), 1.6)], xfade=X)
+        tl.clip(s.cap, s.a, s.b, [(s.a, 1.0), (cut - s.d(6), 0.9), (s.m('cut') - s.d(4), 0.8), (smooth - s.d(6), 1.15), (s.m('smooth'), 1.1)], xfade=X)
         w3 = s.r('dual3d')
         tools = s.r('dualTools')
         work = view_of(union(w3, tools), fill=1.0, zmax=1.45)  # the 3D view and the tools
         cam.cut(t0, WIDE)
         cam.to(at(s, s.m('below'), t0), work, move=50)
+        # the cut, the hole it leaves, closing and smoothing it: close on that place
+        box = s.path_box(s.before('cut', 'down'), s.m('cut'), 0)
+        spot = within(view_of(grow(box, 250, 190), fill=1.0, zmax=2.0), union(w3, tools))
+        cam.to(at(s, cut, t0) + 50, spot, move=46)
+        cam.to(at(s, keep, t0) - 20, work, move=34)
+        cam.to(at(s, keep, t0) + 70, spot, move=40)
+        cam.to(at(s, fill, t0) - 16, work, move=30)
+        cam.to(at(s, smooth, t0) + 40, spot, move=40)
+        cam.to(at(s, s.m('smooth'), t0) + 30, work, move=40)
         cam.to(at(s, s.b - 1, t0) - 30, work, move=1)
         cam.to(tl.n - 6, WIDE, move=34)
         mv.caption(t0 + 14, at(s, cut, t0) - 6, 'Turn it over: scan residue', 'scan residue')
-        mv.caption(at(s, cut, t0), at(s, keep, t0) - 8, 'Cut it loose with the cut brush', 'cut brush')
-        mv.caption(at(s, keep, t0) - 2, at(s, smooth, t0) - 8, 'Remove the islands. Close the holes.', 'islands.')
+        mv.caption(at(s, cut, t0), at(s, keep, t0) - 8, 'Cut brush: only where the two touch', 'Cut brush:')
+        mv.caption(at(s, keep, t0) - 2, at(s, smooth, t0) - 8, 'Remove the islands. Close the hole.', 'islands.')
         mv.caption(at(s, smooth, t0), at(s, s.m('smooth'), t0) + 10, 'Smooth brush for the finish', 'Smooth brush')
 
     # ---- placed -----------------------------------------------------------------------------------
@@ -97,7 +106,7 @@ def build(S):
         t0 = tl.n
         c = s.clicks  # 0 Place in the patient's CBCT, 1 maximize 3D
         o = s.downs[-1]  # the turn of the model
-        tl.clip(s.cap, s.a, s.b, [(s.a, 1.0), (s.m('placed'), 1.2), (c[1] - s.d(10), 1.4), (o - s.d(4), 1.0), (s.m('turned'), 1.5)], xfade=X)
+        tl.clip(s.cap, s.a, s.b, [(s.a, 1.0), (s.m('placed'), 0.75), (c[1] - s.d(10), 1.2), (o - s.d(4), 1.0), (s.m('turned'), 1.0)], xfade=X)
         views = view_of(s.r('viewport'), fill=1.0, zmax=1.32)
         cam.cut(t0, WIDE)
         cam.to(at(s, s.m('placed'), t0) + 46, views, move=40)

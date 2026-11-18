@@ -95,7 +95,7 @@ with two CBCTs (`--data` is the folder that holds `patient with denture/` and `d
 ```bash
 node capture.cjs --data "/path/to/Dual Scan Example" --out out/dual --scenes dopen,dcurve,dscan,dclean,dplace
 python3 compose/edit_dual.py out/dual --out dual.mp4
-python3 compose/music.py 50.2 music.wav 39.6 24        # 24 bars keep the tempo at this length
+python3 compose/music.py 67.1 music.wav 55 30          # 30 bars keep the tempo at this length
 ```
 
 The window with the DICOM files at the start is an illustration drawn by the editor (the app is
