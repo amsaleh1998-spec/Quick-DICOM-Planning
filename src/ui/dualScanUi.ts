@@ -4,7 +4,9 @@
 
 import { autoDentureThreshold, autoMarkerThreshold, dentureMask, dentureSurface, findMarkers, matchMarkers, Marker, MarkerMatch } from '../dualScan';
 import { loadDicomFiles } from '../dicom';
-import { createScan } from '../scans';
+import { SCAN_KINDS, createScan } from '../scans';
+import type { MeshData } from '../meshio';
+import { editMesh } from './meshEditor';
 import type { Volume } from '../volume';
 import type { Vec3 } from '../math';
 import { isZipFile, zipEntriesAsFiles } from '../zip';
@@ -13,6 +15,8 @@ import { $, app, hideLoading, setStatus, showLoading } from './shell';
 
 const filesInput = $<HTMLInputElement>('dual-files');
 const folderInput = $<HTMLInputElement>('dual-folder');
+
+const DENTURE_COLOUR = [...SCAN_KINDS.find((k) => k.kind === 'denture')!.color] as [number, number, number];
 
 /** Most candidates the matcher looks at in the patient's scan (the most marker-like ones). */
 const MAX_CANDIDATES = 40;
@@ -178,7 +182,7 @@ function showDualScan(denture: Volume, patient: Volume, found: Found) {
       </div>
       <footer>
         <button class="ds-cancel">Cancel</button><span class="grow"></span>
-        <button class="primary ds-create">Segment and place the denture</button>
+        <button class="primary ds-create" title="Segment the denture at this threshold, check and edit it in 3D, then place it">Segment the denture…</button>
       </footer>
     </div>`;
   const $m = <T extends HTMLElement>(s: string) => m.querySelector<T>(s)!;
@@ -302,26 +306,42 @@ function showDualScan(denture: Volume, patient: Volume, found: Found) {
     const match = found.match;
     if (!match || match.pairs.length < 3) return;
     create.disabled = true;
+    let mesh: MeshData;
     try {
       showLoading('Segmenting the denture…', 0);
       await new Promise((r) => setTimeout(r, 30));
-      const mesh = await dentureSurface(denture, tAcrylic, (f) => showLoading('Segmenting the denture…', f));
+      mesh = await dentureSurface(denture, tAcrylic, (f) => showLoading('Segmenting the denture…', f));
       if (!mesh.idx.length) throw new Error('nothing above the threshold – lower the denture threshold');
-      const scan = createScan(denture.info.seriesDescription || 'Denture CBCT', mesh, 'denture');
-      scan.transform = match.T;
-      scan.placement = { method: 'markers', rms: match.rms, markers: match.pairs.length };
-      app.scans.push(scan);
-      app.activeScanId = scan.id;
-      done();
-      app.changed();
-      setStatus(`Denture placed by ${match.pairs.length} radiopaque markers (fit ${match.rms.toFixed(2)} mm) – ${(mesh.idx.length / 3).toLocaleString()} triangles.`);
     } catch (e) {
       console.error(e);
       setStatus(`Denture: ${(e as Error).message}`, true);
       create.disabled = false;
+      return;
     } finally {
       hideLoading();
     }
+    // check and clean up the segmented denture in 3D before it is placed
+    m.classList.add('hidden');
+    window.removeEventListener('keydown', onKey, true);
+    const edited = await editMesh(mesh, {
+      title: 'Dual scan – the segmented denture',
+      intro: 'Check the denture and clean it up: double-click the denture to select it and remove the islands, trim what does not belong to it, close holes. Then place it in the patient’s CBCT.',
+      color: DENTURE_COLOUR,
+      okLabel: 'Place in the patient’s CBCT',
+      cancelLabel: 'Back',
+    });
+    m.classList.remove('hidden');
+    window.addEventListener('keydown', onKey, true);
+    create.disabled = false;
+    if (!edited) return; // back to the threshold
+    const scan = createScan(denture.info.seriesDescription || 'Denture CBCT', edited, 'denture');
+    scan.transform = match.T;
+    scan.placement = { method: 'markers', rms: match.rms, markers: match.pairs.length };
+    app.scans.push(scan);
+    app.activeScanId = scan.id;
+    done();
+    app.changed();
+    setStatus(`Denture placed by ${match.pairs.length} radiopaque markers (fit ${match.rms.toFixed(2)} mm) – ${(edited.idx.length / 3).toLocaleString()} triangles.`);
   };
   document.body.append(m);
   showResult();

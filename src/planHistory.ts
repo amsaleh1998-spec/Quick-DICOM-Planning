@@ -9,7 +9,7 @@ import { Implant, reserveImplantIds } from './implant';
 import type { Vec2 } from './math';
 import type { MeshData } from './meshio';
 import { Nerve, reserveNerveIds } from './nerve';
-import { Scan, reserveScanIds } from './scans';
+import { Scan, meshId, reserveScanIds } from './scans';
 import type { AiLayer, Cut, Segment } from './segment';
 import type { Affine } from './register';
 import type { WaxTooth, Waxup } from './waxup/waxup';
@@ -136,22 +136,24 @@ function segments(app: App): Channel {
 }
 
 function scans(app: App): Channel {
-  // meshes are kept by reference, so a deleted scan can come back
+  // meshes are kept by reference (by mesh id), so a deleted scan can come back and an edited
+  // mesh (replaced, never changed in place) can be undone
   const meshes = new Map<number, MeshData>();
   return {
     label: 'scan',
     key() {
-      for (const s of app.scans) meshes.set(s.id, s.mesh);
-      return JSON.stringify(app.scans.map(({ mesh: _m, visible: _v, ...rest }): SavedScan => rest));
+      for (const s of app.scans) meshes.set(meshId(s.mesh), s.mesh);
+      return JSON.stringify(app.scans.map(({ mesh, visible: _v, ...rest }) => ({ ...rest, meshRef: meshId(mesh) })));
     },
     restore(key) {
       const old = new Map(app.scans.map((s) => [s.id, s]));
-      app.scans = (JSON.parse(key) as SavedScan[])
-        .filter((m) => old.has(m.id) || meshes.has(m.id))
-        .map((m) => {
+      app.scans = (JSON.parse(key) as (SavedScan & { meshRef: number })[])
+        .filter((m) => meshes.has(m.meshRef))
+        .map(({ meshRef, ...m }) => {
+          const mesh = meshes.get(meshRef)!;
           const s = old.get(m.id);
-          if (s) return Object.assign(s, m);
-          return { ...m, mesh: meshes.get(m.id)!, visible: true };
+          if (s) return Object.assign(s, m, { mesh });
+          return { ...m, mesh, visible: true };
         });
       reserveScanIds(Math.max(0, ...app.scans.map((s) => s.id)));
       if (!app.scans.some((s) => s.id === app.activeScanId)) app.activeScanId = null;

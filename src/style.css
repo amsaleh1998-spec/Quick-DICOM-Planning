@@ -3581,3 +3581,81 @@ details.sub[open] > summary::before {
   gap: 8px;
   margin-top: 14px;
 }
+
+/* ---- mesh editor ---- */
+.modal.mesh-editor {
+  max-width: 1180px;
+  height: min(860px, 92vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mesh-editor .me-intro {
+  margin: 6px 0 0;
+}
+.mesh-editor .me-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+.mesh-editor .me-tools {
+  width: 236px;
+  flex: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mesh-editor .me-tools section {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.mesh-editor .me-tools h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.mesh-editor .me-tools p {
+  margin: 2px 0 6px;
+}
+.mesh-editor .me-tools button {
+  width: 100%;
+  margin-bottom: 4px;
+}
+.mesh-editor .me-undo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mesh-editor .me-undo-row button {
+  width: auto;
+  flex: 1;
+  margin: 0;
+}
+.mesh-editor .me-vis {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 2px 0;
+}
+.mesh-editor .me-view {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.mesh-editor .me-view .mv {
+  flex: 1;
+}
+.mesh-editor .mv.lasso {
+  cursor: crosshair;
+}
+.mesh-editor footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}

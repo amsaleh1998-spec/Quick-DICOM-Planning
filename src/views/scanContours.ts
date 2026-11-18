@@ -4,7 +4,7 @@
 import type { App } from '../app';
 import type { ArchCurve } from '../curve';
 import { Frame, Vec3 } from '../math';
-import { Scan, scanWorld } from '../scans';
+import { Scan, geometryKey, scanWorld } from '../scans';
 
 interface Bounds {
   key: string;
@@ -14,7 +14,7 @@ interface Bounds {
 const boundsCache = new WeakMap<Scan, Bounds>();
 
 function bounds(s: Scan, pos: Float32Array): Bounds {
-  const key = s.transform!.join(',');
+  const key = geometryKey(s);
   const c = boundsCache.get(s);
   if (c && c.key === key) return c;
   const min: Vec3 = [Infinity, Infinity, Infinity];
@@ -173,7 +173,7 @@ export function nearestGrid(curve: ArchCurve, cell: number, margin: number) {
 export function panoCoords(s: Scan, curve: ArchCurve, O: Vec3, F: Frame): PanoCoords | null {
   const wd = scanWorld(s);
   if (!wd) return null;
-  const key = JSON.stringify([s.transform, curve.ctrl, O, F]);
+  const key = JSON.stringify([geometryKey(s), curve.ctrl, O, F]);
   const c = panoCache.get(s);
   if (c && c.key === key) return c;
   const pos = wd.pos;

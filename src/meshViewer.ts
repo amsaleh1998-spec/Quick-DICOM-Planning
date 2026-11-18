@@ -47,6 +47,12 @@ export class MeshViewer {
   markers: Marker[] = [];
   /** left button paints instead of orbiting */
   paintMode = false;
+  /** left button draws a lasso (closed on release, then onLasso) instead of orbiting */
+  lassoMode = false;
+  onLasso: ((poly: [number, number][]) => void) | null = null;
+  private lasso: [number, number][] | null = null;
+  /** lines drawn over the meshes (world, pairs of points as x0 y0 z0 x1 y1 z1 …) */
+  lines: { seg: Float32Array; color: string }[] = [];
   onPick: ((p: Vec3, mesh: ViewerMesh) => void) | null = null;
   onPaint: ((p: Vec3, mesh: ViewerMesh, erase: boolean) => void) | null = null;
   onHover: ((p: Vec3 | null) => void) | null = null;
@@ -215,6 +221,32 @@ export class MeshViewer {
       o.font = '13px system-ui';
       o.fillText(this.error, 12, 40);
     }
+    for (const l of this.lines) {
+      o.strokeStyle = l.color;
+      o.lineWidth = 2;
+      o.beginPath();
+      const g = l.seg;
+      for (let i = 0; i + 5 < g.length; i += 6) {
+        const a = this.project([g[i], g[i + 1], g[i + 2]], w, h), b = this.project([g[i + 3], g[i + 4], g[i + 5]], w, h);
+        if (!a || !b) continue;
+        o.moveTo(a[0], a[1]);
+        o.lineTo(b[0], b[1]);
+      }
+      o.stroke();
+    }
+    if (this.lasso && this.lasso.length > 1) {
+      o.beginPath();
+      o.moveTo(this.lasso[0][0], this.lasso[0][1]);
+      for (const [x, y] of this.lasso) o.lineTo(x, y);
+      o.closePath();
+      o.fillStyle = 'rgba(255, 138, 92, 0.15)';
+      o.fill();
+      o.setLineDash([5, 4]);
+      o.strokeStyle = '#ff8a5c';
+      o.lineWidth = 1.5;
+      o.stroke();
+      o.setLineDash([]);
+    }
     for (const mk of this.markers) {
       const s = this.project(mk.p, w, h);
       if (!s) continue;
@@ -231,6 +263,69 @@ export class MeshViewer {
       o.textBaseline = 'middle';
       o.fillText(mk.label, s[0], s[1] + 0.5);
     }
+  }
+
+  /** Screen position (CSS px in the viewer) of a world point; null behind the camera. */
+  screenOf(p: Vec3): [number, number] | null {
+    return this.project(p, this.el.clientWidth, this.el.clientHeight);
+  }
+
+  /** Camera position (world). */
+  eye(): Vec3 {
+    return this.camPos();
+  }
+
+  /** The triangle (of a pickable mesh) under a screen position, by casting a ray. */
+  triangleAt(x: number, y: number): { mesh: ViewerMesh; tri: number; p: Vec3 } | null {
+    const ray = pixelRay(x, y, this.el.clientWidth, this.el.clientHeight, this.camPos(), this.right, this.up, this.fwd, FOV);
+    let best: { mesh: ViewerMesh; tri: number; p: Vec3; t: number } | null = null;
+    for (const m of this.meshes) {
+      if (!m.pickable || m.visible === false) continue;
+      const hit = rayMesh(m.pos, m.idx, ray.o, ray.d);
+      if (hit && (!best || hit.t < best.t)) best = { mesh: m, tri: hit.tri, p: hit.p, t: hit.t };
+    }
+    return best;
+  }
+
+  /**
+   * Distance from the camera to the nearest visible surface, per screen position (read back
+   * once from the GPU): for "only what can be seen" tools. Null without WebGL.
+   */
+  depthMap(): ((x: number, y: number) => number | null) | null {
+    const gl = this.gl;
+    if (!gl || !this.mg) return null;
+    const w = this.el.clientWidth, h = this.el.clientHeight;
+    const W = this.canvas.width, H = this.canvas.height;
+    this.pickAt(w / 2, h / 2); // sets up the pick buffer at this size
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.pickFbo);
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    const pos = this.camPos();
+    const far = this.dist * 20;
+    const mvp = viewProjection(pos, this.right, this.up, this.fwd, FOV, w / h, Math.max(0.1, this.dist * 0.01), far);
+    this.meshes.filter((m) => m.visible !== false).forEach((m, i) => drawPick(this.mg!, m.key, mvp, pos, far, i + 1));
+    const px = new Uint8Array(W * H * 4);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return (x, y) => {
+      const i = Math.floor((x / w) * W), j = H - 1 - Math.floor((y / h) * H);
+      if (i < 0 || j < 0 || i >= W || j >= H) return null;
+      // the nearest of a 3×3 neighbourhood (a triangle centre may sit at a pixel's edge)
+      let best: number | null = null;
+      for (let dj = -1; dj <= 1; dj++)
+        for (let di = -1; di <= 1; di++) {
+          const a = i + di, b = j + dj;
+          if (a < 0 || b < 0 || a >= W || b >= H) continue;
+          const o = (a + b * W) * 4;
+          if (!px[o + 3]) continue;
+          const d = ((px[o] * 65536 + px[o + 1] * 256 + px[o + 2]) / 16777215) * far;
+          if (best === null || d < best) best = d;
+        }
+      return best;
+    };
   }
 
   private project(p: Vec3, w: number, h: number): [number, number] | null {
@@ -316,7 +411,10 @@ export class MeshViewer {
     el.addEventListener('pointerdown', (e) => {
       el.setPointerCapture(e.pointerId);
       drag = { btn: e.button, x: e.clientX, y: e.clientY, moved: false, erase: e.altKey || (e.button === 0 && e.ctrlKey), grab: false };
-      if (this.paintMode && e.button === 0) this.paintAt(e, drag.erase);
+      if (this.lassoMode && e.button === 0) {
+        this.lasso = [local(e)];
+        this.request();
+      } else if (this.paintMode && e.button === 0) this.paintAt(e, drag.erase);
       else if (e.button === 0 && !e.shiftKey && this.onGrab) {
         const hit = this.pickAt(...local(e));
         if (hit && this.onGrab(hit.p)) drag.grab = true;
@@ -341,6 +439,14 @@ export class MeshViewer {
         grabQueued = e;
         return;
       }
+      if (this.lassoMode && drag.btn === 0) {
+        if (this.lasso) {
+          const q = local(e), last = this.lasso[this.lasso.length - 1];
+          if (Math.hypot(q[0] - last[0], q[1] - last[1]) > 2) this.lasso.push(q);
+          this.request();
+        }
+        return;
+      }
       if (this.paintMode && drag.btn === 0) {
         if (!paintQueued) {
           paintQueued = e;
@@ -353,7 +459,7 @@ export class MeshViewer {
       }
       drag.x = e.clientX;
       drag.y = e.clientY;
-      const orbit = this.paintMode ? drag.btn === 2 : drag.btn === 0 && !e.shiftKey;
+      const orbit = this.paintMode || this.lassoMode ? drag.btn === 2 : drag.btn === 0 && !e.shiftKey;
       if (orbit) {
         // orbit around the target
         const a = 0.006;
@@ -372,6 +478,14 @@ export class MeshViewer {
       this.request();
     });
     el.addEventListener('pointerup', (e) => {
+      if (this.lasso) {
+        const poly = this.lasso;
+        this.lasso = null;
+        this.request();
+        drag = null;
+        if (poly.length >= 3) this.onLasso?.(poly);
+        return;
+      }
       if (drag?.grab) {
         grabQueued = null;
         if (drag.moved) {

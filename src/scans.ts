@@ -99,6 +99,18 @@ interface WorldCache {
   nrm: Float32Array;
 }
 const cache = new WeakMap<Scan, WorldCache>();
+const meshIds = new WeakMap<MeshData, number>();
+let nextMeshId = 1;
+/** A number for each mesh object: a scan's mesh is replaced (never changed in place) when it is edited. */
+export function meshId(m: MeshData): number {
+  let id = meshIds.get(m);
+  if (!id) meshIds.set(m, (id = nextMeshId++));
+  return id;
+}
+/** Key of a scan's geometry in world space: its mesh and its placement (for caches). */
+export function geometryKey(s: Scan): string {
+  return `${meshId(s.mesh)}:${s.transform ? s.transform.join(',') : '-'}`;
+}
 const localNormals = new WeakMap<MeshData, Float32Array>();
 
 export function scanNormals(m: MeshData): Float32Array {
@@ -114,7 +126,7 @@ export function scanNormals(m: MeshData): Float32Array {
 export function scanWorld(s: Scan): { pos: Float32Array; nrm: Float32Array } | null {
   const T = s.transform;
   if (!T) return null;
-  const key = T.join(',');
+  const key = geometryKey(s);
   const c = cache.get(s);
   if (c && c.key === key) return c;
   const src = s.mesh.pos;
@@ -138,7 +150,7 @@ export function scanWorld(s: Scan): { pos: Float32Array; nrm: Float32Array } | n
 
 /** Changes that affect drawing (for view caches). */
 export function scansKey(scans: Scan[]): string {
-  return JSON.stringify(scans.map((s) => [s.id, s.visible, s.color, s.opacity, s.vertexColors, s.transform]));
+  return JSON.stringify(scans.map((s) => [s.id, s.visible, s.color, s.opacity, s.vertexColors, s.transform, meshId(s.mesh)]));
 }
 
 export function placementLabel(s: Scan): string {

@@ -473,9 +473,24 @@ open case stays as it is):
 - **Denture** – the acrylic is segmented from the denture-only scan (air and acrylic are the only materials there):
   the threshold is set automatically and can be changed on the slider, with a live preview from above and from the
   front. Only the largest object is kept (no scanning supports or loose bits), inner hollows are filled.
-- *Segment and place the denture* adds it as a scan of type *Denture (dual scan)*, placed in the patient's CBCT by
-  the markers – shown in 3D and as outlines in every slice, saved with the project and exported with *Export STL*
-  like any scan (and it can be refined with *Align…* if needed).
+- *Segment the denture…* opens the segmented denture in the **mesh editor** (below) to check and clean it up;
+  *Back* returns to the threshold. *Place in the patient's CBCT* then adds it as a scan of type *Denture (dual
+  scan)*, placed by the markers – shown in 3D and as outlines in every slice, saved with the project and exported
+  with *Export STL* like any scan (and it can be refined with *Align…* if needed).
+
+### Mesh editor
+
+A 3D view of a mesh with clean-up tools – for the dual scan denture, and for any scan (Scans panel → *Edit mesh…*):
+
+- **Parts** – separate pieces (islands) are shown in orange. **Double-click** the part to keep, then *Remove the
+  islands*; or *Delete the selected part* (also Delete / Backspace), or *Keep the largest part*.
+- **Trim** – *Trim with a lasso* (T): draw around what to cut away. It cuts through the whole mesh, or with *Only what
+  is visible* just the surface seen from where you look. Right-drag rotates and the wheel zooms while trimming.
+- **Holes** – their edges are drawn in orange; *Close the holes* fills them (watertight, facing the same way as the
+  surface around them).
+- **Smooth** – a gentle smoothing that keeps the size.
+- *Undo* / *Redo* (Ctrl+Z / Ctrl+Y) inside the editor; leaving with changes asks once more. An applied edit of a
+  scan is one step of the app's undo.
 
 ## Export STL
 

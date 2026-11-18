@@ -1,6 +1,6 @@
 import { MeshGL, rayMesh, viewProjection } from '../meshgl';
 import { WaxupEditor } from './waxupEdit';
-import { scanWorld } from '../scans';
+import { geometryKey, scanWorld } from '../scans';
 import { WaxTooth, toothKey, toothWorld } from '../waxup/waxup';
 import { falloff } from '../waxup/sculpt';
 import type { App } from '../app';
@@ -1445,7 +1445,7 @@ export class View3D extends View {
     const items: Item[] = scans.map((s) => ({
       opacity: s.opacity,
       draw: () => {
-        const key = s.transform!.join(',');
+        const key = geometryKey(s);
         if (this.uploaded.get(s) !== key || !mg.has(s)) {
           const w = scanWorld(s)!;
           mg.upload(s, w.pos, w.nrm, s.mesh.idx, s.mesh.col);

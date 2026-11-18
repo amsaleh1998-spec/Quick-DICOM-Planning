@@ -43,6 +43,43 @@ test('the denture is segmented from its own CBCT and placed in the patient’s b
   expect(thr).toBeGreaterThan(-700);
   expect(thr).toBeLessThan(120);
   await page.click('.dual-scan .ds-create');
+  // the segmented denture opens in the mesh editor first
+  const ed = page.locator('.mesh-editor');
+  await expect(ed).toBeVisible({ timeout: 60_000 });
+  await expect(ed.locator('.me-parts')).toContainText('One part');
+  await expect(ed.locator('.me-holes')).toContainText('No holes');
+  const tris = async () => Number((await ed.locator('.me-stats').textContent())!.replace(/\D/g, ''));
+  const before = await tris();
+  // trim through the middle with a lasso: the denture is cut open
+  await ed.locator('.me-trim').click();
+  const box = (await ed.locator('.mv').boundingBox())!;
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await page.mouse.move(cx - 30, cy - 200);
+  await page.mouse.down();
+  for (const [x, y] of [[cx + 30, cy - 200], [cx + 30, cy + 200], [cx - 30, cy + 200], [cx - 30, cy - 200]]) await page.mouse.move(x, y, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(tris).toBeLessThan(before);
+  await expect(ed.locator('.me-holes')).toContainText(/\d+ holes?/);
+  // two parts now (the arch cut in two): double-click one, remove the other
+  await expect(ed.locator('.me-parts')).toContainText('2 parts');
+  await ed.locator('.me-trim').click(); // trimming off
+  await ed.locator('.me-fill').click();
+  await expect(ed.locator('.me-holes')).toContainText('No holes');
+  // undo / redo inside the editor
+  await page.keyboard.press('Control+z');
+  await expect(ed.locator('.me-holes')).toContainText(/\d+ holes?/);
+  await page.keyboard.press('Control+y');
+  await expect(ed.locator('.me-holes')).toContainText('No holes');
+  // back to the threshold, and on again
+  await ed.locator('.me-cancel').click();
+  await expect(ed.locator('.me-cancel')).toHaveText('Discard the changes?');
+  await ed.locator('.me-cancel').click();
+  await expect(ed).toBeHidden();
+  await expect(page.locator('.dual-scan')).toBeVisible();
+  await page.click('.dual-scan .ds-create');
+  await expect(ed).toBeVisible({ timeout: 60_000 });
+  expect(await tris()).toBe(before);
+  await ed.locator('.me-ok').click();
   await expect(page.locator('.dual-scan')).toBeHidden({ timeout: 60_000 });
   const scan = await page.evaluate(() => {
     const s = window.app.scans[window.app.scans.length - 1];
