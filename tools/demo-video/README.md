@@ -88,14 +88,14 @@ the Inter font (DejaVu Sans is used when it is missing).
 
 ## The dual scan video
 
-`dual.cjs` (scenes `dopen, dcurve, dscan, dclean, dplace`), `lib/plan-dual.cjs` and
+`dual.cjs` (scenes `dopen, dcurve, dscan, dclean, dplace, dslices, d3d`), `lib/plan-dual.cjs` and
 `compose/edit_dual.py` are a second video on the same recorder: the dual scan protocol on a case
 with two CBCTs (`--data` is the folder that holds `patient with denture/` and `denture only/`).
 
 ```bash
-node capture.cjs --data "/path/to/Dual Scan Example" --out out/dual --scenes dopen,dcurve,dscan,dclean,dplace
+node capture.cjs --data "/path/to/Dual Scan Example" --out out/dual --scenes dopen,dcurve,dscan,dclean,dplace,dslices,d3d
 python3 compose/edit_dual.py out/dual --out dual.mp4
-python3 compose/music.py 67.1 music.wav 55 30          # 30 bars keep the tempo at this length
+python3 compose/music.py 72.8 music.wav 63.6          # length of the video, start of the 3D shot (s)
 ```
 
 The window with the DICOM files at the start is an illustration drawn by the editor (the app is

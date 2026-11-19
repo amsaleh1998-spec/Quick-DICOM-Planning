@@ -151,8 +151,8 @@ async function dclean(st) {
   st.mark('dclean.done');
 }
 
-/** Placed in the patient's CBCT by the markers: its outline in the slices, the denture on the jaw in 3D. */
-async function dplace(st, cfg) {
+/** Placed in the patient's CBCT by the markers: its outline in the slices. */
+async function dplace(st) {
   st.begin('dplace');
   const page = st.page;
   await st.click('.ds-create', { after: 0 });
@@ -162,11 +162,40 @@ async function dplace(st, cfg) {
   await st.rect('viewport', '#viewport');
   await st.moveTo(await page.evaluate(() => { const b = window.app.pano.el.getBoundingClientRect(); return [b.x + b.width * 0.5, b.y + b.height * 0.8]; }), { dur: 0.7 });
   await st.hold(2.2);
-  // 3D
+}
+
+/** Through the cross-sections: the section line of the panoramic dragged along the arch and back. */
+async function dslices(st) {
+  st.begin('dslices');
+  const page = st.page;
+  for (const [name, v] of [['pano', 'pano'], ['cs1', 'crossViews.0'], ['cs3', 'crossViews.2'], ['tang', 'tang'], ['plan3d', 'view3d'], ['planAxialTile', 'planAxial']]) await st.rect(name, await viewRect(page, v));
+  await st.rect('viewport', '#viewport');
+  // along the panoramic at the height of its level line (so that only the position along the arch changes)
+  const at = (f) => page.evaluate((f) => { const a = window.app, v = a.pano, b = v.el.getBoundingClientRect(); return [b.x + v.xOf(a.curve.length * f), b.y + v.yOf(a.focusC)]; }, f);
+  const here = await page.evaluate(() => { const a = window.app, v = a.pano, b = v.el.getBoundingClientRect(); return [b.x + v.xOf(a.crossS(1)), b.y + v.yOf(a.focusC)]; });
+  const stops = [here, ...(await Promise.all(plan.slices.map(at)))];
+  await st.moveTo(here, { dur: 0.7 });
+  await st.hold(0.4);
+  st.mark('dslices.start');
+  await st.press();
+  await st.frame();
+  for (let i = 1; i < stops.length; i++) {
+    await st.dragMove([stops[i - 1], stops[i]], { dur: 0.35 + Math.abs(stops[i][0] - stops[i - 1][0]) / 190, ease: (t) => t * t * (3 - 2 * t) });
+    await st.hold(0.25);
+  }
+  await st.release();
+  st.mark('dslices.end');
+  await st.hold(0.8);
+}
+
+/** 3D: the denture on the jaw. */
+async function d3d(st, cfg) {
+  st.begin('d3d');
+  const page = st.page;
   const Q = cfg && cfg.draft3d ? undefined : plan.hero.appMs;
   await st.click(await page.evaluate(() => { const b = window.app.view3d.el.querySelector('.max-btn').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }));
   await st.hold(0.7);
-  st.mark('dplace.max');
+  st.mark('d3d.max');
   const r = await viewRect(page, 'view3d');
   await st.rect('hero3d', r);
   await st.rect('objects', '#objects');
@@ -174,9 +203,9 @@ async function dplace(st, cfg) {
   await st.moveTo(c);
   await st.hold(0.2, Q);
   await st.drag([c, [c[0] + plan.hero.orbit[0], c[1] + plan.hero.orbit[1]]], { dur: 2.6, before: 0.1, after: 0.3, appMs: Q, ease: (t) => t * t * (3 - 2 * t) });
-  st.mark('dplace.turned');
+  st.mark('d3d.turned');
   await st.moveTo([r[0] + r[2] * 0.9, r[1] + r[3] * 0.88], { appMs: Q, dur: 0.5 });
   await st.hold(1.0, Q);
 }
 
-module.exports = { dopen, dcurve, dscan, dclean, dplace };
+module.exports = { dopen, dcurve, dscan, dclean, dplace, dslices, d3d };

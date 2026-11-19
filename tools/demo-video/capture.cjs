@@ -102,7 +102,8 @@ const checkpoints = !!arg('checkpoints', false);
     await scenes[name](st, cfg);
     st.save();
     console.log(`  ${name}: ${((Date.now() - t0) / 1000).toFixed(0)} s`);
-    if (checkpoints) {
+    // (no project while a window of the app is open: Save is behind it)
+    if (checkpoints && !(await st.page.evaluate(() => !!document.querySelector('.modal-backdrop')))) {
       await st.offcam(async (page) => {
         const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 300_000 }), page.click('#btn-save-project')]);
         await dl.saveAs(path.join(outDir, `${name}.qdp.zip`));

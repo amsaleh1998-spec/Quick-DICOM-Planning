@@ -14,6 +14,8 @@ const plan = {
   /** looking at the denture from below and a little from the front, for the clean-up */
   below: [0.22, 0.42, 0.88],
   smoothRadius: 2.8,
+  /** where the section line goes in the panoramic once the denture is placed, as fractions of the curve's length */
+  slices: [0.2, 0.82, 0.5],
   /** 3D of the result: app time per frame (see lib/plan.cjs), the turn of the model (px) */
   hero: { appMs: 320, orbit: [-170, -24] },
 };

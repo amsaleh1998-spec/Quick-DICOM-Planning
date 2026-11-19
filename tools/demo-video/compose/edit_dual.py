@@ -104,16 +104,33 @@ def build(S):
     if 'dplace' in S:
         s = S['dplace']
         t0 = tl.n
-        c = s.clicks  # 0 Place in the patient's CBCT, 1 maximize 3D
-        o = s.downs[-1]  # the turn of the model
-        tl.clip(s.cap, s.a, s.b, [(s.a, 1.0), (s.m('placed'), 0.75), (c[1] - s.d(10), 1.2), (o - s.d(4), 1.0), (s.m('turned'), 1.0)], xfade=X)
+        # (a take in which the scene went on to the 3D view: up to there)
+        end = s.clicks[1] - s.d(20) if len(s.clicks) > 1 else s.b
+        tl.clip(s.cap, s.a, end, [(s.a, 1.0), (s.m('placed'), 0.75)], xfade=X)
         views = view_of(s.r('viewport'), fill=1.0, zmax=1.32)
         cam.cut(t0, WIDE)
         cam.to(at(s, s.m('placed'), t0) + 46, views, move=40)
+        mv.caption(at(s, s.m('placed'), t0) + 6, tl.n - 4, "Placed in the patient's CBCT", "patient's CBCT")
+
+    # ---- through the cross-sections ---------------------------------------------------------------
+    if 'dslices' in S:
+        s = S['dslices']
+        t0 = tl.n
+        tl.clip(s.cap, s.a, s.b, [(s.a, 1.6), (s.m('start') - s.d(10), 1.0)], xfade=X)
+        views = view_of(s.r('viewport'), fill=1.0, zmax=1.32)
+        cam.cut(t0, views)
+        mv.caption(t0 + 10, tl.n - 4, 'Scroll the sections: the denture on every slice', 'on every slice')
+
+    # ---- 3D ---------------------------------------------------------------------------------------
+    if 'd3d' in S:
+        s = S['d3d']
+        t0 = tl.n
+        o = s.downs[-1]  # the turn of the model
+        tl.clip(s.cap, s.a, s.b, [(s.a, 1.2), (o - s.d(4), 1.0), (s.m('turned'), 1.0)], xfade=X)
         hero = within(view_of(s.r('hero3d'), fill=1.0), s.r('hero3d'), top=True)
+        cam.cut(t0, view_of(s.r('viewport'), fill=1.0, zmax=1.32))
         cam.to(at(s, s.m('max'), t0) + 30, hero, move=34)
-        mv.caption(at(s, s.m('placed'), t0) + 6, at(s, c[1], t0) + 6, "Placed in the patient's CBCT", "patient's CBCT")
-        mv.caption(at(s, c[1], t0) + 16, tl.n - 4, 'The denture, exactly in place', 'exactly in place')
+        mv.caption(at(s, s.clicks[0], t0) + 16, tl.n - 4, 'The denture, exactly in place', 'exactly in place')
 
     tl.card(cards.outro_dual, 3.8, xfade=18)
     return mv
