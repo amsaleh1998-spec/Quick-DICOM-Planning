@@ -359,8 +359,8 @@ def paced(S, pages, lines, holds=None, base=1.18, most=1.4, tail=0.5):
     (`base`), slower still where its lines do not fit (up to `most`), then held on its last picture."""
     fixed = ('intro', 'outro', 'hero', 'report')  # (cards; 3D that is shown frame for frame; the pages)
     pace = {n: {'slow': 1.0 if n in fixed else base, 'pad': 0.0} for n in ['intro', 'outro'] + list(S)}
-    for n, sec in (holds or {}).items():  # a scene held on its first picture ('scene') or at a point in it ('scene.what')
-        pace[n.partition('.')[0]]['hold' if '.' in n else 'pre'] = sec
+    for n, sec in (holds or {}).items():  # a card shown longer, a scene held on its first picture ('scene') or at a point in it ('scene.what')
+        pace[n.partition('.')[0]]['pad' if n in ('intro', 'outro') else 'hold' if '.' in n else 'pre'] = sec
     for _ in range(6):
         mv = build(S, pages, pace)
         sch = schedule(mv, S, lines)
@@ -459,8 +459,8 @@ def main():
     S, pages = load(a.caps, a.only)
     if a.vo:
         import json
-        import vo_script
-        mv, sch, pace = paced(S, pages, json.load(open(a.vo)), getattr(vo_script, 'HOLDS', None))
+        vo = json.load(open(a.vo))
+        mv, sch, pace = paced(S, pages, vo['lines'], vo.get('holds'))
         for n, p in pace.items():
             print(f"  pace {n:9s} x{p['slow']:.2f}  +{p['pad']:.1f} s")
         for l in sch:

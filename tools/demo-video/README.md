@@ -119,5 +119,9 @@ ffmpeg -i demo-vo.mp4 -i sound.wav -map 0:v -map 1:a -c:v copy -af loudnorm=I=-1
 ```
 
 The speech engine leaves out words it does not know: `voice.py` stops and names them, so that they
-can be respelled in the script.
+can be added to `compose/vo_lexicon.txt` (word, then its sounds as the engine writes them) or
+respelled in the script.
+
+A second narration is `compose/vo_script_tour.py` (another voice, longer sentences) with the bed
+of `compose/music_laidback.py`: `voice.py <model> vo2 vo_script_tour`, then the same steps.
 
