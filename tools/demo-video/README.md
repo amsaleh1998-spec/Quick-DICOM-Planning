@@ -125,3 +125,7 @@ respelled in the script.
 A second narration is `compose/vo_script_tour.py` (another voice, longer sentences) with the bed
 of `compose/music_tour.py`: `voice.py <model> vo2 vo_script_tour`, then the same steps.
 
+The dual scan video has its narration too (`compose/vo_script_dual.py`, the same voice and bed):
+`voice.py <model> vo3 vo_script_dual`, `edit_dual.py out/dual --vo vo3/lines.json --out dual-vo.mp4`,
+then `music_tour.py` and `mix.py` on `dual-vo.mp4.vo.json`.
+

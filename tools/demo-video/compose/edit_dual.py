@@ -10,11 +10,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import cards
 import engine
-from edit import Scene, grow, load, union, within
+from edit import Scene, grow, load, paced, union, within
 from engine import FPS, Camera, Movie, Timeline, view_of
 
 
-def build(S):
+def build(S, pace=None):
+    pace = pace or {}
     tl = Timeline()
     WIDE = engine.WIDE
     cam = Camera(WIDE)
@@ -24,17 +25,30 @@ def build(S):
     def at(sc, f, start=0):
         return tl.at(sc.cap, f, start)
 
-    tl.card(cards.titled('Dual Scan Protocol'), 2.8)
+    mv.starts = {'intro': 0}
+
+    def begin(name):
+        mv.starts[name] = tl.n
+        tl.slow = pace.get(name, {}).get('slow', 1.0)
+        return tl.n
+
+    def pad(sc, name):
+        d = pace.get(name, {}).get('pad', 0)
+        if d > 0:
+            tl.still(sc.cap, sc.b - 1, d)
+
+    tl.card(cards.titled('Dual Scan Protocol'), 2.8 + pace.get('intro', {}).get('pad', 0))
     # ---- a DICOM file is double-clicked; the app opens it --------------------------------------
-    t0 = tl.n
-    tl.card(cards.file_window, 3.0, xfade=X)
+    t0 = begin('file')
+    tl.card(cards.file_window, 3.0 + pace.get('file', {}).get('pad', 0), xfade=X)
     mv.caption(t0 + 14, tl.n - 2, 'Double-click a DICOM file', 'Double-click')
     if 'dopen' in S:
         s = S['dopen']
-        t0 = tl.n
+        t0 = begin('dopen')
         la, lb, _ = s.lapse('load')
         tl.lapse(s.cap, min(la + 2, lb), lb, 1.6, xfade=X)
         tl.clip(s.cap, lb + 1, s.b, 0.8)
+        pad(s, 'dopen')
         vp = view_of(s.r('viewport'), fill=1.0, zmax=1.32)
         cam.cut(t0, WIDE)
         cam.to(at(s, s.m('loaded'), t0) + 44, (vp[0] - 40, vp[1], vp[2]), move=44)
@@ -43,9 +57,10 @@ def build(S):
     # ---- the panoramic curve ---------------------------------------------------------------------
     if 'dcurve' in S:
         s = S['dcurve']
-        t0 = tl.n
+        t0 = begin('dcurve')
         down, up = s.before('drawn', 'down'), s.m('drawn')
         tl.clip(s.cap, s.a, s.b, [(s.a, 1.3), (s.clicks[0] - s.d(4), 1.0), (s.m('open'), 1.2), (down - s.d(30), 1.0), (s.m('settled'), 0.8)], xfade=X)
+        pad(s, 'dcurve')
         cam.cut(t0, WIDE)
         cam.to(at(s, s.m('open'), t0) + 36, view_of(s.r('planArea'), fill=0.98, zmax=1.5), move=34)
         cam.to(at(s, up, t0) - 2, WIDE, move=40)
@@ -55,13 +70,19 @@ def build(S):
     # ---- the denture's own CBCT; the markers ------------------------------------------------------
     if 'dscan' in S:
         s = S['dscan']
-        t0 = tl.n
+        t0 = begin('dscan')
         c = s.clicks  # 0 Scans, 1 Denture CBCT…, 2 Folder…
         la, lb, _ = s.lapse('denture')
         tl.clip(s.cap, s.a, la, [(s.a, 1.1), (c[1] - s.d(10), 0.85)], xfade=X)
         mv.badge(*tl.lapse(s.cap, min(la + 1, lb), lb, 1.6))
         t1 = tl.n
-        tl.clip(s.cap, lb + 1, s.b, 0.75)
+        hold = pace.get('dscan', {}).get('hold', 0)
+        w = min(lb + 1 + s.d(70), s.b - 2)
+        tl.clip(s.cap, lb + 1, w, 0.75)
+        if hold:  # (with a voiceover: the markers and their result held while they are spoken of)
+            tl.still(s.cap, w, hold)
+        tl.clip(s.cap, w, s.b, 0.75)
+        pad(s, 'dscan')
         side = s.r('dualSide')
         cam.cut(t0, view_of(grow(s.r('pano'), 16, 20), fill=1.0, zmax=1.7, dy=10) if 'dcurve' in S else WIDE)
         cam.to(at(s, c[0], t0) + 30, within(view_of(grow(s.r('sidebar'), 260, 0), fill=0.9, zmax=1.9), [0, -40, 1664, 940], top=True), move=36)
@@ -76,9 +97,10 @@ def build(S):
     # ---- clean-up ---------------------------------------------------------------------------------
     if 'dclean' in S:
         s = S['dclean']
-        t0 = tl.n
+        t0 = begin('dclean')
         cut, keep, fill, smooth = s.after('below'), s.after('cut'), s.before('holes'), s.after('holes')
         tl.clip(s.cap, s.a, s.b, [(s.a, 1.0), (cut - s.d(6), 0.9), (s.m('cut') - s.d(4), 0.8), (smooth - s.d(6), 1.15), (s.m('smooth'), 1.1)], xfade=X)
+        pad(s, 'dclean')
         w3 = s.r('dual3d')
         tools = s.r('dualTools')
         work = view_of(union(w3, tools), fill=1.0, zmax=1.45)  # the 3D view and the tools
@@ -103,10 +125,11 @@ def build(S):
     # ---- placed -----------------------------------------------------------------------------------
     if 'dplace' in S:
         s = S['dplace']
-        t0 = tl.n
+        t0 = begin('dplace')
         # (a take in which the scene went on to the 3D view: up to there)
         end = s.clicks[1] - s.d(20) if len(s.clicks) > 1 else s.b
         tl.clip(s.cap, s.a, end, [(s.a, 1.0), (s.m('placed'), 0.75)], xfade=X)
+        pad(s, 'dplace')
         views = view_of(s.r('viewport'), fill=1.0, zmax=1.32)
         cam.cut(t0, WIDE)
         cam.to(at(s, s.m('placed'), t0) + 46, views, move=40)
@@ -115,8 +138,9 @@ def build(S):
     # ---- through the cross-sections ---------------------------------------------------------------
     if 'dslices' in S:
         s = S['dslices']
-        t0 = tl.n
+        t0 = begin('dslices')
         tl.clip(s.cap, s.a, s.b, [(s.a, 1.6), (s.m('start') - s.d(10), 1.0)], xfade=X)
+        pad(s, 'dslices')
         views = view_of(s.r('viewport'), fill=1.0, zmax=1.32)
         cam.cut(t0, views)
         mv.caption(t0 + 10, tl.n - 4, 'Scroll the sections: the denture on every slice', 'on every slice')
@@ -124,15 +148,18 @@ def build(S):
     # ---- 3D ---------------------------------------------------------------------------------------
     if 'd3d' in S:
         s = S['d3d']
-        t0 = tl.n
+        t0 = begin('d3d')
         o = s.downs[-1]  # the turn of the model
         tl.clip(s.cap, s.a, s.b, [(s.a, 1.2), (o - s.d(4), 1.0), (s.m('turned'), 1.0)], xfade=X)
+        pad(s, 'd3d')
         hero = within(view_of(s.r('hero3d'), fill=1.0), s.r('hero3d'), top=True)
         cam.cut(t0, view_of(s.r('viewport'), fill=1.0, zmax=1.32))
         cam.to(at(s, s.m('max'), t0) + 30, hero, move=34)
         mv.caption(at(s, s.clicks[0], t0) + 16, tl.n - 4, 'The denture, exactly in place', 'exactly in place')
 
-    tl.card(cards.outro_dual, 3.8, xfade=18)
+    mv.starts['outro'] = tl.n
+    tl.slow = 1.0
+    tl.card(cards.outro_dual, 3.8 + pace.get('outro', {}).get('pad', 0), xfade=18)
     return mv
 
 
@@ -147,9 +174,22 @@ def main():
     ap.add_argument('--times', default=None)
     ap.add_argument('--crf', type=int, default=16)
     ap.add_argument('--preset', default='slow')
+    ap.add_argument('--vo', default=None, help='lines.json of a voiceover (voice.py): the video is paced for it; writes <out>.vo.json')
     a = ap.parse_args()
     S, _ = load(a.caps, a.only)
-    mv = build(S)
+    if a.vo:
+        import json
+        vo = json.load(open(a.vo))
+        # (the video is unhurried already: slower only where a line needs it; cards and the 3D turn are held, not slowed)
+        mv, sch, pace = paced(S, None, vo['lines'], vo.get('holds'), base=1.0, most=1.3, build=lambda S, _, p: build(S, p), fixed=('intro', 'file', 'outro', 'd3d'))
+        for n, p in pace.items():
+            print(f"  pace {n:8s} x{p['slow']:.2f}  +{p['pad']:.1f} s")
+        for l in sch:
+            print(f"  {l['start']:6.2f} s (+{l['late']:.1f})  {l['text']}")
+        st = {k: v / FPS for k, v in mv.starts.items()}
+        json.dump(dict(seconds=mv.tl.n / FPS, starts=st, music=dict(drums=st.get('dopen', 6), tune=st.get('d3d', 0), out=st['outro']), lines=sch), open((a.stills or a.out) + '.vo.json', 'w'), indent=1)
+    else:
+        mv = build(S)
     print(f'{mv.tl.n} frames = {mv.tl.n / FPS:.1f} s')
     seg = None
     for k, e in enumerate(mv.tl.out):

@@ -354,13 +354,14 @@ def schedule(mv, S, lines, gap=0.3):
     return out
 
 
-def paced(S, pages, lines, holds=None, base=1.18, most=1.4, tail=0.5):
+def paced(S, pages, lines, holds=None, base=1.18, most=1.4, tail=0.5, build=None, fixed=('intro', 'outro', 'hero', 'report')):
     """Build the movie at the pace its voiceover needs: every scene a little slower than without one
     (`base`), slower still where its lines do not fit (up to `most`), then held on its last picture."""
-    fixed = ('intro', 'outro', 'hero', 'report')  # (cards; 3D that is shown frame for frame; the pages)
-    pace = {n: {'slow': 1.0 if n in fixed else base, 'pad': 0.0} for n in ['intro', 'outro'] + list(S)}
+    # (`fixed`: not slowed, only held - cards; 3D that is shown frame for frame; the report's pages)
+    build = build or globals()['build']
+    pace = {n: {'slow': 1.0 if n in fixed else base, 'pad': 0.0} for n in list(fixed) + list(S)}
     for n, sec in (holds or {}).items():  # a card shown longer, a scene held on its first picture ('scene') or at a point in it ('scene.what')
-        pace[n.partition('.')[0]]['pad' if n in ('intro', 'outro') else 'hold' if '.' in n else 'pre'] = sec
+        pace[n.partition('.')[0]]['pad' if n in fixed and '.' not in n else 'hold' if '.' in n else 'pre'] = sec
     for _ in range(6):
         mv = build(S, pages, pace)
         sch = schedule(mv, S, lines)

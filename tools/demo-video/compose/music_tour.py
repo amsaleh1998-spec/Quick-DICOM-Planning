@@ -101,9 +101,11 @@ def pad(freqs, dur):
     return lp(x, 1200, 2) / (3 * len(freqs)) * np.minimum(1, t / 1.2) * np.minimum(1, np.maximum(0, (dur + 1.5 - t) / 1.5))
 
 
-b_beat = max(4, bar_of(T.get('open', 3.6) + 8) // 2 * 2)   # the drums, once the opening lines are said
-b_hero = bar_of(T.get('hero', 80)) // 2 * 2
-b_out = bar_of(T.get('report', 92)) // 2 * 2
+# where the parts change: from the editor ("music": drums, tune, out) or from the implant demo's scenes
+M = info.get('music', {})
+b_beat = max(4, bar_of(M.get('drums', T.get('open', 3.6) + 8)) // 2 * 2)   # the drums, once the opening lines are said
+b_hero = bar_of(M.get('tune', T.get('hero', 80))) // 2 * 2                  # the lead takes the tune (the 3D shot)
+b_out = bar_of(M.get('out', T.get('report', 92))) // 2 * 2
 END = bar_of(T.get('outro', DUR - 5))
 # the lead, per chord, over two bars (beats, beats long, note): answers between the lines, the tune over the 3D shot
 ANSWER = [[(5, 1, 81), (6, 2, 84)], [(4, 1, 81), (5, 1, 77), (6, 2, 76)], [(5, 1, 77), (6, 2, 81)], [(4, 1, 79), (5, 1, 82), (6, 2, 84)]]
