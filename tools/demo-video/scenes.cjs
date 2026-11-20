@@ -175,15 +175,19 @@ async function scans(st, cfg) {
   // Waits are recorded in real time (the editor shows them as a time-lapse): the button is
   // released and the clock runs freely until the app is ready again.
   await st.click('#pl-go', { after: 0 });
-  const ready = (label) => (page) => page.evaluate((label) => /Click a point/.test(document.querySelector('#sa-help')?.textContent ?? '') && document.querySelectorAll('.sa-panes .mv-title')[1]?.textContent === `CBCT – ${label}`, label);
-  await st.realtime(ready('Segment: Maxilla & upper skull'), { label: 'surface', every: 200 });
+  // The window opens on the teeth of the scan's jaw (from the automatic segmentation): for the
+  // upper jaw scan, "Segment: Upper teeth" – nothing to choose.
+  const title = () => document.querySelectorAll('.sa-panes .mv-title')[1]?.textContent ?? '';
+  await st.realtime((page) => page.evaluate(() => /Click a point/.test(document.querySelector('#sa-help')?.textContent ?? '') && /^CBCT – /.test(document.querySelectorAll('.sa-panes .mv-title')[1]?.textContent ?? '')), { label: 'surface', every: 200 });
+  const target = await st.page.evaluate(title);
+  console.log('  aligning to:', target);
+  if (target !== 'CBCT – Segment: Upper teeth') throw new Error(`the alignment opened on "${target}"`);
   await st.rect('alignDialog', '.modal.scan-align');
-  await st.hold(0.5);
-  // match on the teeth: choose that segment as the CBCT surface
-  await st.click('#sa-target', { after: 0.3 });
-  await st.click(await optionPoint(st.page, '#sa-target', 'Segment: Upper teeth'), { after: 0 });
-  await st.realtime(ready('Segment: Upper teeth'), { label: 'surface2', every: 80 });
-  await st.hold(0.5);
+  await st.rect('alignTarget', '#sa-target');
+  st.mark('scans.window');
+  // a look at what was chosen
+  await st.moveTo(await st.point({ sel: '#sa-target', fx: 0.5, fy: 1.9 }), { dur: 0.6 });
+  await st.hold(1.6);
   const panes = await st.page.evaluate(() => [...document.querySelectorAll('.sa-panes > .mv')].map((e) => { const b = e.getBoundingClientRect(); return [b.x, b.y, b.width, b.height]; }));
   await st.rect('paneScan', panes[0]);
   await st.rect('paneCbct', panes[1]);

@@ -117,8 +117,10 @@ def grow(r, dx=0, dy=0):
     return [r[0] - dx, r[1] - dy, r[2] + 2 * dx, r[3] + 2 * dy]
 
 
-def build(S, report_pages=None):
-    """S: scene name -> Scene. Returns the Movie."""
+def build(S, report_pages=None, pace=None):
+    """S: scene name -> Scene. Returns the Movie. `pace`: {scene: {'slow': factor, 'pad': seconds}} – a scene
+    played slower and held longer on its last picture (to give a voiceover its time)."""
+    pace = pace or {}
     tl = Timeline()
     WIDE = engine.WIDE
     CX, CY = WIDE[0], WIDE[1]
@@ -130,27 +132,47 @@ def build(S, report_pages=None):
         return tl.at(sc.cap, f, start)
 
     # ---- opening card -----------------------------------------------------------------------------
-    tl.card(cards.intro, 2.0)
+    mv.starts = {'intro': 0}
+
+    def begin(name):
+        mv.starts[name] = tl.n
+        tl.slow = pace.get(name, {}).get('slow', 1.0)
+        return tl.n
+
+    def pad(sc, name):
+        d = pace.get(name, {}).get('pad', 0)
+        if d > 0:
+            tl.still(sc.cap, sc.b - 1, d)
+
+    tl.card(cards.intro, 2.0 + pace.get('intro', {}).get('pad', 0))
 
     # ---- drop in a CBCT ---------------------------------------------------------------------------
     if 'open' in S:
         s = S['open']
-        t0 = tl.n
-        tl.clip(s.cap, s.a + s.d(16), s.drops[0] + 1, 1.0, xfade=X)
+        t0 = begin('open')
+        # (with a voiceover: the start screen held while the opening lines are spoken, the camera moving in a little)
+        pre = int(round(pace.get('open', {}).get('pre', 0) * FPS))
+        if pre:
+            tl.still(s.cap, s.a + s.d(16), pre / FPS, xfade=X)
+        tl.clip(s.cap, s.a + s.d(16), s.drops[0] + 1, 1.0, xfade=0 if pre else X)
         la, lb, _ = s.lapse('load')
         mv.badge(*tl.lapse(s.cap, la, lb, 0.8))
         tl.clip(s.cap, s.m('loaded'), s.b, 1.35)
+        pad(s, 'open')
         cam.cut(t0, WIDE)
         vp = view_of(s.r('viewport'), fill=1.0, zmax=1.32)
+        if pre:
+            cam.to(t0 + pre - 30, (WIDE[0], WIDE[1] - 20, 1.14), move=pre - 40)
+            cam.to(t0 + pre + 30, WIDE, move=44)
         cam.to(at(s, s.m('auto'), t0) + 36, (vp[0] - 40, vp[1], vp[2]), move=46)
         k = at(s, s.m('loaded'), t0)
-        mv.caption(t0 + 16, k + 8, 'Drop in a CBCT', 'CBCT')
+        mv.caption(t0 + pre + 16, k + 8, 'Drop in a CBCT', 'CBCT')
         mv.caption(k + 20, tl.n - 4, 'Nothing is uploaded', 'Nothing')
 
     # ---- automatic segmentation -------------------------------------------------------------------
     if 'ai' in S:
         s = S['ai']
-        t0 = tl.n
+        t0 = begin('ai')
         c = s.clicks  # 0 Segments, 1 Run…, 2 maxilla only, 3 fast, 4 Start, 5 Run in background
         dlg = s.r('aiDialog')
         tl.clip(s.cap, s.a, c[3] + s.d(22), [(s.a, 1.45), (c[1] + s.d(10), 1.7)], xfade=X)
@@ -162,6 +184,7 @@ def build(S, report_pages=None):
         t3 = tl.n
         tl.clip(s.cap, s.m('done'), s.b, 1.2)
         tl.still(s.cap, s.b - 1, 0.7)  # the result a little longer
+        pad(s, 'ai')
         cam.cut(t0, (CX - 300, CY - 120, 1.4))
         # the upper part of the dialog: what it does, region, jaws, quality and the time it will take
         cam.to(at(s, c[1], t0) + 34, (dlg[0] + dlg[2] / 2, 0, 2.05), move=42)
@@ -177,36 +200,53 @@ def build(S, report_pages=None):
     # ---- intraoral scans --------------------------------------------------------------------------
     if 'scans' in S:
         s = S['scans']
-        t0 = tl.n
-        # clicks: 0 Continue, then the CBCT surface list, the pairs of points; here the first point, Match, Accept, copy the alignment, Continue
+        t0 = begin('scans')
+        # clicks: 0 Continue, then the pairs of points; here the first point, Match, Accept, copy the alignment, Continue
         c = {0: s.clicks[0], 3: s.after('patches'), 9: s.before('matched'), 10: s.after('matched'), 11: s.clicks[-2], 12: s.clicks[-1]}
         la, lb, _ = s.lapse('surface')
         tl.clip(s.cap, s.a + s.d(8), la, 2.0, xfade=X)
         mv.badge(*tl.lapse(s.cap, min(la + 1, lb), lb, 0.6))  # (its first picture is from before the click took effect)
         t1 = tl.n
-        tl.clip(s.cap, lb + 1, s.b, [(lb + 1, 2.4), (c[3] - s.d(26), 2.8), (c[9] + s.d(4), 1.0), (c[10] - s.d(20), 2.0), (s.dragstarts[1] - s.d(40), 2.0), (c[12] + s.d(10), 1.3)])
+        # (with a voiceover: the window that has just opened is held while what it chose is pointed out)
+        hold = pace.get('scans', {}).get('hold', 0)
+        w = min(s.m('window') + s.d(50), c[3] - s.d(30))
+        tl.clip(s.cap, lb + 1, w, 1.0)
+        th = tl.n
+        if hold:
+            tl.still(s.cap, w, hold)
+        tl.clip(s.cap, w, s.b, [(w, 1.0), (c[3] - s.d(26), 1.5), (c[9] + s.d(4), 1.0), (c[10] - s.d(20), 2.0), (s.dragstarts[1] - s.d(40), 2.0), (c[12] + s.d(10), 1.3)])
+        pad(s, 'scans')
         both = view_of(union(s.r('paneScan'), s.r('paneCbct')), fill=0.99, zmax=1.4, dy=-10)
         dialog = view_of(s.r('placeDialog'), fill=0.62, zmax=1.7)
         views = view_of(s.r('viewport'), fill=1.0, zmax=1.32)
         cam.cut(t0, WIDE)
         cam.to(at(s, c[0], t0) - 4, dialog, move=36)
-        cam.to(t1 - 6, both, move=30)
-        cam.to(at(s, c[9], t0) + 34, view_of(grow(s.r('paneCbct'), 30, 24), fill=0.96, zmax=1.9, dy=30), move=40)
+        # the window opens on the upper teeth: close on what was chosen (the CBCT surface, the jaw) and the teeth under it
+        tg, pc = s.r('alignTarget'), s.r('paneCbct')
+        chosen = view_of([tg[0] - 150, tg[1] - 70, 760, 420], fill=1.0, zmax=2.0)
+        cam.to(t1 + 30, chosen, move=36)
+        if hold:  # ... and across to the teeth of the CBCT it will be matched to
+            cam.to(th + int(hold * FPS * 0.75), view_of([pc[0] - 60, pc[1] - 110, pc[2] + 80, 520], fill=1.0, zmax=1.75), move=int(hold * FPS * 0.55))
+        cam.to(at(s, c[3], t0) - 10, both, move=40)
+        cam.to(at(s, c[9], t0) + 34, view_of(grow(pc, 30, 24), fill=0.96, zmax=1.9, dy=30), move=40)
         cam.to(at(s, c[10], t0) + 40, views, move=34)
         cam.to(at(s, s.dragstarts[1], t0) + 10, WIDE, move=28)
         cam.to(at(s, c[11], t0) - 2, dialog, move=34)
         cam.to(at(s, c[12], t0) + 52, view_of(s.r('mpr3d'), fill=0.92, zmax=2.2), move=50)  # both scans in the jaw
-        mv.caption(t0 + 16, at(s, c[9], t0) - 4, 'Match the intraoral scan by points', 'by points')
+        mv.caption(t0 + 16, t1 + 6, 'Add the intraoral scan', 'intraoral scan')
+        mv.caption(t1 + 16, at(s, c[3], t0) - 16, 'Upper jaw scan: upper teeth selected for you', 'selected for you')
+        mv.caption(at(s, c[3], t0) - 6, at(s, c[9], t0) - 4, 'Match it by points', 'by points')
         mv.caption(at(s, c[9], t0) + 8, at(s, c[10], t0) + 14, 'Colour-coded fit check', 'fit check')
         mv.caption(at(s, s.dragstarts[1], t0), at(s, c[12], t0) + 30, 'The lower scan copies the alignment', 'copies the alignment')
 
     # ---- the panoramic curve ----------------------------------------------------------------------
     if 'curve' in S:
         s = S['curve']
-        t0 = tl.n
+        t0 = begin('curve')
         down, up = s.before('drawn', 'down'), s.m('drawn')  # the stroke along the arch
         # the views moving apart for the drawing and back afterwards are shown as recorded, with the whole window in view
         tl.clip(s.cap, s.a, s.b, [(s.a, 1.6), (s.clicks[0] - s.d(4), 1.0), (s.m('open'), 1.9), (down - s.d(40), 1.25), (up - s.d(6), 1.0), (s.m('settled'), 1.15)], xfade=X)
+        pad(s, 'curve')
         cam.cut(t0, WIDE)
         cam.to(at(s, s.m('open'), t0) + 40, view_of(s.r('planArea'), fill=0.98, zmax=1.5), move=36)
         cam.to(at(s, down, t0) + 4, view_of(grow(s.path_box(down, up), 110, 70), fill=0.9, zmax=1.9), move=36)
@@ -217,7 +257,7 @@ def build(S, report_pages=None):
     # ---- implants ---------------------------------------------------------------------------------
     if 'implants' in S:
         s = S['implants']
-        t0 = tl.n
+        t0 = begin('implants')
         # the clicks on "+ Upper implant" (24, 26) and on the Implant ▾ list
         add24, brand, add26 = s.clicks[0], s.before('brandList'), s.after('mua24')
         tl.clip(s.cap, s.a, s.b, [
@@ -225,6 +265,7 @@ def build(S, report_pages=None):
             (s.m('sized24') - s.d(10), 1.5), (s.m('tilted24'), 2.6), (s.m('mua24') - s.d(24), 1.9),
             (s.m('placed26'), 2.8), (s.m('sized26'), 2.5), (s.m('tilted26'), 3.0), (s.m('done') - s.d(20), 1.15), (s.b - s.d(34), 3.0),
         ], xfade=X)
+        pad(s, 'implants')
         # the details close up: the implant's settings, the cross-sections, the tangential view and the
         # small 3D view – everything left of the Objects list, along the window's lower edge
         z = W / (s.r('plan3d')[0] + s.r('plan3d')[2])
@@ -245,13 +286,14 @@ def build(S, report_pages=None):
     # ---- 3D ---------------------------------------------------------------------------------------
     if 'hero' in S:
         s = S['hero']
-        t0 = tl.n
+        t0 = begin('hero')
         c = s.clicks  # 0 maximize the 3D view, 1 the eye of "Upper jaw"
         o1, o2 = s.downs[1], s.downs[3]  # the two turns of the model
         # The shot starts with the 3D view already enlarged and the implant deselected. While the model
         # moves (the turns, the zoom between them) every recorded frame is shown: played at 1.3x it
         # would advance in uneven steps. The pointer's ways in between are shortened.
         tl.clip(s.cap, s.m('ready'), s.b, [(s.a, 1.5), (o1 - s.d(4), 1.0), (s.m('turned'), 1.5), (s.m('zoom') - s.d(2), 1.0), (s.m('zoomed') + s.d(4), 1.5), (o2 - s.d(4), 1.0), (s.m('end'), 1.5)], xfade=X)
+        pad(s, 'hero')
         views = within(view_of(union(s.r('hero3d'), s.r('objects')), fill=1.0), union(s.r('hero3d'), s.r('objects')), top=True)  # the 3D view and the Objects list, nothing else
         cam.cut(t0, views)
         focus = implants_rect(s.cap, s.m('end'), s.r('hero3d'))
@@ -262,13 +304,14 @@ def build(S, report_pages=None):
     # ---- report -----------------------------------------------------------------------------------
     if 'report' in S:
         s = S['report']
-        t0 = tl.n
+        t0 = begin('report')
         c = s.clicks  # 0 Export ▾, 1 Planning report (PDF)…
         tl.clip(s.cap, s.a, c[1] + s.d(8), 1.3, xfade=X)
         la, lb, _ = s.lapse('report')
         mv.badge(*tl.lapse(s.cap, la, lb, 0.9))
         t1 = tl.n
         tl.still(s.cap, s.b - 1, 2.5)
+        pad(s, 'report')
         cam.cut(t0, cam.at(t0 - 1) if 'hero' in S else WIDE)
         cam.to(at(s, c[0], t0) + 16, view_of(grow(s.r('exportMenu'), 190, 120), fill=0.8, zmax=1.9), move=30)
         cam.to(at(s, c[1], t0) + 36, WIDE, move=32)  # the whole window while the report is made
@@ -277,8 +320,68 @@ def build(S, report_pages=None):
         mv.caption(t0 + 14, tl.n - 4, 'Export the planning report', 'planning report')
 
     # ---- closing card -----------------------------------------------------------------------------
-    tl.card(cards.outro, 3.8, xfade=18)
+    mv.starts['outro'] = tl.n
+    tl.slow = 1.0
+    tl.card(cards.outro, 3.8 + pace.get('outro', {}).get('pad', 0), xfade=18)
     return mv
+
+
+def anchor(mv, S, spec):
+    """Output frame of a voiceover anchor: 'scene', 'scene.mark', a card ('intro', 'outro'), each with '+seconds'."""
+    spec, _, plus = spec.partition('+')
+    name, _, mark = spec.partition('.')
+    k = mv.starts[name]
+    if mark:
+        try:
+            k = mv.tl.at(S[name].cap, S[name].m(mark), k)
+        except ValueError:  # a mark after the part that is shown
+            k = scene_end(mv, name) - 1
+    return k + int(round(float(plus or 0) * FPS))
+
+
+def scene_end(mv, name):
+    later = [v for v in mv.starts.values() if v > mv.starts[name]]
+    return min(later) if later else mv.tl.n
+
+
+def schedule(mv, S, lines, gap=0.3):
+    """When each line is spoken (seconds): at its anchor, or when the line before it is over."""
+    out, free = [], 0.0
+    for l in lines:
+        t = max(anchor(mv, S, l['anchor']) / FPS, free)
+        out.append(dict(l, start=round(t, 3), late=round(t - anchor(mv, S, l['anchor']) / FPS, 2)))
+        free = t + l['seconds'] + gap
+    return out
+
+
+def paced(S, pages, lines, holds=None, base=1.18, most=1.4, tail=0.5):
+    """Build the movie at the pace its voiceover needs: every scene a little slower than without one
+    (`base`), slower still where its lines do not fit (up to `most`), then held on its last picture."""
+    fixed = ('intro', 'outro', 'hero', 'report')  # (cards; 3D that is shown frame for frame; the pages)
+    pace = {n: {'slow': 1.0 if n in fixed else base, 'pad': 0.0} for n in ['intro', 'outro'] + list(S)}
+    for n, sec in (holds or {}).items():  # a scene held on its first picture ('scene') or at a point in it ('scene.what')
+        pace[n.partition('.')[0]]['hold' if '.' in n else 'pre'] = sec
+    for _ in range(6):
+        mv = build(S, pages, pace)
+        sch = schedule(mv, S, lines)
+        worst = 0.0
+        for name in mv.starts:
+            mine = [l for l in sch if l['anchor'].partition('+')[0].partition('.')[0] == name]
+            if not mine:
+                continue
+            a, b = mv.starts[name] / FPS, scene_end(mv, name) / FPS
+            need = mine[-1]['start'] + mine[-1]['seconds'] + tail - b
+            if need <= 0.03:
+                continue
+            worst = max(worst, need)
+            p = pace[name]
+            if name not in fixed and p['slow'] < most:
+                p['slow'] = min(most, p['slow'] * (b - a + need) / (b - a))
+            else:
+                p['pad'] += need
+        if worst <= 0.03:
+            break
+    return mv, sch, pace
 
 
 def report_fan(paths):
@@ -351,9 +454,20 @@ def main():
     ap.add_argument('--times', default=None, help='with --stills: only at these seconds (comma-separated)')
     ap.add_argument('--crf', type=int, default=16)
     ap.add_argument('--preset', default='slow')
+    ap.add_argument('--vo', default=None, help='lines.json of a voiceover (voice.py): the video is paced for it; writes <out>.vo.json')
     a = ap.parse_args()
     S, pages = load(a.caps, a.only)
-    mv = build(S, pages)
+    if a.vo:
+        import json
+        import vo_script
+        mv, sch, pace = paced(S, pages, json.load(open(a.vo)), getattr(vo_script, 'HOLDS', None))
+        for n, p in pace.items():
+            print(f"  pace {n:9s} x{p['slow']:.2f}  +{p['pad']:.1f} s")
+        for l in sch:
+            print(f"  {l['start']:6.2f} s (+{l['late']:.1f})  {l['text']}")
+        json.dump(dict(seconds=mv.tl.n / FPS, starts={k: v / FPS for k, v in mv.starts.items()}, lines=sch), open((a.stills or a.out) + '.vo.json', 'w'), indent=1)
+    else:
+        mv = build(S, pages)
     print(f'{mv.tl.n} frames = {mv.tl.n / FPS:.1f} s')
     seg = None
     for k, e in enumerate(mv.tl.out):  # where each part starts

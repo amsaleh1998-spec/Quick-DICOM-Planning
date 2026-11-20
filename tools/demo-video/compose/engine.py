@@ -310,6 +310,7 @@ class Timeline:
     def __init__(self):
         self.out = []  # dict(cap, i, lapse, card, seg, xfade)
         self.seg = 0
+        self.slow = 1.0  # > 1: clips and time-lapses that follow take this much longer (for a voiceover)
 
     def _add(self, entries, xfade=0):
         self.seg += 1
@@ -328,14 +329,14 @@ class Timeline:
             i = int(pos)
             entries.append(dict(cap=cap, i=i))
             sp = [s for f, s in steps if f <= i]
-            pos += (sp[-1] if sp else steps[0][1]) * cap.fps / FPS
+            pos += max(0.55, (sp[-1] if sp else steps[0][1]) / self.slow) * cap.fps / FPS
         return self._add(entries, xfade)
 
     def lapse(self, cap, a, b, dur, xfade=0):
         """A real-time stretch (frames a..b, sampled while the app worked) played in `dur` seconds. Returns its (start, end) in output frames."""
         fr = cap.frames
         t0, t1 = fr[a].get('rt', 0), fr[b].get('rt', 0)
-        n = max(2, int(round(dur * FPS)))
+        n = max(2, int(round(dur * self.slow * FPS)))
         entries = []
         j = a
         for k in range(n):

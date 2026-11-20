@@ -101,3 +101,23 @@ python3 compose/music.py 72.8 music.wav 63.6          # length of the video, sta
 The window with the DICOM files at the start is an illustration drawn by the editor (the app is
 opened by a double-click on a file only where it is installed); everything after it is the app.
 
+## The cut with a voiceover
+
+The implant demo with a narrator: the lines are in `compose/vo_script.py` (what is said, the point
+of the video each line belongs to, and how names are spelled for the speech engine), spoken by
+`compose/voice.py` (Kokoro through `sherpa-onnx`; the model is a download of its own). The editor
+then paces the video for them – every scene a little slower, slower still or held where a line
+needs the time – and writes when each line starts; `compose/music_vo.py` makes a music bed that
+follows the scenes and `compose/mix.py` puts the voice on it, the music held down under the voice.
+
+```bash
+python3 compose/voice.py /path/to/kokoro-multi-lang-v1_0 vo             # vo/line00.wav ..., vo/lines.json
+python3 compose/edit.py out/rec --vo vo/lines.json --out demo-vo.mp4    # also writes demo-vo.mp4.vo.json
+python3 compose/music_vo.py demo-vo.mp4.vo.json music.wav
+python3 compose/mix.py demo-vo.mp4.vo.json vo music.wav sound.wav
+ffmpeg -i demo-vo.mp4 -i sound.wav -map 0:v -map 1:a -c:v copy -af loudnorm=I=-16:TP=-1.5 -c:a aac -b:a 192k demo-voiceover.mp4
+```
+
+The speech engine leaves out words it does not know: `voice.py` stops and names them, so that they
+can be respelled in the script.
+
