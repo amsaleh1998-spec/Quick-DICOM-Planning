@@ -123,5 +123,5 @@ can be added to `compose/vo_lexicon.txt` (word, then its sounds as the engine wr
 respelled in the script.
 
 A second narration is `compose/vo_script_tour.py` (another voice, longer sentences) with the bed
-of `compose/music_laidback.py`: `voice.py <model> vo2 vo_script_tour`, then the same steps.
+of `compose/music_tour.py`: `voice.py <model> vo2 vo_script_tour`, then the same steps.
 

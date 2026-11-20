@@ -1,12 +1,13 @@
-"""Music for the narrated cut, laid back: an original bed synthesised here (no samples, nothing licensed).
+"""Music for the narrated cut: an original bed synthesised here (no samples, nothing licensed).
 
-  python3 music_laidback.py <video.vo.json> <out.wav>
+  python3 music_tour.py <video.vo.json> <out.wav>
 
-About 65 beats a minute with a half-time beat, F major, deep and unhurried: a long sub bass, warm
-electric-piano chords, a kick and a clap that leave room, soft hats, and a gliding sine lead that
-answers between the lines. Two bars of music alone open it; parts come in where the video's scenes
-start (from the .vo.json the editor writes), the lead takes over for the 3D shot, one chord rings
-under the closing card.
+About 129 beats a minute in F major, moving all the time without hurrying: a synth pulse in even
+eighth notes, straight hats, a clap on two and four, a kick that leaves room, a long deep bass,
+warm electric-piano chords (one every two bars) and a gliding sine lead that answers between the
+lines. A few bars of music alone open it; parts come in where the video's scenes start (from the
+.vo.json the editor writes), the lead takes the tune for the 3D shot, one chord rings under the
+closing card.
 """
 import json, sys, wave
 import numpy as np
@@ -15,8 +16,8 @@ from scipy.signal import butter, lfilter
 SR = 48000
 info = json.load(open(sys.argv[1]))
 DUR = info['seconds']; T = info['starts']
-BARS = int(round(DUR / (240 / 65)))
-BAR = DUR / BARS; BEAT = BAR / 4; S16 = BEAT / 4
+BARS = int(round(DUR / (240 / 129.5)))  # bars of four beats
+BAR = DUR / BARS; BEAT = BAR / 4; E8 = BEAT / 2
 N = int(DUR * SR)
 rng = np.random.default_rng(8)
 L = np.zeros(N + SR * 5); R = np.zeros(N + SR * 5)
@@ -68,6 +69,13 @@ def lead(notes, beat):
     return (np.sin(ph) + 0.18 * np.sin(2 * ph) + 0.06 * np.sin(3 * ph)) * g
 
 
+def pulse(f, vel=1.0, bright=1800):
+    """One note of the pulse: a short, muted synth pluck."""
+    n = int(0.21 * SR); t = np.arange(n) / SR
+    x = (2 * ((f * t) % 1) - 1) + 0.6 * (2 * ((f * 1.004 * t + 0.3) % 1) - 1)
+    return lp(x, bright) * np.exp(-t * 17) * np.minimum(1, t / 0.003) * vel * 0.5
+
+
 def kick():
     n = int(0.42 * SR); t = np.arange(n) / SR
     return np.tanh(1.5 * np.sin(2 * np.pi * np.cumsum(44 + 95 * np.exp(-t * 26)) / SR)) * np.exp(-t * 7.5)
@@ -93,57 +101,64 @@ def pad(freqs, dur):
     return lp(x, 1200, 2) / (3 * len(freqs)) * np.minimum(1, t / 1.2) * np.minimum(1, np.maximum(0, (dur + 1.5 - t) / 1.5))
 
 
-b_beat = max(2, bar_of(T.get('open', 3.6) + 8))   # the beat, once the opening lines are said
-b_hats = bar_of(T.get('scans', 30))
-b_hero = bar_of(T.get('hero', 80))
-b_out = bar_of(T.get('report', 92))
+b_beat = max(4, bar_of(T.get('open', 3.6) + 8) // 2 * 2)   # the drums, once the opening lines are said
+b_hero = bar_of(T.get('hero', 80)) // 2 * 2
+b_out = bar_of(T.get('report', 92)) // 2 * 2
 END = bar_of(T.get('outro', DUR - 5))
-# answers of the lead, one for each chord (beats in the bar, beats long, note), played every other time round
-ANSWER = [[(2.5, 0.5, 81), (3, 1, 84)], [(2, 0.5, 81), (2.5, 0.5, 77), (3, 1, 76)], [(2.5, 0.5, 77), (3, 1, 81)], [(2, 0.5, 79), (2.5, 0.5, 82), (3, 1, 84)]]
-TUNE = [[(0, 1.5, 84), (1.5, 0.5, 81), (2, 1, 84), (3, 1, 88)], [(0, 1.5, 86), (1.5, 0.5, 84), (2, 2, 81)], [(0, 1.5, 82), (1.5, 0.5, 81), (2, 1, 77), (3, 1, 81)], [(0, 1, 79), (1, 1, 82), (2, 2, 84)]]
+# the lead, per chord, over two bars (beats, beats long, note): answers between the lines, the tune over the 3D shot
+ANSWER = [[(5, 1, 81), (6, 2, 84)], [(4, 1, 81), (5, 1, 77), (6, 2, 76)], [(5, 1, 77), (6, 2, 81)], [(4, 1, 79), (5, 1, 82), (6, 2, 84)]]
+TUNE = [[(0, 3, 84), (3, 1, 81), (4, 2, 84), (6, 2, 88)], [(0, 3, 86), (3, 1, 84), (4, 4, 81)], [(0, 3, 82), (3, 1, 81), (4, 2, 77), (6, 2, 81)], [(0, 2, 79), (2, 2, 82), (4, 4, 84)]]
+# the pulse: which chord tone each eighth of a bar plays (and an octave up on some)
+ARP = [(0, 0), (2, 0), (1, 0), (2, 0), (3, 0), (2, 0), (1, 0), (2, 12)]
 
 for bar in range(BARS):
     t0 = bar * BAR
-    root, tones = CH[bar % 4]
+    ci = (bar // 2) % 4
+    root, tones = CH[ci]
+    first = bar % 2 == 0  # the first of the chord's two bars
     if bar >= END:
         if bar == END:
             for k, m in enumerate(CH[0][1] + [72]):
                 put(keys(note(m), 6.0, 0.8), t0 + 0.03 * k, 0.15, -0.3 + 0.15 * k)
-            put(sub(note(29), 4.0), t0, 0.34)
+            put(sub(note(29), 4.0), t0, 0.3)
             put(pad([note(m) for m in CH[0][1]], 4.0), t0, 0.5)
         continue
     hero = b_hero <= bar < b_out
-    beat = b_beat <= bar < b_out + 1
-    put(pad([note(m) for m in tones], BAR), t0, 0.42 if not beat else 0.3)
-    # chords: rolled on the one, a softer one on the and of three
-    for h, v in ((0, 0.85), (2.5, 0.55)):
-        for k, m in enumerate(tones):
-            put(keys(note(m), BAR * 0.62, v), t0 + h * BEAT + 0.022 * k, 0.2, -0.35 + 0.23 * k)
-    if bar >= 1:
-        put(sub(note(root), BEAT * 2.4, 0.0 if bar % 2 else 0.12), t0, 0.26)
-        put(sub(note(root + (7 if bar % 4 != 3 else 5)), BEAT * 0.9), t0 + 2.5 * BEAT, 0.2)
-        if bar % 4 == 3:
-            put(sub(note(root + 2), BEAT * 0.45, 0.1), t0 + 3.5 * BEAT, 0.2)
+    beat = b_beat <= bar < b_out + 2
+    if first:
+        put(pad([note(m) for m in tones], 2 * BAR), t0, 0.36 if not beat else 0.24)
+        # chords: rolled on the one of the first bar, a softer one before the second
+        for h, v in ((0, 0.85), (3.5, 0.5), (6.5, 0.45)):
+            for k, m in enumerate(tones):
+                put(keys(note(m), BAR * 0.9, v), t0 + h * BEAT + 0.018 * k, 0.17, -0.35 + 0.23 * k)
+        if bar >= 2:
+            put(sub(note(root), BEAT * 5.2, 0.12 if ci % 2 == 0 else 0.0), t0, 0.26)
+            put(sub(note(root + 7), BEAT * 1.6), t0 + 5.5 * BEAT, 0.2)
+            if ci == 3:
+                put(sub(note(root + 2), BEAT * 0.8, 0.1), t0 + 7.25 * BEAT, 0.2)
+    # the pulse: even eighths from the start, opening up as the piece goes on
+    open_ = 1300 + 1900 * min(1.0, bar / max(1, b_hero)) + (900 if hero else 0)
+    for k, (ti, up) in enumerate(ARP):
+        put(pulse(note(tones[ti] + up), 1.0 if k % 2 == 0 else 0.8, open_), t0 + k * E8, 0.42 if bar >= 2 else 0.3, 0.28 * (-1) ** k)
     if beat:
-        for b in ((0, 1.75) if bar % 2 == 0 else (0, 1.5, 3.5)):
+        for b in ((0, 2.5) if first else (0, 1.5, 2.5)):
             put(kick(), t0 + b * BEAT, 0.4)
-        put(clap(), t0 + 2 * BEAT, 0.4, 0.08)
-        if bar >= b_hats:
-            for k in range(16):
-                sw = S16 * 0.16 if k % 2 else 0
-                put(hat((0.9, 0.35, 0.6, 0.35)[k % 4], open_=(k == 14 and bar % 4 == 3)), t0 + k * S16 + sw, 0.11, 0.35)
-        else:
-            for k in range(8):
-                put(hat(0.8 if k % 2 == 0 else 0.4), t0 + k * BEAT / 2, 0.09, 0.35)
-    # the lead: the tune over the 3D shot, an answer every other bar elsewhere once the beat is in
-    if hero:
-        put(lead(TUNE[bar % 4], BEAT), t0, 0.075, -0.1)
-    elif beat and bar % 2 == 1 and bar < b_hero - 1:
-        put(lead(ANSWER[bar % 4], BEAT), t0, 0.055, 0.25)
+        for b in (1, 3):
+            put(clap(), t0 + b * BEAT, 0.36, 0.08)
+        for k in range(8):
+            put(hat(0.9 if k % 2 == 0 else 0.6, open_=(k == 7 and not first and ci == 3)), t0 + k * E8, 0.12, 0.35)
+    elif bar >= 2:
+        for k in range(8):  # hats alone before the drums
+            put(hat(0.7 if k % 2 == 0 else 0.45), t0 + k * E8, 0.07, 0.35)
+    if first:
+        if hero:
+            put(lead(TUNE[ci], BEAT), t0, 0.075, -0.1)
+        elif beat and ci % 2 == 1 and bar < b_hero - 2:
+            put(lead(ANSWER[ci], BEAT), t0, 0.055, 0.25)
 
-# into the beat and into the 3D shot: a reversed swell
+# into the drums and into the 3D shot: a reversed swell
 for bb, g in ((b_beat, 0.05), (b_hero, 0.07)):
-    n = int(BAR * SR); put(hp(lp(rng.standard_normal(n), 5000), 400) * (np.arange(n) / n) ** 3, bb * BAR - BAR, g)
+    n = int(2 * BAR * SR); put(hp(lp(rng.standard_normal(n), 5000), 400) * (np.arange(n) / n) ** 3, bb * BAR - 2 * BAR, g)
 
 
 def room(x):
@@ -160,4 +175,4 @@ L *= fade; R *= fade
 pk = max(abs(L).max(), abs(R).max()); L, R = np.tanh(L / pk * 1.3) / np.tanh(1.3), np.tanh(R / pk * 1.3) / np.tanh(1.3)
 with wave.open(sys.argv[2], 'wb') as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes((np.stack([L, R], 1) * 0.85 * 32767).astype('<i2').tobytes())
-print(f'wrote {sys.argv[2]}: {DUR:.1f} s, {BARS} bars, {240 / BAR:.1f} BPM; beat from bar {b_beat}, hats {b_hats}, 3D {b_hero}, out {b_out}, end {END}')
+print(f'wrote {sys.argv[2]}: {DUR:.1f} s, {BARS} bars, {240 / BAR:.1f} BPM; drums from bar {b_beat}, 3D {b_hero}, out {b_out}, end {END}')
