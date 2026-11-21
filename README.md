@@ -383,7 +383,8 @@ the future teeth.
   jaws are edentulous, where the teeth meet when they are not). *Upper arch* / *Lower arch* add 17–27 / 47–37. A second
   click selects a tooth, a third removes it (or Del). With one curve for both jaws the upper arch sits slightly outside
   the lower one; with a curve per jaw each jaw follows its own.
-  The new teeth are set up in contact with each other (and with teeth already there).
+  The new teeth are set up in contact with each other (and with teeth already there): side by side along the curve,
+  upright as in the library, each taking the room of its mesio-distal width.
 - The panel's tooth placement window has three tabs, laid out like the tooth placement step of a dental CAD. In
   every tab (3D view, slices, panoramic): **Ctrl**+drag = rotate (3D: the grabbed point follows the mouse around the
   tooth centre; slices: around the view axis), **Shift**+drag = scale, **Ctrl+Shift**+drag = scale in the drag direction.
@@ -404,7 +405,8 @@ the future teeth.
     teeth, the slider wears the cusps and incisal edges flat or makes them more pointed (the library shape in the
     middle); teeth added later get the same abrasion, and it is saved with the project.
   - **Chain**: the teeth of a row of neighbouring positions form a chain, shown in 3D as a tube through their contacts
-    with a disc at each end and a green control point beside every tooth and disc. *Chain*: a dragged tooth carries
+    (the ends of each crown on its mesio-distal axis, at one height for the jaw – so the tube of a set-up arch is
+    level and follows the curve) with a disc at each end and a green control point beside every tooth and disc. *Chain*: a dragged tooth carries
     the chain along, fading out towards pinned teeth (a rotation also towards the ends); *Single*: only the dragged
     tooth changes and its neighbours slide along the tube to stay in contact; *Tube*: the teeth slide along the fixed
     arch (red extensions). Click a control point to pin it (red) – pinned teeth and ends stay; drag a disc to move that

@@ -6,6 +6,7 @@ import { JawPlacement, Waxup, mirrorPlane, reflection, rotateScaleAbout, toothWo
 import { applyChain, chainOf, chainsOf, contacts, discPin, flipped, mirroredVertices, settleChain, snapshot, toothAxes, toothPin } from '../../src/waxup/chain';
 import { applyPart, brush, startPart } from '../../src/waxup/sculpt';
 import { IDENTITY, applyV, compose } from '../../src/register';
+import { ArchCurve } from '../../src/curve';
 import type { Frame, Vec2, Vec3 } from '../../src/math';
 
 const lib = parseLibrary(await unpackLibrary(JSON.parse(readFileSync('public/library/teeth-bodyparts3d.json', 'utf8'))));
@@ -158,6 +159,68 @@ describe('chain mode', () => {
     expect(worstContact(w, ts)).toBeLessThan(0.1);
     expect(dist(contacts(w, w.tooth(41)!).b, mid0)).toBeLessThan(1);
     for (const t of ts) expect(Waxup.scaleOf(t)).toBeCloseTo(1, 3);
+  });
+
+  it('has the contacts of a tooth on its mesio-distal axis, at one height for the whole jaw', () => {
+    const w = waxup();
+    for (const f of [...jawOrder('upper'), ...jawOrder('lower')]) w.add(f);
+    for (const jaw of ['upper', 'lower'] as const) {
+      const ts = w.jawTeeth(jaw);
+      const z0 = contacts(w, ts[0]).a[2];
+      for (const t of ts) {
+        const c = contacts(w, t);
+        const md = toothAxes(w, t).md;
+        const d: Vec3 = [c.b[0] - c.a[0], c.b[1] - c.a[1], c.b[2] - c.a[2]];
+        const len = Math.hypot(...d);
+        // the line between the contacts is the mesio-distal axis, through the middle of the crown
+        expect((d[0] * md[0] + d[1] * md[1] + d[2] * md[2]) / len).toBeGreaterThan(0.9999);
+        const ctr = w.center(t);
+        const off: Vec3 = [ctr[0] - c.a[0], ctr[1] - c.a[1], 0];
+        expect(Math.abs(off[0] * md[1] - off[1] * md[0])).toBeLessThan(1e-3);
+        expect(c.a[2]).toBeCloseTo(z0, 4);
+        expect(c.b[2]).toBeCloseTo(z0, 4);
+        // inside the height of the crown
+        const p = toothWorld(t).pos;
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 2; i < p.length; i += 3) (lo = Math.min(lo, p[i])), (hi = Math.max(hi, p[i]));
+        expect(z0).toBeGreaterThan(lo + 0.5);
+        expect(z0).toBeLessThan(hi - 0.5);
+      }
+    }
+  });
+
+  it('sets an arch up evenly: a level chain along the curve, no tooth turned or tipped', () => {
+    const w = waxup();
+    const P = new ArchCurve(curve);
+    for (const f of [...jawOrder('upper'), ...jawOrder('lower')]) w.add(f);
+    for (const jaw of ['upper', 'lower'] as const) {
+      for (const c of chainsOf(w, jaw)) settleChain(w, c, new Set(), true);
+      const ts = w.jawTeeth(jaw);
+      const snap = snapshot(w, ts);
+      const buccal = w.placement[jaw]!.buccal;
+      for (const n of snap.nodes) {
+        // the chain runs along the patient's curve (the upper arch 1.5 mm outside it), at one height
+        expect(n[2]).toBeCloseTo(snap.nodes[0][2], 4);
+        const s = P.nearest(n[0], n[1]).s;
+        if (s < 0.5 || s > P.length - 0.5) continue; // past the end of the drawn curve
+        const cp = P.at(s);
+        expect(Math.abs((n[0] - cp.p[0]) * cp.n[0] + (n[1] - cp.p[1]) * cp.n[1] - buccal)).toBeLessThan(1.2);
+      }
+      for (const t of ts) {
+        const ax = toothAxes(w, t);
+        // upright (as in the library) and heading along the curve
+        expect(Math.abs(ax.oc[2])).toBeGreaterThan(0.9999);
+        const c = w.center(t);
+        const tg = P.at(P.nearest(c[0], c[1]).s).t;
+        expect(ax.md[0] * tg[0] + ax.md[1] * tg[1]).toBeGreaterThan(Math.cos((12 * Math.PI) / 180));
+      }
+      // the same on both sides
+      for (const t of ts) {
+        const o = w.tooth(contralateral(t.fdi))!;
+        const a = w.center(t), b = w.center(o);
+        expect(Math.hypot(a[0] + b[0], a[1] - b[1], a[2] - b[2])).toBeLessThan(0.6);
+      }
+    }
   });
 
   it('chain: moves the whole chain, or bends it towards a pinned tooth', () => {
