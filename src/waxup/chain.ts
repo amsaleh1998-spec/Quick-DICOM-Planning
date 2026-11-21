@@ -66,6 +66,51 @@ interface LibContacts {
 }
 const contactCache = new WeakMap<Float32Array, LibContacts>();
 
+/** Extent of a crown along its mesio-distal axis (library coordinates, mm along the axis). */
+function mdExtent(p: Float32Array, md: Vec3): [number, number] {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < p.length; i += 3) {
+    const d = p[i] * md[0] + p[i + 1] * md[1];
+    if (d < lo) lo = d;
+    if (d > hi) hi = d;
+  }
+  return [lo, hi];
+}
+
+const levelCache = new WeakMap<ToothLibrary, Partial<Record<Jaw, number>>>();
+/**
+ * Height of the contacts of a jaw (library z): the middle of the heights at which the library
+ * crowns are widest. One height for the whole jaw, so the chain is level.
+ */
+export function contactLevel(lib: ToothLibrary, jaw: Jaw): number {
+  let c = levelCache.get(lib);
+  if (!c) levelCache.set(lib, (c = {}));
+  let z = c[jaw];
+  if (z === undefined) {
+    const hs: number[] = [];
+    for (const fdi of jawOrder(jaw)) {
+      const tpl = lib.teeth.get(fdi);
+      if (!tpl) continue;
+      const md = libAxes(lib, tpl).md;
+      const p = tpl.pos;
+      const [lo, hi] = mdExtent(p, md);
+      const sum = [0, 0], cnt = [0, 0];
+      for (let i = 0; i < p.length; i += 3) {
+        const d = p[i] * md[0] + p[i + 1] * md[1];
+        const e = d <= lo + 0.25 ? 0 : d >= hi - 0.25 ? 1 : -1;
+        if (e < 0) continue;
+        sum[e] += p[i + 2];
+        cnt[e]++;
+      }
+      for (const e of [0, 1]) if (cnt[e]) hs.push(sum[e] / cnt[e]);
+    }
+    hs.sort((x, y) => x - y);
+    const n = hs.length;
+    z = c[jaw] = n ? (hs[(n - 1) >> 1] + hs[n >> 1]) / 2 : 0;
+  }
+  return z;
+}
+
 function libContacts(m: Waxup, t: WaxTooth): LibContacts {
   const c = contactCache.get(t.pos);
   const ver = t.ver ?? 0;
@@ -73,30 +118,22 @@ function libContacts(m: Waxup, t: WaxTooth): LibContacts {
   const tpl = m.template(t.fdi);
   const ax = libAxes(m.lib!, tpl);
   const p = t.pos;
-  let lo = Infinity, hi = -Infinity, g = 0, bu = 0;
+  const [lo, hi] = mdExtent(p, ax.md);
+  let g = 0, bu = 0;
   for (let i = 0; i < p.length; i += 3) {
-    const d = p[i] * ax.md[0] + p[i + 1] * ax.md[1];
-    if (d < lo) lo = d;
-    if (d > hi) hi = d;
     const h = -((p[i] - tpl.centroid[0]) * ax.oc[0] + (p[i + 1] - tpl.centroid[1]) * ax.oc[1] + (p[i + 2] - tpl.centroid[2]) * ax.oc[2]);
     if (h > g) g = h;
     const b = (p[i] - tpl.centroid[0]) * ax.bl[0] + (p[i + 1] - tpl.centroid[1]) * ax.bl[1];
     if (b > bu) bu = b;
   }
-  // the contact: mean of the vertices within 0.25 mm of the extreme
-  const mean = (near: (d: number) => boolean): Vec3 => {
-    const s: Vec3 = [0, 0, 0];
-    let n = 0;
-    for (let i = 0; i < p.length; i += 3) {
-      if (!near(p[i] * ax.md[0] + p[i + 1] * ax.md[1])) continue;
-      s[0] += p[i];
-      s[1] += p[i + 1];
-      s[2] += p[i + 2];
-      n++;
-    }
-    return scale(s, 1 / Math.max(1, n));
-  };
-  const out = { ver, a: mean((d) => d <= lo + 0.25), b: mean((d) => d >= hi - 0.25), ging: g, buc: bu };
+  // The contacts: the ends of the crown on its mesio-distal axis through the centroid, at the
+  // jaw's contact height. So the line between a tooth's contacts is its mesio-distal axis – teeth
+  // laid contact to contact follow the arch without turning or tipping – and its length is the
+  // room the crown takes on the arch.
+  const cz = contactLevel(m.lib!, tpl.jaw);
+  const dc = tpl.centroid[0] * ax.md[0] + tpl.centroid[1] * ax.md[1];
+  const on = (d: number): Vec3 => [tpl.centroid[0] + ax.md[0] * (d - dc), tpl.centroid[1] + ax.md[1] * (d - dc), cz];
+  const out = { ver, a: on(lo), b: on(hi), ging: g, buc: bu };
   contactCache.set(t.pos, out);
   return out;
 }
