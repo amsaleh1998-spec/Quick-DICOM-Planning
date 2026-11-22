@@ -2,6 +2,8 @@
 // Only possible where the browser gives the app file / folder handles (Chrome, Edge): the
 // handles are kept in IndexedDB, and reopening asks for read access again if needed.
 
+import { DirLike, folderFiles, withLimit } from '../folderFiles';
+
 type Perm = 'granted' | 'denied' | 'prompt';
 interface PermHandle extends FileSystemHandle {
   queryPermission?(o: { mode: 'read' }): Promise<Perm>;
@@ -90,25 +92,18 @@ export async function removeRecent(id: string): Promise<void> {
   await write((await listRecent()).filter((e) => e.id !== id));
 }
 
-type DirLike = FileSystemDirectoryHandle & { values(): AsyncIterable<FileSystemHandle> };
-async function filesIn(dir: DirLike, depth: number, level = 0): Promise<File[]> {
-  const out: File[] = [];
-  for await (const h of dir.values()) {
-    if (h.kind === 'file') out.push(await (h as FileSystemFileHandle).getFile());
-    else if (level < depth) out.push(...(await filesIn(h as DirLike, depth, level + 1)));
-  }
-  return out;
-}
-
 /** Read access (asks if needed – call from a click) and the files of the entry. */
-export async function readRecent(e: RecentEntry): Promise<File[]> {
+export async function readRecent(e: RecentEntry, progress?: (text: string, f: number) => void): Promise<File[]> {
+  progress?.(`“${e.label}”: checking access…`, 0);
   for (const h of e.handles as PermHandle[]) {
-    let p = (await h.queryPermission?.({ mode: 'read' })) ?? 'granted';
+    let p = (await withLimit(h.queryPermission?.({ mode: 'read' }) ?? Promise.resolve(undefined), 'Checking access to the files')) ?? 'granted';
+    // (asking waits for the user's answer: no time limit)
     if (p !== 'granted') p = (await h.requestPermission?.({ mode: 'read' })) ?? 'denied';
     if (p !== 'granted') throw new Error('Access to the files was not allowed.');
   }
-  if (e.kind === 'folder') return filesIn(e.handles[0] as DirLike, e.depth);
-  return Promise.all((e.handles as FileSystemFileHandle[]).map((h) => h.getFile()));
+  if (e.kind === 'folder') return folderFiles(e.handles[0] as unknown as DirLike, e.depth, progress);
+  progress?.(`Reading “${e.label}”…`, 0);
+  return Promise.all((e.handles as FileSystemFileHandle[]).map((h) => withLimit(h.getFile(), `Reading “${h.name}”`)));
 }
 
 export function ago(t: number): string {

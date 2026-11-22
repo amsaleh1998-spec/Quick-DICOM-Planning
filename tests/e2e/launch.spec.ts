@@ -39,6 +39,7 @@ test('a file the browser never delivers: the wait can be cancelled, then anythin
   await expect(page.locator('#loading-text')).toHaveText('Opening “IM000002.dcm”…');
   // after a while without progress: Cancel
   await expect(page.locator('#loading-cancel')).toBeVisible({ timeout: 12_000 });
+  await expect(page.locator('#loading-alt')).toHaveText('Choose the folder…'); // a picker grants access at once
   await page.click('#loading-cancel');
   await expect(page.locator('#loading')).toBeHidden();
   await expect(page.locator('#status-msg')).toContainText('Stopped opening “IM000002.dcm”');

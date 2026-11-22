@@ -26,6 +26,7 @@ const loading = $('loading');
 const stall = $('loading-stall');
 let stallTimer = 0;
 let cancelWait: (() => void) | null = null;
+let altWait: { label: string; run: () => void } | null = null;
 const STALL_MS = 8000;
 export function showLoading(text: string, f: number) {
   const changed = $('loading-text').textContent !== text || $('loading-bar').style.width !== `${Math.round(f * 100)}%`;
@@ -39,10 +40,15 @@ export function hideLoading() {
   clearTimeout(stallTimer);
   stall.classList.add('hidden');
   cancelWait = null;
+  altWait = null;
 }
 /** While waiting on the browser (opening files): after a while without progress, offer to cancel. */
-export function cancellableWait(onCancel: (() => void) | null) {
+export function cancellableWait(onCancel: (() => void) | null, alt: { label: string; run: () => void } | null = null) {
   cancelWait = onCancel;
+  altWait = onCancel ? alt : null;
+  const b = $('loading-alt');
+  b.textContent = altWait?.label ?? '';
+  b.classList.toggle('hidden', !altWait);
   armStall();
 }
 function armStall() {
@@ -54,6 +60,13 @@ $('loading-cancel').onclick = () => {
   const c = cancelWait;
   hideLoading();
   c?.();
+};
+// another way (e.g. choosing the folder again in a picker: that grants access at once)
+$('loading-alt').onclick = () => {
+  const c = cancelWait, a = altWait;
+  hideLoading();
+  c?.();
+  a?.run();
 };
 
 /** A promise that gives up (TimeoutError) when it does not settle in time. */

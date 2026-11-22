@@ -11,6 +11,7 @@ import { choosePatient } from './patientChooser';
 import { createPhantom } from '../volume';
 import { closePopovers } from './popover';
 import { RecentEntry, RecentSource, addRecent, ago, handlesFromDrop, listRecent, readRecent, recentFromHandles, removeRecent } from './recent';
+import { DirLike, folderFiles } from '../folderFiles';
 import { $, app, cancellableWait, escapeHtml, hideLoading, setStatus, showLoading, timed } from './shell';
 import { rail, setMode } from './layout';
 import type { PanelId } from './rail';
@@ -90,13 +91,9 @@ let openedDir: FileSystemDirectoryHandle | null = null;
 type DirHandle = { kind: 'directory'; name: string; values(): AsyncIterable<FileHandleLike | DirHandle> };
 type FileHandleLike = { kind: 'file'; name: string; getFile(): Promise<File> };
 
-async function filesFromDirectory(dir: DirHandle, maxDepth = 4, depth = 0): Promise<File[]> {
-  const out: File[] = [];
-  for await (const entry of dir.values()) {
-    if (entry.kind === 'file') out.push(await entry.getFile());
-    else if (depth < maxDepth) out.push(...(await filesFromDirectory(entry, maxDepth, depth + 1)));
-  }
-  return out;
+/** The files of a folder, with the progress in the loading box (and time limits). */
+function filesFromDirectory(dir: DirHandle, maxDepth = 4): Promise<File[]> {
+  return folderFiles(dir as unknown as DirLike, maxDepth, showLoading);
 }
 
 let launchHandle: FileSystemFileHandle | null = null;
@@ -200,10 +197,13 @@ launchQueue?.setConsumer(async (params) => {
   showLoading(`Opening ${what}…`, 0);
   // the browser does not always answer (a file still being written, a drive gone to sleep…): the
   // steps below have time limits, and the wait can be cancelled to reach Recent / Open
-  cancellableWait(() => {
-    openGen++;
-    setStatus(`Stopped opening ${what} – open it from Recent or the Open menu.`, true);
-  });
+  cancellableWait(
+    () => {
+      openGen++;
+      setStatus(`Stopped opening ${what} – open it from Recent or the Open menu.`, true);
+    },
+    { label: 'Choose the folder…', run: () => void pickAndOpen('folder') },
+  );
   try {
     const files = await timed(Promise.all(handles.map((h) => h.getFile())), 15000, 'Reading the file');
     step('file read');
@@ -411,11 +411,20 @@ async function openRecentEntry(e: RecentEntry) {
   const my = ++openGen;
   try {
     showLoading(`Opening “${e.label}”…`, 0);
-    cancellableWait(() => {
-      openGen++;
-      setStatus(`Stopped opening “${e.label}”.`, true);
+    console.info('[recent] opening', e.kind, e.label);
+    cancellableWait(
+      () => {
+        openGen++;
+        setStatus(`Stopped opening “${e.label}”.`, true);
+      },
+      // the browser may not answer for a remembered folder / file (its access is asked again):
+      // a picker grants it straight away
+      { label: e.kind === 'folder' ? 'Choose the folder…' : 'Choose the file…', run: () => void pickAndOpen(e.kind === 'folder' ? 'folder' : e.kind) },
+    );
+    const files = await readRecent(e, (text, f) => {
+      console.info('[recent]', text);
+      if (my === openGen) showLoading(text, f);
     });
-    const files = await readRecent(e);
     if (my !== openGen) return;
     cancellableWait(null);
     pendingRecent = { kind: e.kind, handles: e.handles, depth: e.depth };
