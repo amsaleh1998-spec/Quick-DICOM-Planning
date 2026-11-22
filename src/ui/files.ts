@@ -11,7 +11,8 @@ import { choosePatient } from './patientChooser';
 import { createPhantom } from '../volume';
 import { closePopovers } from './popover';
 import { RecentEntry, RecentSource, addRecent, ago, handlesFromDrop, listRecent, readRecent, recentFromHandles, removeRecent } from './recent';
-import { DirLike, folderFiles } from '../folderFiles';
+import { DirLike, folderFiles, withLimit } from '../folderFiles';
+import { showFileCheck } from './fileCheck';
 import { $, app, cancellableWait, escapeHtml, hideLoading, setStatus, showLoading, timed } from './shell';
 import { rail, setMode } from './layout';
 import type { PanelId } from './rail';
@@ -155,11 +156,27 @@ $('lb-folder').onclick = async () => {
   }
   try {
     const dir = await picker({ startIn: launchHandle ?? undefined, id: 'scans-folder', mode: 'read' });
-    await rememberScanFolder(dir);
-    const path = launchHandle ? await dir.resolve(launchHandle) : null;
+    hideLaunchBanner();
+    showLoading(`Opening “${dir.name}”…`, 0);
+    // remembered alongside – if the browser's storage does not answer, the scan still opens
+    const remembered = withLimit(rememberScanFolder(dir), 'Remembering the scans folder', 8000).then(
+      () => true,
+      (e) => (console.warn('[scans folder]', e), false),
+    );
+    let path: string[] | null = null;
+    try {
+      path = launchHandle ? await withLimit(dir.resolve(launchHandle), 'Finding the scan in the folder', 5000) : null;
+    } catch (e) {
+      console.warn('[scans folder]', e);
+    }
     if (path) {
       await loadFolderOf({ root: dir, path });
-      setStatus(`“${dir.name}” remembered – double-clicked scans inside it now open directly.`);
+      setStatus(
+        (await remembered)
+          ? `“${dir.name}” remembered – double-clicked scans inside it now open directly.`
+          : `Opened – but the browser did not keep “${dir.name}” (Settings → Test file access… shows why).`,
+        !(await remembered),
+      );
       return;
     }
     // the chosen folder doesn't contain the file: load what was chosen
@@ -173,6 +190,10 @@ $('lb-folder').onclick = async () => {
   }
 };
 $('lb-close').onclick = hideLaunchBanner;
+$('btn-file-check').onclick = () => {
+  closePopovers();
+  showFileCheck();
+};
 $('lb-helper').onclick = () => showHelperHelp();
 
 type LaunchQueue = { setConsumer(cb: (p: { files?: FileSystemFileHandle[] }) => void): void };

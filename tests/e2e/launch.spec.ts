@@ -61,3 +61,15 @@ test('without cancelling, the stuck step gives up with a message naming it', asy
   await expect(page.locator('#lb-msg')).toContainText('Reading the file did not answer within 15 s');
   await expect(page.locator('#loading')).toBeHidden();
 });
+
+test('Settings → Test file access runs the browser steps and shows them', async ({ page }) => {
+  await page.click('#btn-settings');
+  await page.click('#btn-file-check');
+  const fc = page.locator('.file-check');
+  await expect(fc).toBeVisible();
+  await expect(fc.locator('li.ok')).toHaveCount(2); // the browser, the Recent list
+  await expect(fc.locator('li').nth(1)).toContainText('Read the Recent list');
+  await expect(fc.locator('.fc-pick')).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(fc).toBeHidden();
+});

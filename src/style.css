@@ -3761,3 +3761,31 @@ details.sub[open] > summary::before {
 #loading-stall button {
   margin-left: auto;
 }
+
+/* ---- file access test ---- */
+.modal.file-check {
+  max-width: 720px;
+}
+.file-check .fc-steps {
+  margin: 10px 0;
+  padding-left: 22px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.file-check .fc-state {
+  display: inline-block;
+  width: 16px;
+  font-weight: 600;
+}
+.file-check li.ok .fc-state {
+  color: #4ade80;
+}
+.file-check li.bad .fc-state,
+.file-check li.bad .fc-res {
+  color: #ff8a5c;
+}
+.file-check footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
