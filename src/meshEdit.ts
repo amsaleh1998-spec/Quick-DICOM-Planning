@@ -368,9 +368,9 @@ export function smoothAt(pos: Float32Array, nbrs: { start: Uint32Array; nb: Uint
 }
 
 /** Smooth brush stroke: a smoothed copy (dabs at `pts`). */
-export function brushSmooth(m: MeshData, pts: Vec3[], r: number): MeshData {
+export function brushSmooth(m: MeshData, pts: Vec3[], r: number, iterations = 10): MeshData {
   const pos = new Float32Array(m.pos);
   const nbrs = neighbours(m);
-  for (const p of pts) smoothAt(pos, nbrs, p, r);
+  for (const p of pts) smoothAt(pos, nbrs, p, r, iterations);
   return { pos, idx: m.idx, col: m.col };
 }

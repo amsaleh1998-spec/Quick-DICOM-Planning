@@ -155,5 +155,10 @@ describe('mesh editing', () => {
     for (let i = 0; i < sm.pos.length; i += 3) if (sm.pos[i + 2] < 0.01) expect(sm.pos[i + 2]).toBe(bumpy.pos[i + 2]);
     expect(far(sm)).toBe(far(bumpy));
     expect(sm.idx).toBe(bumpy.idx);
+    // the strength: more rounds per dab flatten the bump more
+    const weak = brushSmooth(bumpy, [[5, 5, 11]], 3, 1);
+    const strong = brushSmooth(bumpy, [[5, 5, 11]], 3, 20);
+    expect(strong.pos[bump * 3 + 2]).toBeLessThan(weak.pos[bump * 3 + 2]);
+    expect(weak.pos[bump * 3 + 2]).toBeLessThan(12);
   });
 });

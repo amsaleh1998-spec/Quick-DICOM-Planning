@@ -19,7 +19,8 @@ export type EditOp =
   | { t: 'lasso'; poly: [number, number][]; cam: Camera; visible: boolean }
   | { t: 'fill' }
   | { t: 'cut'; pts: Vec3[]; r: number }
-  | { t: 'smooth'; pts: Vec3[]; r: number };
+  /** it: smoothing rounds per dab (the brush strength) */
+  | { t: 'smooth'; pts: Vec3[]; r: number; it?: number };
 
 type Mode = 'select' | 'lasso' | 'cut' | 'smooth';
 
@@ -29,7 +30,7 @@ const HINTS: Record<Mode, string> = {
   select: 'Double-click a part to select it · drag to rotate · wheel to zoom',
   lasso: 'Draw around what to cut away · right-drag rotates · wheel zooms',
   cut: 'Brush over what to cut away · right-drag rotates · [ ] brush size',
-  smooth: 'Brush over the area to smooth · right-drag rotates · [ ] brush size',
+  smooth: 'Brush over the area to smooth · right-drag rotates · [ ] size · { } strength',
 };
 
 /** One edit applied to a mesh (the viewer renders the depth for "only what is visible" lassos). */
@@ -62,7 +63,7 @@ function applyOp(m: MeshData, op: EditOp, viewer: MeshViewer): MeshData {
     case 'cut':
       return brushCut(m, op.pts, op.r);
     case 'smooth':
-      return brushSmooth(m, op.pts, op.r);
+      return brushSmooth(m, op.pts, op.r, op.it ?? 10);
   }
 }
 
@@ -84,6 +85,8 @@ export class MeshEditor {
   private vm: ViewerMesh | null = null;
   private mode: Mode = 'select';
   private radius = 1.5;
+  /** smooth brush strength (%): 5 % = 1 smoothing round per dab, 100 % = 20 */
+  private strength = 50;
   /** the brush stroke going on */
   private stroke: { pts: Vec3[]; mesh: MeshData; nbrs?: ReturnType<typeof neighbours> } | null = null;
 
@@ -108,6 +111,7 @@ export class MeshEditor {
           <button data-mode="smooth" title="Brush over an area to smooth it (S)">Smooth brush</button>
         </div>
         <label class="me-row me-size">Brush <input class="me-radius" type="range" min="0.3" max="6" step="0.1" value="1.5" /> <output class="me-radius-v">1.5 mm</output></label>
+        <label class="me-row me-size me-strength" title="How strongly the smooth brush smooths ({ and })">Strength <input class="me-str" type="range" min="5" max="100" step="5" value="50" /> <output class="me-str-v">50 %</output></label>
         <label class="me-row me-vis"><input type="checkbox" class="me-visible" /> Lasso: only what is visible</label>
       </section>
       <section>
@@ -132,6 +136,8 @@ export class MeshEditor {
     this.tools.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) => (b.onclick = () => this.setMode(b.dataset.mode as Mode)));
     const radius = q<HTMLInputElement>('.me-radius');
     radius.oninput = () => this.setRadius(Number(radius.value));
+    const str = q<HTMLInputElement>('.me-str');
+    str.oninput = () => this.setStrength(Number(str.value));
     q<HTMLButtonElement>('.me-keep').onclick = () => {
       if (this.sel === null) this.push({ t: 'largest' });
       else this.push({ t: 'keep', p: this.partPoint(this.sel) });
@@ -168,7 +174,7 @@ export class MeshEditor {
       if (this.mode === 'cut') s.mesh = brushCut(s.mesh, [p], this.radius);
       else {
         s.nbrs ??= neighbours(s.mesh);
-        smoothAt(s.mesh.pos, s.nbrs, p, this.radius);
+        smoothAt(s.mesh.pos, s.nbrs, p, this.radius, this.rounds());
       }
       this.showMesh(s.mesh, false, this.mode === 'smooth' ? this.parts : undefined);
     };
@@ -176,10 +182,13 @@ export class MeshEditor {
       const s = this.stroke;
       this.stroke = null;
       if (!s?.pts.length) return;
-      const op: EditOp = this.mode === 'smooth' ? { t: 'smooth', pts: s.pts, r: this.radius } : { t: 'cut', pts: s.pts, r: this.radius };
+      const op: EditOp = this.mode === 'smooth' ? { t: 'smooth', pts: s.pts, r: this.radius, it: this.rounds() } : { t: 'cut', pts: s.pts, r: this.radius };
       if (op.t === 'cut' && s.mesh.idx.length === this.mesh.idx.length) return this.show();
       this.pushResult(op, s.mesh);
     };
+    this.setRadius(this.radius);
+    this.setStrength(this.strength);
+    this.tools.querySelector('.me-strength')!.classList.add('dim');
     this.show(true);
   }
 
@@ -212,6 +221,7 @@ export class MeshEditor {
     v.brushRadius = v.paintMode ? this.radius : null;
     v.setTitle(HINTS[mode]);
     v.el.classList.toggle('brush', v.paintMode);
+    this.tools.querySelector('.me-strength')!.classList.toggle('dim', mode !== 'smooth');
     this.tools.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) => {
       b.classList.toggle('active', b.dataset.mode === mode);
       b.setAttribute('aria-checked', String(b.dataset.mode === mode));
@@ -221,10 +231,25 @@ export class MeshEditor {
 
   private setRadius(r: number) {
     this.radius = Math.max(0.3, Math.min(6, Math.round(r * 10) / 10));
-    this.tools.querySelector<HTMLInputElement>('.me-radius')!.value = String(this.radius);
+    const el = this.tools.querySelector<HTMLInputElement>('.me-radius')!;
+    el.value = String(this.radius);
+    el.style.setProperty('--fill', `${((this.radius - 0.3) / 5.7) * 100}%`);
     this.tools.querySelector('.me-radius-v')!.textContent = `${this.radius.toFixed(1)} mm`;
     if (this.viewer.paintMode) this.viewer.brushRadius = this.radius;
     this.viewer.request();
+  }
+
+  /** Smoothing rounds per dab of the smooth brush. */
+  private rounds(): number {
+    return Math.max(1, Math.round(this.strength / 5));
+  }
+
+  private setStrength(pct: number) {
+    this.strength = Math.max(5, Math.min(100, Math.round(pct / 5) * 5));
+    const el = this.tools.querySelector<HTMLInputElement>('.me-str')!;
+    el.value = String(this.strength);
+    el.style.setProperty('--fill', `${((this.strength - 5) / 95) * 100}%`);
+    this.tools.querySelector('.me-str-v')!.textContent = `${this.strength} %`;
   }
 
   /** Keyboard shortcuts of the editor; true when the key was used. */
@@ -239,6 +264,8 @@ export class MeshEditor {
     else if (k === 't') this.setMode('lasso');
     else if (k === 'b') this.setMode('cut');
     else if (k === 's') this.setMode('smooth');
+    else if (e.key === '{') this.setStrength(this.strength - 10);
+    else if (e.key === '}') this.setStrength(this.strength + 10);
     else if (e.key === '[') this.setRadius(this.radius - (this.radius > 2 ? 0.5 : 0.2));
     else if (e.key === ']') this.setRadius(this.radius + (this.radius >= 2 ? 0.5 : 0.2));
     else if ((e.key === 'Delete' || e.key === 'Backspace') && this.sel !== null) this.tools.querySelector<HTMLButtonElement>('.me-del')!.click();

@@ -3649,6 +3649,9 @@ details.sub[open] > summary::before {
   flex: 1;
   min-width: 0;
 }
+.me-strength.dim {
+  opacity: 0.45;
+}
 .me-size output {
   min-width: 44px;
   text-align: right;

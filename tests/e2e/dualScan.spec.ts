@@ -92,6 +92,12 @@ test('the denture is segmented from its own CBCT and placed in the patient’s b
   const afterCut = await tris();
   // smooth brush: same triangles, one more step to undo
   await win.locator('[data-mode="smooth"]').click();
+  await expect(win.locator('.me-strength')).not.toHaveClass(/dim/);
+  await page.keyboard.press('}');
+  await expect(win.locator('.me-str-v')).toHaveText('60 %');
+  await page.keyboard.press('{');
+  await page.keyboard.press('{');
+  await expect(win.locator('.me-str-v')).toHaveText('40 %');
   await drag([[cx - 220, cy - 60], [cx + 220, cy - 20]]);
   await page.keyboard.press('Control+z'); // the smoothing undone
   await expect.poll(tris).toBe(afterCut);

@@ -491,7 +491,7 @@ The 3D view with clean-up tools – in the dual scan window, and for any scan (S
   surface seen from where you look.
 - **Cut brush** (B) – brush over what to cut away.
 - **Smooth brush** (S) – brush over an area to smooth just there (it keeps its size); the rest stays as it is.
-- Brush size: the slider or `[` / `]`. With a tool on, right-drag rotates and the wheel zooms.
+- Brush size: the slider or `[` / `]`; smooth brush **strength**: its slider (5–100 %) or `{` / `}`. With a tool on, right-drag rotates and the wheel zooms.
 - **Holes** – their edges are drawn in orange; *Close the holes* fills them (watertight, facing the same way as the
   surface around them).
 - *Undo* / *Redo* (Ctrl+Z / Ctrl+Y) inside the editor; leaving with changes asks once more. An applied edit of a
