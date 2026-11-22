@@ -115,3 +115,18 @@ test('a dropped STL is not listed under Recent', async () => {
   await page.reload();
   await expect(page.locator('#start-recent li')).toHaveCount(before);
 });
+
+test('Clear empties the Recent list (after a second click)', async () => {
+  await page.goto('./');
+  await expect(page.locator('#start-recent li')).not.toHaveCount(0);
+  const clear = page.locator('#start-recent .recent-clear');
+  await clear.click();
+  await expect(clear).toHaveText('Clear all?');
+  await expect(page.locator('#start-recent li')).not.toHaveCount(0); // not yet
+  await clear.click();
+  await expect(page.locator('#start-recent')).toBeHidden();
+  await expect(page.locator('#status-msg')).toContainText('Recent list cleared');
+  await page.reload();
+  await expect(page.locator('#start-recent')).toBeHidden();
+  await expect(page.locator('#open-recent')).toBeHidden();
+});

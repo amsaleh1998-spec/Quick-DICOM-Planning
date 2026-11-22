@@ -10,7 +10,7 @@ import { filesFromDataTransfer, loadDicomFiles } from '../dicom';
 import { choosePatient } from './patientChooser';
 import { createPhantom } from '../volume';
 import { closePopovers } from './popover';
-import { RecentEntry, RecentSource, addRecent, ago, handlesFromDrop, listRecent, readRecent, recentFromHandles, removeRecent } from './recent';
+import { addRecent, ago, clearRecent, handlesFromDrop, listRecent, readRecent, RecentEntry, recentFromHandles, RecentSource, removeRecent } from './recent';
 import { DirLike, folderFiles, withLimit } from '../folderFiles';
 import { showFileCheck } from './fileCheck';
 import { $, app, cancellableWait, escapeHtml, hideLoading, setStatus, showLoading, timed } from './shell';
@@ -497,6 +497,31 @@ function askToChooseAgain(e: RecentEntry) {
   };
   document.body.append(m);
   m.querySelector<HTMLButtonElement>('.ca-go')!.focus();
+}
+
+// Clear: a second click within a few seconds empties the list
+for (const b of document.querySelectorAll<HTMLButtonElement>('.recent-clear')) {
+  let armed = -Infinity;
+  b.onclick = async (ev) => {
+    ev.stopPropagation(); // (the Open menu stays open)
+    if (performance.now() - armed > 3000) {
+      armed = performance.now();
+      b.textContent = 'Clear all?';
+      b.classList.add('danger');
+      setTimeout(() => {
+        if (performance.now() - armed < 2900) return;
+        b.textContent = 'Clear';
+        b.classList.remove('danger');
+      }, 3000);
+      return;
+    }
+    armed = -Infinity;
+    b.textContent = 'Clear';
+    b.classList.remove('danger');
+    await clearRecent();
+    await renderRecent();
+    setStatus('Recent list cleared (the files themselves are unchanged).');
+  };
 }
 
 /** Recent list in the Open menu and on the start screen. */

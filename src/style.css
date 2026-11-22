@@ -3789,3 +3789,28 @@ details.sub[open] > summary::before {
   gap: 8px;
   margin-top: 12px;
 }
+
+/* Recent: header with a Clear link */
+.recent-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.recent-hd .recent-clear {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.recent-hd .recent-clear:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+.recent-hd .recent-clear.danger {
+  color: #ff8a5c;
+}

@@ -89,6 +89,11 @@ export async function addRecent(src: RecentSource, label: string, sub: string): 
   await write([entry, ...keep].slice(0, MAX));
 }
 
+/** Empty the Recent list (only the list: the files stay where they are). */
+export async function clearRecent(): Promise<void> {
+  await write([]);
+}
+
 export async function removeRecent(id: string): Promise<void> {
   await write((await listRecent()).filter((e) => e.id !== id));
 }
