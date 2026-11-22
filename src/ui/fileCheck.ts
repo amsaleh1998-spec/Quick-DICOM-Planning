@@ -3,7 +3,7 @@
 // file handles and their permissions, kept in its storage) – and shows which one fails or does
 // not answer, with the times, ready to copy and send.
 
-import { listRecent } from './recent';
+import { ago, listRecent } from './recent';
 import { withLimit } from '../folderFiles';
 import { escapeHtml } from './shell';
 
@@ -15,6 +15,25 @@ type AnyHandle = FileSystemHandle & {
   getFile?(): Promise<File>;
 };
 const LIMIT = 10000;
+const DB = 'qdp-file-check';
+const open = () =>
+  new Promise<IDBDatabase>((res, rej) => {
+    const r = indexedDB.open(DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+/** The folder kept by an earlier run of the test (null when none). */
+async function readKept(): Promise<{ dir: AnyHandle; when: number } | null> {
+  const db = await open();
+  const v = await new Promise<{ dir: AnyHandle; when: number } | undefined>((res) => {
+    const r = db.transaction('kv').objectStore('kv').get('kept');
+    r.onsuccess = () => res(r.result as { dir: AnyHandle; when: number } | undefined);
+    r.onerror = () => res(undefined);
+  });
+  db.close();
+  return v ?? null;
+}
 
 export function showFileCheck() {
   const m = document.createElement('div');
@@ -72,13 +91,18 @@ export function showFileCheck() {
       },
     );
     const recents = await step('Read the Recent list (browser storage)', () => listRecent(), (l) => `${l.length} item${l.length === 1 ? '' : 's'}`);
-    const first = recents?.[0];
-    if (first) {
-      const h = first.handles[0] as AnyHandle;
-      const perm = await step(`Access to Recent “${first.label}”`, async () => (await h.queryPermission?.({ mode: 'read' })) ?? 'no check');
-      if (perm === 'granted' && h.kind === 'directory')
-        await step(`List Recent “${first.label}”`, async () => firstEntries(h), (n) => `${n} entries seen`);
-      if (perm === 'granted' && h.kind === 'file') await step(`Read Recent “${first.label}”`, async () => (await h.getFile!()).size, (s) => `${(s / 1048576).toFixed(1)} MB`);
+    // every Recent item (at the same time: each may take the full time limit)
+    await Promise.all(
+      (recents ?? []).map((r) =>
+        step(`Access to Recent “${r.label}” (${r.sub || r.kind}, ${ago(r.when)})`, async () => (await (r.handles[0] as AnyHandle).queryPermission?.({ mode: 'read' })) ?? 'no check'),
+      ),
+    );
+    // the folder kept by an earlier run of this test: does access kept by now survive a restart?
+    const kept = await readKept().catch(() => null);
+    if (kept) {
+      const label = `Folder kept by the last test (“${kept.dir.name}”, ${ago(kept.when)})`;
+      const perm = await step(`${label}: access`, async () => (await kept.dir.queryPermission?.({ mode: 'read' })) ?? 'no check');
+      if (perm === 'granted') await step(`${label}: list`, () => firstEntries(kept.dir), (n) => `${n} entries seen`);
     }
   };
 
@@ -129,20 +153,13 @@ export function showFileCheck() {
       await step('Read the file', async () => (await file.getFile!()).size, (s) => `${(s / 1024).toFixed(0)} kB`);
       await step('Locate the file in the folder', async () => (await dir.resolve!(file)) ?? [], (p) => p.join(' / '));
     }
-    // keep the folder's handle in the browser's storage and read it back (as Recent / scans folder do)
-    const DB = 'qdp-file-check';
-    const open = () =>
-      new Promise<IDBDatabase>((res, rej) => {
-        const r = indexedDB.open(DB, 1);
-        r.onupgradeneeded = () => r.result.createObjectStore('kv');
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
+    // keep the folder's handle in the browser's storage and read it back (as Recent / scans folder
+    // do); it stays there, so the next run (e.g. after restarting the app) checks it again
     const saved = await step('Keep the folder in browser storage', async () => {
       const db = await open();
       await new Promise<void>((res, rej) => {
         const tx = db.transaction('kv', 'readwrite');
-        tx.objectStore('kv').put(dir, 'dir');
+        tx.objectStore('kv').put({ dir, when: Date.now() }, 'kept');
         tx.oncomplete = () => res();
         tx.onerror = () => rej(tx.error);
       });
@@ -153,8 +170,8 @@ export function showFileCheck() {
       const back = await step('Read it back', async () => {
         const db = await open();
         const h = await new Promise<AnyHandle>((res, rej) => {
-          const r = db.transaction('kv').objectStore('kv').get('dir');
-          r.onsuccess = () => res(r.result as AnyHandle);
+          const r = db.transaction('kv').objectStore('kv').get('kept');
+          r.onsuccess = () => res((r.result as { dir: AnyHandle } | undefined)?.dir as AnyHandle);
           r.onerror = () => rej(r.error);
         });
         db.close();
@@ -166,9 +183,8 @@ export function showFileCheck() {
         await step('Read-back folder: access', async () => (await back.queryPermission?.({ mode: 'read' })) ?? 'no check');
         await step('Read-back folder: list', () => firstEntries(back), (n) => `${n} entries seen`);
       }
-      indexedDB.deleteDatabase(DB);
     }
-    lines.push('done');
+    lines.push('done – restart the app and run the test again: “Folder kept by the last test” shows whether access kept now survives');
   };
 
   const close = () => {

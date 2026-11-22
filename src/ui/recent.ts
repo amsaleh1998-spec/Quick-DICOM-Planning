@@ -71,7 +71,8 @@ async function sameEntry(a: FileSystemHandle[], b: FileSystemHandle[]): Promise<
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     try {
-      if (!(await a[i].isSameEntry(b[i]))) return false;
+      // a handle kept from an earlier session may not answer at all: then it is not the same
+      if (!(await withLimit(a[i].isSameEntry(b[i]), 'Comparing files', 2000))) return false;
     } catch {
       return false;
     }
@@ -92,11 +93,36 @@ export async function removeRecent(id: string): Promise<void> {
   await write((await listRecent()).filter((e) => e.id !== id));
 }
 
+/**
+ * The browser does not answer for this Recent item at all (seen with items kept from before a
+ * browser / Windows update): it has to be chosen again in a picker.
+ */
+export class StaleAccessError extends Error {
+  name = 'StaleAccessError';
+}
+
 /** Read access (asks if needed – call from a click) and the files of the entry. */
 export async function readRecent(e: RecentEntry, progress?: (text: string, f: number) => void): Promise<File[]> {
   progress?.(`“${e.label}”: checking access…`, 0);
   for (const h of e.handles as PermHandle[]) {
-    let p = (await withLimit(h.queryPermission?.({ mode: 'read' }) ?? Promise.resolve(undefined), 'Checking access to the files')) ?? 'granted';
+    let p: Perm | 'no answer' | undefined;
+    try {
+      p = (await withLimit(h.queryPermission?.({ mode: 'read' }) ?? Promise.resolve(undefined), 'Checking access to the files', 4000)) ?? 'granted';
+    } catch (err) {
+      if ((err as Error).name !== 'TimeoutError') throw err;
+      p = 'no answer';
+    }
+    if (p === 'no answer') {
+      // no answer about the access: perhaps reading still works – otherwise the item is stale
+      console.warn('[recent] no answer about the access to', e.label);
+      try {
+        const d = h as unknown as DirLike & { getFile?: () => Promise<File> };
+        await withLimit<unknown>(d.kind === 'directory' ? d.values()[Symbol.asyncIterator]().next() : d.getFile!(), 'Reading', 5000);
+        continue;
+      } catch {
+        throw new StaleAccessError(`The browser no longer answers for “${e.label}”.`);
+      }
+    }
     // (asking waits for the user's answer: no time limit)
     if (p !== 'granted') p = (await h.requestPermission?.({ mode: 'read' })) ?? 'denied';
     if (p !== 'granted') throw new Error('Access to the files was not allowed.');

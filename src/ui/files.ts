@@ -454,11 +454,49 @@ async function openRecentEntry(e: RecentEntry) {
   } catch (err) {
     if (my !== openGen) return;
     hideLoading();
+    if ((err as Error).name === 'StaleAccessError') return askToChooseAgain(e);
     const gone = (err as Error).name === 'NotFoundError';
     if (gone) await removeRecent(e.id);
     setStatus(gone ? `“${e.label}” is no longer there (moved or deleted) – removed from the recent list.` : (err as Error).message, true);
     void renderRecent();
   }
+}
+
+/**
+ * A Recent item the browser no longer answers for (kept from before a browser / Windows update):
+ * choosing it once more in a picker gives fresh access, and Recent keeps the new choice.
+ */
+function askToChooseAgain(e: RecentEntry) {
+  const what = e.kind === 'folder' ? 'folder' : 'file';
+  const m = document.createElement('div');
+  m.className = 'modal-backdrop';
+  m.innerHTML = `
+    <div class="modal ask-save" role="alertdialog" aria-modal="true" aria-labelledby="ca-title">
+      <header><h2 id="ca-title">Choose “${escapeHtml(e.label)}” once more</h2><button class="modal-close" title="Cancel (Esc)">×</button></header>
+      <p>The browser no longer opens this ${what} from Recent – this happens to items kept from before a browser or Windows update. Choose the ${what} once more; Recent keeps the new choice.</p>
+      <footer><button class="ca-cancel">Cancel</button><span class="grow"></span><button class="ca-go primary">Choose the ${what}…</button></footer>
+    </div>`;
+  const done = () => {
+    window.removeEventListener('keydown', onKey, true);
+    m.remove();
+  };
+  const onKey = (ev: KeyboardEvent) => {
+    if (ev.key !== 'Escape') return;
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    done();
+  };
+  window.addEventListener('keydown', onKey, true);
+  m.querySelector<HTMLButtonElement>('.modal-close')!.onclick = done;
+  m.querySelector<HTMLButtonElement>('.ca-cancel')!.onclick = done;
+  m.querySelector<HTMLButtonElement>('.ca-go')!.onclick = () => {
+    done();
+    // the stale item goes; the one chosen now takes its place once it has opened
+    void removeRecent(e.id).then(() => renderRecent());
+    void pickAndOpen(e.kind === 'folder' ? 'folder' : e.kind); // (in this click: the picker may open)
+  };
+  document.body.append(m);
+  m.querySelector<HTMLButtonElement>('.ca-go')!.focus();
 }
 
 /** Recent list in the Open menu and on the start screen. */

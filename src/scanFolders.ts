@@ -58,13 +58,22 @@ export async function scanFolders(): Promise<ScanDir[]> {
 }
 
 /** Remember a granted folder (newest first). Folders inside it become redundant and are dropped. */
+/** A promise, or `fallback` if it does not settle within `ms` (a stale handle may never answer). */
+function orAfter<T, F>(p: Promise<T>, ms: number, fallback: F): Promise<T | F> {
+  return Promise.race([p, new Promise<F>((r) => setTimeout(() => r(fallback), ms))]);
+}
+const NO_ANSWER = Symbol('no answer');
+
 export async function rememberScanFolder(dir: ScanDir): Promise<void> {
   const list = await readList();
   const keep: ScanDir[] = [];
   for (const d of list) {
     try {
-      if (await d.isSameEntry(dir)) continue;
-      if ((await dir.resolve(d)) !== null) continue; // d lies inside the new folder
+      const same = await orAfter(d.isSameEntry(dir), 2000, NO_ANSWER);
+      if (same === NO_ANSWER) continue; // kept from an earlier session and no longer answering: dropped
+      if (same) continue;
+      const inside = await orAfter(dir.resolve(d), 2000, NO_ANSWER);
+      if (inside === NO_ANSWER || inside !== null) continue; // d lies inside the new folder (or is stale)
     } catch {
       /* stale handle: keep it, harmless */
     }
@@ -87,20 +96,39 @@ export interface FolderHit {
 /** Find a remembered folder that contains this file. Prefers one with access already granted. */
 export async function findScanFolder(file: FileSystemFileHandle): Promise<FolderHit | null> {
   let fallback: FolderHit | null = null;
-  for (const root of await readList()) {
+  const list = await readList();
+  const stale: ScanDir[] = [];
+  let found: FolderHit | null = null;
+  for (const root of list) {
     try {
-      // a folder on a drive that is asleep or gone may not answer: skip it after a while
-      const path = await Promise.race([root.resolve(file), new Promise<null>((r) => setTimeout(() => r(null), 3000))]);
+      // a folder on a drive that is asleep or gone, or kept from before a browser / Windows update,
+      // may not answer: skip it after a while (and forget it when it does not answer at all)
+      const path = await orAfter(root.resolve(file), 3000, NO_ANSWER);
+      if (path === NO_ANSWER) {
+        stale.push(root);
+        continue;
+      }
       if (!path) continue;
-      const permission = (await root.queryPermission?.({ mode: 'read' })) ?? 'granted';
+      const permission = await orAfter(root.queryPermission?.({ mode: 'read' }) ?? Promise.resolve('granted' as Perm), 3000, NO_ANSWER);
+      if (permission === NO_ANSWER) {
+        stale.push(root);
+        continue;
+      }
       const hit = { root, path, permission };
-      if (permission === 'granted') return hit;
+      if (permission === 'granted') {
+        found = hit;
+        break;
+      }
       fallback ??= hit;
     } catch {
       /* folder moved or deleted */
     }
   }
-  return fallback;
+  if (stale.length) {
+    console.warn('[scans folder] no answer from', stale.map((s) => s.name), '– forgotten');
+    void writeList(list.filter((d) => !stale.includes(d)));
+  }
+  return found ?? fallback;
 }
 
 /** The directory that directly contains the file. */
