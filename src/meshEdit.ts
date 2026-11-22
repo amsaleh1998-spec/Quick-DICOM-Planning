@@ -318,7 +318,7 @@ export function neighbours(m: MeshData): { start: Uint32Array; nb: Uint32Array }
  * Smooth brush, one dab: the surface within r of p smoothed (Taubin steps – no shrinking), most
  * in the middle of the brush. Changes `pos` in place.
  */
-export function smoothAt(pos: Float32Array, nbrs: { start: Uint32Array; nb: Uint32Array }, p: Vec3, r: number, iterations = 3) {
+export function smoothAt(pos: Float32Array, nbrs: { start: Uint32Array; nb: Uint32Array }, p: Vec3, r: number, iterations = 10) {
   const nv = pos.length / 3;
   const verts: number[] = [], wts: number[] = [];
   const r2 = r * r;
