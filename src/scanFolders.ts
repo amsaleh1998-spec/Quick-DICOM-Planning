@@ -89,7 +89,8 @@ export async function findScanFolder(file: FileSystemFileHandle): Promise<Folder
   let fallback: FolderHit | null = null;
   for (const root of await readList()) {
     try {
-      const path = await root.resolve(file);
+      // a folder on a drive that is asleep or gone may not answer: skip it after a while
+      const path = await Promise.race([root.resolve(file), new Promise<null>((r) => setTimeout(() => r(null), 3000))]);
       if (!path) continue;
       const permission = (await root.queryPermission?.({ mode: 'read' })) ?? 'granted';
       const hit = { root, path, permission };

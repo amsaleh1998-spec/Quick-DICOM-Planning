@@ -23,12 +23,49 @@ export function setStatus(msg: string, error = false) {
 app.onCursor = (t) => ($('status-cursor').textContent = t);
 
 const loading = $('loading');
+const stall = $('loading-stall');
+let stallTimer = 0;
+let cancelWait: (() => void) | null = null;
+const STALL_MS = 8000;
 export function showLoading(text: string, f: number) {
+  const changed = $('loading-text').textContent !== text || $('loading-bar').style.width !== `${Math.round(f * 100)}%`;
   loading.classList.remove('hidden');
   $('loading-text').textContent = text;
   $('loading-bar').style.width = `${Math.round(f * 100)}%`;
+  if (changed) armStall();
 }
-export const hideLoading = () => loading.classList.add('hidden');
+export function hideLoading() {
+  loading.classList.add('hidden');
+  clearTimeout(stallTimer);
+  stall.classList.add('hidden');
+  cancelWait = null;
+}
+/** While waiting on the browser (opening files): after a while without progress, offer to cancel. */
+export function cancellableWait(onCancel: (() => void) | null) {
+  cancelWait = onCancel;
+  armStall();
+}
+function armStall() {
+  clearTimeout(stallTimer);
+  stall.classList.add('hidden');
+  if (cancelWait) stallTimer = window.setTimeout(() => stall.classList.remove('hidden'), STALL_MS);
+}
+$('loading-cancel').onclick = () => {
+  const c = cancelWait;
+  hideLoading();
+  c?.();
+};
+
+/** A promise that gives up (TimeoutError) when it does not settle in time. */
+export function timed<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  let t = 0;
+  return Promise.race([
+    p.finally(() => clearTimeout(t)),
+    new Promise<T>((_, reject) => {
+      t = window.setTimeout(() => reject(Object.assign(new Error(`${what} did not answer within ${Math.round(ms / 1000)} s`), { name: 'TimeoutError' })), ms);
+    }),
+  ]);
+}
 app.onStatus = (msg, error) => setStatus(msg, error);
 app.onBusy = (text) => (text ? showLoading(text, 0.6) : hideLoading());
 

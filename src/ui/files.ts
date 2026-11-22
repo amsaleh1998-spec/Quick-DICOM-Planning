@@ -11,7 +11,7 @@ import { choosePatient } from './patientChooser';
 import { createPhantom } from '../volume';
 import { closePopovers } from './popover';
 import { RecentEntry, RecentSource, addRecent, ago, handlesFromDrop, listRecent, readRecent, recentFromHandles, removeRecent } from './recent';
-import { $, app, escapeHtml, hideLoading, setStatus, showLoading } from './shell';
+import { $, app, cancellableWait, escapeHtml, hideLoading, setStatus, showLoading, timed } from './shell';
 import { rail, setMode } from './layout';
 import type { PanelId } from './rail';
 import { HELPER_LOG, OS_MAC, showHelperHelp } from './install';
@@ -180,44 +180,75 @@ $('lb-helper').onclick = () => showHelperHelp();
 
 type LaunchQueue = { setConsumer(cb: (p: { files?: FileSystemFileHandle[] }) => void): void };
 const launchQueue = (window as unknown as { launchQueue?: LaunchQueue }).launchQueue;
+/** Counts the openings (double-click, Recent): one that was cancelled or overtaken is dropped. */
+let openGen = 0;
+
 launchQueue?.setConsumer(async (params) => {
   const handles = params.files ?? [];
   if (!handles.length) return; // ordinary start, no file
   hideLaunchBanner();
+  const my = ++openGen;
+  const stale = () => my !== openGen;
   launchHandle = handles[0];
   launchFile = null;
   pendingRecent = handles.length <= 2 ? { kind: /\.(zip|qdp)$/i.test(handles[0].name) ? 'project' : 'files', handles, depth: 0 } : null;
   const what = handles.length > 1 ? `${handles.length} files` : `“${handles[0].name}”`;
   console.info('[launch] received', handles.map((h) => h.name));
+  const t0 = performance.now();
+  const step = (s: string) => console.info(`[launch] ${s} (${Math.round(performance.now() - t0)} ms)`);
   setStatus(`Opening ${what}…`);
   showLoading(`Opening ${what}…`, 0);
+  // the browser does not always answer (a file still being written, a drive gone to sleep…): the
+  // steps below have time limits, and the wait can be cancelled to reach Recent / Open
+  cancellableWait(() => {
+    openGen++;
+    setStatus(`Stopped opening ${what} – open it from Recent or the Open menu.`, true);
+  });
   try {
-    const files = await Promise.all(handles.map((h) => h.getFile()));
+    const files = await timed(Promise.all(handles.map((h) => h.getFile())), 15000, 'Reading the file');
+    step('file read');
+    if (stale()) return;
     launchFile = files[0];
-    if (files.length > 1 || /\.(zip|qdp)$/i.test(files[0].name) || (await isZipFile(files[0]))) {
+    const bundle = files.length > 1 || /\.(zip|qdp)$/i.test(files[0].name) || (await timed(isZipFile(files[0]), 15000, 'Reading the start of the file'));
+    step(bundle ? 'files / ZIP' : 'single file');
+    if (stale()) return;
+    if (bundle) {
       // several files selected in Explorer, a project, or a whole series bundled by the
       // Windows helper (a ZIP named .dcm): open them as they are, no folder access needed
+      cancellableWait(null); // from here on the loading shows its progress
       const err = await loadFiles(files);
       if (err) showLaunchBanner('error', err);
       return;
     }
-    const hit = await findScanFolder(handles[0]);
+    let hit: Awaited<ReturnType<typeof findScanFolder>> = null;
+    try {
+      hit = await timed(findScanFolder(handles[0]), 8000, 'Looking up your scans folders');
+    } catch (e) {
+      console.warn('[launch]', e); // no remembered folder answered: choose it again
+    }
+    step(hit ? `in scans folder “${hit.root.name}” (${hit.permission})` : 'not in a remembered scans folder');
+    if (stale()) return;
     if (hit?.permission === 'granted') {
+      cancellableWait(null);
       await loadFolderOf(hit);
       return;
     }
     pendingHit = hit;
     showLaunchBanner(hit ? 'allow' : 'setup', hit?.root.name);
   } catch (e) {
+    if (stale()) return;
     console.error(e);
+    const name = (e as Error).name;
     showLaunchBanner(
       'error',
-      (e as Error).name === 'SecurityError'
+      name === 'SecurityError'
         ? 'the browser does not let web apps read files in this location (system folders such as AppData or the temp folder, or hidden folders whose name starts with a dot in your user folder). If you double-clicked with the Windows / Mac helper, run its latest version once (Install app → helper) – it keeps its files in a permitted folder; otherwise move the scan to a normal folder such as Documents.'
-        : `${(e as Error).name}: ${(e as Error).message}`,
+        : name === 'TimeoutError'
+          ? `${(e as Error).message} (the file may still be copying, or on a drive that is asleep or disconnected). Try again in a moment.`
+          : `${name}: ${(e as Error).message}`,
     );
   } finally {
-    hideLoading();
+    if (!stale()) hideLoading();
   }
 });
 
@@ -376,12 +407,23 @@ export async function pickAndOpen(kind: 'files' | 'folder' | 'project') {
 
 async function openRecentEntry(e: RecentEntry) {
   closePopovers();
+  hideLaunchBanner();
+  const my = ++openGen;
   try {
+    showLoading(`Opening “${e.label}”…`, 0);
+    cancellableWait(() => {
+      openGen++;
+      setStatus(`Stopped opening “${e.label}”.`, true);
+    });
     const files = await readRecent(e);
+    if (my !== openGen) return;
+    cancellableWait(null);
     pendingRecent = { kind: e.kind, handles: e.handles, depth: e.depth };
     if (e.kind === 'project') await openProject(files[0]);
     else await loadFiles(files);
   } catch (err) {
+    if (my !== openGen) return;
+    hideLoading();
     const gone = (err as Error).name === 'NotFoundError';
     if (gone) await removeRecent(e.id);
     setStatus(gone ? `“${e.label}” is no longer there (moved or deleted) – removed from the recent list.` : (err as Error).message, true);

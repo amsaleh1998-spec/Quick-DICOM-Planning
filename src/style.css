@@ -3746,3 +3746,18 @@ details.sub[open] > summary::before {
   color: var(--text);
   pointer-events: none;
 }
+
+#loading-stall {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+#loading-stall.hidden {
+  display: none;
+}
+#loading-stall button {
+  margin-left: auto;
+}
