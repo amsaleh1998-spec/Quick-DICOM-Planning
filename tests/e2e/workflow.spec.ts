@@ -7,11 +7,11 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => ((window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = undefined));
 });
 
-test('opens a DICOM series from the start screen, straight into Plan when set', async ({ page }) => {
+test('opens a DICOM series from the start screen, straight into Plan (the default)', async ({ page }) => {
   await page.goto('./');
   await expect(page.locator('#start-screen')).toBeVisible();
   await page.click('#btn-settings');
-  await page.check('#set-open-plan');
+  await expect(page.locator('#set-open-plan')).toBeChecked(); // on by default
   await page.keyboard.press('Escape');
   await page.setInputFiles('#file-input', dicomFiles());
   await page.waitForFunction(() => !!window.app.vol);

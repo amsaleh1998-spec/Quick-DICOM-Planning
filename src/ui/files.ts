@@ -348,13 +348,14 @@ projectInput.onchange = () => {
 
 const fileInput = $<HTMLInputElement>('file-input');
 const folderInput = $<HTMLInputElement>('folder-input');
-// "Open scans directly in ② Plan"
-const OPEN_PLAN_KEY = 'qdp.openPlan';
+// "Open scans directly in ② Plan" – on unless turned off (a new key: on again for everyone who
+// had it off before it became the default)
+const OPEN_PLAN_KEY = 'qdp.openPlan.v2';
 function openInPlan(): boolean {
   try {
-    return localStorage.getItem(OPEN_PLAN_KEY) === '1';
+    return localStorage.getItem(OPEN_PLAN_KEY) !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 const setOpenPlan = $<HTMLInputElement>('set-open-plan');
