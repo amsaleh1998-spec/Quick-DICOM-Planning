@@ -497,6 +497,16 @@ The 3D view with clean-up tools – in the dual scan window, and for any scan (S
 - *Undo* / *Redo* (Ctrl+Z / Ctrl+Y) inside the editor; leaving with changes asks once more. An applied edit of a
   scan is one step of the app's undo.
 
+## Export DICOM
+
+**Export ▾ → DICOM series (ZIP)** writes the CBCT volume as it is in the app – also after *Apply rotate + crop* –
+as a DICOM series: one CT image per slice (explicit VR little endian, 16-bit signed, uncompressed), in a ZIP named
+after the patient. The images are placed in the **original patient coordinates** (ImagePositionPatient /
+ImageOrientationPatient), so the series lines up with the original scan and with STL files exported in DICOM
+coordinates. Patient, study and frame of reference are kept; the series (*… (Quick DICOM Planning)*, number 900) and
+every image get new UIDs. Planning objects (implants, segments, nerves) are not part of it – use *Export STL* or the
+project for those.
+
 ## Export STL
 
 **Export ▾ → STL** (top bar) writes binary STL files in millimetres in the **original DICOM patient coordinates**

@@ -2,8 +2,9 @@
 // files double-clicked in Explorer / Finder (installed app), and saving projects.
 
 import { applyProjectState, buildProject, projectFileName, projectHasWaxup, readProject } from '../project';
+import { volumeToDicom } from '../dicomWrite';
 import { ensureLibrary } from '../waxup/library';
-import { isZipFile, zipEntriesAsFiles } from '../zip';
+import { isZipFile, writeZip, zipEntriesAsFiles } from '../zip';
 import { findScanFolder, parentOf, rememberScanFolder, type FolderHit, type ScanDir } from '../scanFolders';
 import { formatDicomDate, formatPatientName } from '../dicomMeta';
 import { filesFromDataTransfer, loadDicomFiles } from '../dicom';
@@ -339,6 +340,37 @@ export async function saveProject(): Promise<boolean> {
 const projectInput = $<HTMLInputElement>('project-input');
 $('btn-save-project').onclick = () => saveProject();
 $('btn-export-stl').onclick = () => showExportStl(app, exportHooks);
+$('btn-export-dicom').onclick = () => {
+  closePopovers();
+  void exportDicom();
+};
+
+/** The volume as a DICOM series, one file per slice, in a ZIP. */
+async function exportDicom() {
+  const vol = app.vol;
+  if (!vol) {
+    setStatus('Open a CBCT first.', true);
+    return;
+  }
+  try {
+    showLoading('Writing DICOM files…', 0);
+    const files = await volumeToDicom(vol, {}, (f) => showLoading('Writing DICOM files…', f * 0.5));
+    const base = projectFileName(app).replace(/\.qdp\.zip$/, '');
+    const blob = await writeZip(
+      files.map((f) => ({ name: `${base}_DICOM/${f.name}`, data: f.data })),
+      (f) => showLoading('Packing the series…', 0.5 + f * 0.5),
+    );
+    hideLoading();
+    const name = `${base}_DICOM.zip`;
+    const ok = await deliverFile(blob, name, { description: 'DICOM series (ZIP)', accept: { 'application/zip': ['.zip'] } });
+    setStatus(ok ? `Exported ${files.length} DICOM images (${vol.nx}×${vol.ny}×${vol.nz} voxels) as ${name} (${(blob.size / 1e6).toFixed(1)} MB)` : 'Export cancelled');
+  } catch (e) {
+    console.error(e);
+    setStatus(`DICOM export failed: ${(e as Error).message}`, true);
+  } finally {
+    hideLoading();
+  }
+}
 $('btn-open-project').onclick = () => void pickAndOpen('project');
 projectInput.onchange = () => {
   const f = projectInput.files?.[0];
