@@ -9,6 +9,7 @@ import { NERVE_COLOR, nervePath } from '../nerve';
 import { Frame, Vec3, add, cross, dot, fromFrame, neg, normalize, reorthonormalize, rotate, scale, sub, toFrame } from '../math';
 import { Volume } from '../volume';
 import { Pt, View, drawLabel } from './View';
+import { Reorient3d } from './reorient3d';
 import { ImplantEditor } from './implantEdit';
 import { Implant, implantParts, platformOf } from '../implant';
 import { vertexNormals } from '../meshio';
@@ -1004,7 +1005,15 @@ export class View3D extends View {
     return best;
   }
 
+  /** ① Reorient: crop box and rotation rings in 3D (Crop / Rotate tool) */
+  private reorient = new Reorient3d(this.app, { project: (w) => this.projectPoint(w), rayAt: (p) => this.rayAt(p), fwd: () => this.fwd });
+  private reorienting = false;
+
   protected onLeftDown(p: Pt): boolean {
+    if (this.reorient.start(p)) {
+      this.reorienting = true;
+      return true;
+    }
     // implants (body = move, C/A handles = rotate, outline = resize) unless a segmentation tool is active
     if (!this.app.segTool && this.editor.start(p)) {
       this.editingImplant = true;
@@ -1015,6 +1024,10 @@ export class View3D extends View {
   }
 
   protected onLeftDrag(p: Pt, last: Pt) {
+    if (this.reorienting) {
+      this.reorient.move(p);
+      return;
+    }
     if (this.editingImplant) {
       this.editor.move(p, last);
       return;
@@ -1143,6 +1156,12 @@ export class View3D extends View {
   /** A click (no drag) with the grow tool picks the surface under the cursor as a seed. */
   protected onLeftUp(p: Pt, _e: PointerEvent, moved: boolean) {
     const app = this.app;
+    if (this.reorienting) {
+      this.reorienting = false;
+      this.reorient.end();
+      app.requestRender();
+      return;
+    }
     if (this.editingImplant) {
       this.editingImplant = false;
       this.editor.end();
@@ -1159,6 +1178,11 @@ export class View3D extends View {
   }
 
   protected onHover(p: Pt) {
+    const rc = this.reorient.cursor(p);
+    if (rc) {
+      this.el.style.cursor = rc;
+      return;
+    }
     if (this.app.segTool) {
       this.el.style.cursor = this.app.segTool === 'grow' ? 'crosshair' : '';
       return;
@@ -1528,6 +1552,7 @@ export class View3D extends View {
     // the desktop layout shows mode and threshold in the view's own header buttons
     if (!this.el.querySelector('.view-tools.in-view')) drawLabel(o, `${modeName} · ${thr}`, this.w - 62, 16, '#ababb2', 'right');
     this.drawPivot(o);
+    this.reorient.draw(o);
     this.editor.draw(o);
     this.waxEditor?.draw(o);
     if (this.texFactor > 1) drawLabel(o, `rendered at 1/${this.texFactor} resolution`, this.w - 8, this.h - 10, '#ababb2', 'right');

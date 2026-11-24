@@ -78,6 +78,10 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - **Ctrl+Alt+drag** in a view (or the *Rotate* tool) rotates the other two planes around that view's axis, like 3D Slicer.
   *Straighten views* shows the rotated frame axis-aligned in all views; *Reset rotation* undoes it.
 - **Crop** tool: drag the edges of the blue box in any view.
+- **In 3D** too: with the *Crop* or *Rotate* tool the 3D view shows the crop box and the frame's three axes
+  (red S–I, green A–P, yellow R–L, as the views). *Crop*: drag the handle on a face of the box along its axis.
+  *Rotate*: drag one of the three rings to turn the frame around that axis (as the matching 2D view's rotation).
+  The 3D rendering is cropped to the box as it changes; dragging elsewhere still turns the 3D view.
 - **Apply rotate + crop** resamples the volume into the rotated, cropped frame (smaller and faster to work with).
   Any existing curve/implants are carried over.
 
