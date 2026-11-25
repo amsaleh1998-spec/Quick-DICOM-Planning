@@ -205,7 +205,7 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - Angulation: inclination of each implant, a pairwise angle table (per jaw), and angles between neighbouring implants in the panoramic.
 
 **Mobile version** (`mobile.html`, opens automatically on phones)
-- Open DICOM files, a project saved on the desktop (`.qdp.zip`, with implants, segments and nerves) or the demo.
+- Open DICOM files, a project saved on the desktop (`.qdp`, with implants, segments and nerves) or the demo.
 - **MPR** tab: axial, coronal, sagittal and 3D on one screen (2 × 2, or in a row in landscape); ⤢ shows one view full
   screen. *Rotate axes*: drag around the centre of a view to tilt the other two planes (like the desktop Rotate tool);
   *Straighten* and *Reset* as on the desktop.
@@ -226,7 +226,7 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   phones (series above ~110 M voxels are downsampled on load).
 
 **Projects (pause and continue later)**
-- *Save* (or **Ctrl+S**) writes one `.qdp.zip` file to your computer containing the CBCT voxels and the complete
+- *Save* (or **Ctrl+S**) writes one **`.qdp` project file** to your computer containing the CBCT voxels and the complete
   plan: orientation/rotation, crop box, window/level, panoramic curve and slice settings, implants and abutments,
   segments (clicks, thresholds, colours, visibility), separation cuts, traced nerves, measurements, zoom/pan of every
   view, the 3D camera and which view was maximized. Segments are re-grown from their clicks when the project is opened.
@@ -235,8 +235,11 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   draw one).
 - Saved through the browser's save dialog (Chrome / Edge), the project is listed under **Recent** right away; saving it
   again to the same file keeps one entry. (Browsers that save as a download do not give the app the saved file.)
-- The file is a normal ZIP: `project.json` (plan + view state) and `volume.raw` (int16, little endian, x fastest;
-  dimensions/spacing in `project.json`).
+- Inside, a `.qdp` file is a normal ZIP (like `.docx`): `project.json` (plan + view state) and `volume.raw` (int16,
+  little endian, x fastest; dimensions/spacing in `project.json`). Projects saved before as `.qdp.zip` open just the
+  same.
+- With the app installed (Chrome / Edge), **double-clicking a `.qdp` file opens the project** in it – the first time,
+  Windows asks which app to use: choose **QDP** and tick *Always* (macOS: Get Info → Open with → QDP → Change All…).
 
 **Measurements**
 - *Ruler* (top bar or **R**): click the first point, then the second point on any slice – MPR, axial, cross-sections,
@@ -534,7 +537,8 @@ oriented.
 
 ## Open DICOM files by double-clicking (Windows)
 
-The app can be installed from Chrome or Microsoft Edge and then registered for `.dcm`, `.dicom`, `.dic` and `.ima` files:
+The app can be installed from Chrome or Microsoft Edge and then registered for `.dcm`, `.dicom`, `.dic` and `.ima` files –
+and for `.qdp` projects (a project is one file, so it opens directly, without a scans folder or the helper):
 
 1. Open the app in Chrome or Edge and click **Install app** in ⚙ Settings (or the install icon in the address bar /
    ⋯ → *Apps* → *Install this site as an app*). The installed app is called **QDP**, and its window title is

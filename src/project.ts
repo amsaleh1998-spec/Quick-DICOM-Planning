@@ -141,7 +141,7 @@ export function projectFileName(app: App): string {
   const base = raw.replace(/[^\w\- ]+/g, '').replace(/\s+/g, '_').slice(0, 60) || 'project';
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${base}_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.qdp.zip`;
+  return `${base}_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.qdp`;
 }
 
 export async function buildProject(app: App, onProgress?: (f: number) => void): Promise<Blob> {

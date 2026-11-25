@@ -74,7 +74,7 @@ test('a project saved through the save dialog is listed under Recent at once, an
   await page.addInitScript(() => {
     // the person picks the same file each time (the suggested name changes with the minute)
     (window as unknown as { showSaveFilePicker: (o: { suggestedName: string }) => Promise<FileSystemFileHandle> }).showSaveFilePicker = async () =>
-      (await navigator.storage.getDirectory()).getFileHandle('TEST plan.qdp.zip', { create: true });
+      (await navigator.storage.getDirectory()).getFileHandle('TEST plan.qdp', { create: true });
   });
   await page.goto('./');
   // open the scan from the previous test

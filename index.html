@@ -74,7 +74,7 @@
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.2 6.2a1.9 1.9 0 113 1.6c-.7.4-1.2.8-1.2 1.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.5" r=".9" fill="currentColor"/></svg></button>
         <input id="file-input" type="file" multiple hidden />
         <input id="folder-input" type="file" webkitdirectory multiple hidden />
-        <input id="project-input" type="file" accept=".zip,.qdp" hidden />
+        <input id="project-input" type="file" accept=".qdp,.zip" hidden />
       </header>
 
       <div id="main">
@@ -515,7 +515,7 @@
             <div class="start-drop">
               <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="7" y="9" width="32" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M23 15v14M17 23l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <h2>Drop a CBCT here</h2>
-              <div class="muted">DICOM files, a folder, a ZIP or a saved project – or double-click a .dcm file once the app is installed.</div>
+              <div class="muted">DICOM files, a folder, a ZIP or a saved project – or double-click a .dcm or .qdp file once the app is installed.</div>
               <div class="row start-actions">
                 <button class="primary" data-act="open-files">Open files…</button>
                 <button data-act="open-folder">Open folder…</button>
@@ -555,7 +555,7 @@
     <div id="pop-open" class="popover menu hidden" role="menu">
       <button id="btn-open" role="menuitem">CBCT files… <span class="kbd">Ctrl+O</span></button>
       <button id="btn-open-folder" role="menuitem">Folder…</button>
-      <button id="btn-open-project" role="menuitem">Project (.qdp.zip)…</button>
+      <button id="btn-open-project" role="menuitem">Project (.qdp)…</button>
       <button id="btn-demo" role="menuitem">Demo volume</button>
       <div id="open-recent" class="hidden"><hr /><div class="menu-hd recent-hd"><span>Recent</span><button class="recent-clear link-btn" title="Empty the Recent list (the files themselves stay where they are)">Clear</button></div><div class="recent-items"></div></div>
     </div>
@@ -563,7 +563,7 @@
       <button id="btn-export-stl" role="menuitem"><span class="mi">STL files…<span class="mi-sub">Bone, segments, implants, nerves, scans, waxup</span></span></button>
       <button id="btn-export-dicom" role="menuitem"><span class="mi">DICOM series (ZIP)…<span class="mi-sub">The CBCT volume as it is now (also after Rotate + crop), in its patient coordinates</span></span></button>
       <button id="btn-export-report" role="menuitem"><span class="mi">Planning report (PDF)…<span class="mi-sub">Overview, implant list, one page per implant</span></span></button>
-      <button id="btn-export-save" role="menuitem">Project (.qdp.zip) <span class="kbd">Ctrl+S</span></button>
+      <button id="btn-export-save" role="menuitem">Project (.qdp) <span class="kbd">Ctrl+S</span></button>
     </div>
     <div id="pop-patient" class="popover hidden" role="dialog" aria-label="Patient and scan">
       <div id="patient-fields" class="hidden">
@@ -607,7 +607,7 @@
       <div id="settings-desktop">
       <div class="pop-hd">Desktop</div>
       <div class="row">
-        <button id="btn-install" class="hidden" title="Install as a desktop app – then double-clicking a .dcm file opens it here">Install app</button>
+        <button id="btn-install" class="hidden" title="Install as a desktop app – then double-clicking a .dcm scan or a .qdp project opens it here">Install app</button>
         <button id="btn-helper" class="hidden" title="Helper: double-click a DICOM file to open the whole series with no questions">Windows helper</button>
         <a id="btn-mobile" class="btn-link hidden" href="mobile.html?ui=mobile" title="Simplified version for phones">Mobile version</a>
       </div>

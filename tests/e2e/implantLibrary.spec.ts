@@ -67,7 +67,7 @@ test('library implants: choose a model, defaults for new implants, generic again
 
   // saved with the project
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.click('#btn-save-project')]);
-  const file = test.info().outputPath('lib.qdp.zip');
+  const file = test.info().outputPath('lib.qdp');
   await dl.saveAs(file);
   await page.goto('./');
   await page.setInputFiles('#project-input', file);

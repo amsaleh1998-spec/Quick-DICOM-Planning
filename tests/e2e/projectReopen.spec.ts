@@ -38,7 +38,7 @@ test('a project opens with its panel and selected implant, and without drawing a
   expect(await page.evaluate(() => window.app.selectedId)).toBe(first);
   await expect(page.locator('#panel-plan')).toBeVisible();
 
-  await saveAndReopen(page, 'implants.qdp.zip');
+  await saveAndReopen(page, 'implants.qdp');
   expect(await page.evaluate(() => window.app.mode)).toBe('plan');
   // the curve is there: no drawing, the axial view in its tile
   expect(await page.evaluate(() => window.app.drawing)).toBeNull();
@@ -50,7 +50,7 @@ test('a project opens with its panel and selected implant, and without drawing a
 
   // another panel saved: that one comes back
   await page.click('[data-panel="nerves"]');
-  await saveAndReopen(page, 'nerves.qdp.zip');
+  await saveAndReopen(page, 'nerves.qdp.zip'); // the name projects had before .qdp still opens
   await expect(page.locator('#panel-nerves')).toBeVisible();
   await expect(page.locator('#layout-plan')).not.toHaveClass(/drawing-curve/);
 });

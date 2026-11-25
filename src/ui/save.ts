@@ -8,7 +8,9 @@ type ClaudeHost = { use(name: string): Promise<unknown> };
 
 /** Hand the file to the user: hosted page capability, native save dialog, or a plain download. */
 export type FileTypeSpec = { description: string; accept: Record<string, string[]> };
-const PROJECT_FILE_TYPE: FileTypeSpec = { description: 'Quick DICOM Planning project', accept: { 'application/zip': ['.zip'] } };
+/** Projects: .qdp files (a ZIP inside, like .docx – older projects were saved as .qdp.zip). */
+export const PROJECT_MIME = 'application/x-quickdicom-project';
+const PROJECT_FILE_TYPE: FileTypeSpec = { description: 'Quick DICOM Planning project', accept: { [PROJECT_MIME]: ['.qdp'] } };
 
 /**
  * `onSaved` gets the saved file's handle where the browser's save dialog was used (Chrome, Edge) –

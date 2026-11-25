@@ -89,7 +89,8 @@ test('plans implants, segments, imports a scan, exports, saves and reopens the p
 
   // save → reopen: the plan comes back
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.click('#btn-save-project')]);
-  const file = test.info().outputPath('plan.qdp.zip');
+  expect(dl.suggestedFilename()).toMatch(/^ROE_.*\d{4}\.qdp$/); // a .qdp project file
+  const file = test.info().outputPath('plan.qdp');
   await dl.saveAs(file);
   expect(readFileSync(file).subarray(0, 2).toString()).toBe('PK');
   await page.goto('./');

@@ -288,7 +288,7 @@ test('the waxup is saved with the project and exported as STL', async ({ page })
   await page.click('.export-stl .modal-close');
   // save and reopen
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.click('#btn-save-project')]);
-  const file = test.info().outputPath('waxup.qdp.zip');
+  const file = test.info().outputPath('waxup.qdp');
   await dl.saveAs(file);
   await page.goto('./');
   await page.setInputFiles('#project-input', file);

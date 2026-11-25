@@ -18,7 +18,7 @@ import { $, app, cancellableWait, escapeHtml, hideLoading, setStatus, showLoadin
 import { rail, setMode } from './layout';
 import type { PanelId } from './rail';
 import { HELPER_LOG, OS_MAC, showHelperHelp } from './install';
-import { deliverFile, exportHooks } from './save';
+import { PROJECT_MIME, deliverFile, exportHooks } from './save';
 import { showExportStl } from '../exportStl';
 import { importScans } from './scansPanel';
 
@@ -355,7 +355,7 @@ async function exportDicom() {
   try {
     showLoading('Writing DICOM files…', 0);
     const files = await volumeToDicom(vol, {}, (f) => showLoading('Writing DICOM files…', f * 0.5));
-    const base = projectFileName(app).replace(/\.qdp\.zip$/, '');
+    const base = projectFileName(app).replace(/\.qdp$/, '');
     const blob = await writeZip(
       files.map((f) => ({ name: `${base}_DICOM/${f.name}`, data: f.data })),
       (f) => showLoading('Packing the series…', 0.5 + f * 0.5),
@@ -438,7 +438,7 @@ export async function pickAndOpen(kind: 'files' | 'folder' | 'project') {
     if (!pickers.showOpenFilePicker) return kind === 'project' ? projectInput.click() : fileInput.click();
     const handles = await pickers.showOpenFilePicker(
       kind === 'project'
-        ? { id: 'qdp-open', types: [{ description: 'Quick DICOM Planning project', accept: { 'application/zip': ['.zip', '.qdp'] } }] }
+        ? { id: 'qdp-open', types: [{ description: 'Quick DICOM Planning project (.qdp, or .qdp.zip from older versions)', accept: { [PROJECT_MIME]: ['.qdp'], 'application/zip': ['.zip'] } }] }
         : { id: 'qdp-open', multiple: true },
     );
     const files = await Promise.all(handles.map((h) => h.getFile()));

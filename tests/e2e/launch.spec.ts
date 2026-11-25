@@ -73,3 +73,26 @@ test('Settings → Test file access runs the browser steps and shows them', asyn
   await page.keyboard.press('Escape');
   await expect(fc).toBeHidden();
 });
+
+test('a double-clicked .qdp project opens the plan', async ({ page }) => {
+  test.setTimeout(90_000);
+  // a project to open: the test series, saved (as a download)
+  await page.evaluate(() => ((window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = undefined));
+  await page.setInputFiles('#file-input', dicomFiles());
+  await page.waitForFunction(() => !!window.app.vol);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#btn-save-project')]);
+  expect(dl.suggestedFilename()).toMatch(/\.qdp$/);
+  const bytes = readFileSync((await dl.path())!).toString('base64');
+  await page.reload();
+  await page.waitForFunction(() => !!(window as unknown as { __launch?: unknown }).__launch);
+  await page.evaluate((b64) => {
+    // (a stand-in for the file handle: the test browser crashes reading its own storage's handles
+    // back from IndexedDB, where Recent keeps them)
+    const file = new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], 'Loader_plan.qdp');
+    const h = { kind: 'file', name: file.name, getFile: async () => file };
+    (window as unknown as { __launch: (p: unknown) => void }).__launch({ files: [h] });
+  }, bytes);
+  await page.waitForFunction(() => !!window.app.vol, null, { timeout: 60_000 });
+  await expect(page.locator('#status-msg')).toContainText('Project "Loader_plan.qdp" restored');
+  await expect(page.locator('#launch-banner')).toBeHidden(); // no scans folder needed for a project
+});
