@@ -12,7 +12,7 @@ import { removeTooth } from '../waxup/waxApp';
 window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
     e.preventDefault();
-    saveProject();
+    saveProject(e.shiftKey); // Ctrl+Shift+S: save as
     return;
   }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'o' || e.key === 'O')) {

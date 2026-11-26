@@ -10,7 +10,7 @@ const PANELS: Record<PanelId, { modes: Mode[]; hint: string }> = {
   reorient: { modes: ['mpr'], hint: '<b>Reorient</b>: Ctrl+Alt+drag (or the Rotate tool) turns the other planes · Crop tool: drag the blue box edges' },
   curve: { modes: ['plan'], hint: '<b>Curve</b>: hold and drag along the arch in the axial view, or click point by point · double-click a point to remove it' },
   waxup: { modes: ['plan'], hint: '<b>Waxup</b>: add teeth in the chart · Simple: single teeth · Advanced: axes, cusps, freeform, symmetry · Chain: the neighbours follow (click a green point to pin)' },
-  implants: { modes: ['plan'], hint: '<b>Implant</b>: drag the body to move · C / A handles rotate (also the top of the prosthetic axis) · drag the outline to resize · Del deletes' },
+  implants: { modes: ['plan'], hint: '<b>Implant</b>: drag the body (or its prosthetic axis in 3D) to move · C / A handles rotate (also the top of the prosthetic axis) · drag the outline to resize · Del deletes' },
   segments: { modes: ['mpr', 'plan'], hint: '<b>Segments</b>: select one, then “Click to add” and click the structure in 3D or in a slice' },
   nerves: { modes: ['plan'], hint: '<b>Nerve</b>: click the canal centre on cross-sections or the panoramic, in any order' },
   scans: { modes: ['mpr', 'plan'], hint: '<b>Scans</b>: drop STL / PLY / OBJ files on the viewer to import them' },

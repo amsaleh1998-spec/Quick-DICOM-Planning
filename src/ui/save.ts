@@ -75,6 +75,38 @@ export async function deliverFile(
   return true;
 }
 
+type PermissionHandle = {
+  queryPermission?(o: { mode: 'readwrite' }): Promise<PermissionState>;
+  requestPermission?(o: { mode: 'readwrite' }): Promise<PermissionState>;
+};
+
+/**
+ * Permission to write the file (asked while the click still counts as the person's – before the
+ * project is packed). False when not given, or when the browser does not answer in time.
+ */
+export async function canWrite(handle: FileSystemFileHandle, timeoutMs = 30_000): Promise<boolean> {
+  const h = handle as unknown as PermissionHandle;
+  const ask = async () => {
+    if ((await h.queryPermission?.({ mode: 'readwrite' })) === 'granted') return true;
+    return (await h.requestPermission?.({ mode: 'readwrite' })) === 'granted';
+  };
+  let t: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([ask(), new Promise<boolean>((res) => (t = setTimeout(() => res(false), timeoutMs)))]);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Overwrite a file the person chose before. */
+export async function writeFile(handle: FileSystemFileHandle, blob: Blob): Promise<void> {
+  const w = await (handle as unknown as { createWritable(): Promise<{ write(b: Blob): Promise<void>; close(): Promise<void> }> }).createWritable();
+  await w.write(blob);
+  await w.close();
+}
+
 export const exportHooks = {
   showLoading,
   hideLoading,

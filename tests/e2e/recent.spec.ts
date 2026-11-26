@@ -4,7 +4,7 @@ import { chromium, type BrowserContext, type Page } from '@playwright/test';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { dicomFiles, expect, test } from './fixtures';
+import { dicomFiles, expect, openDemo, test } from './fixtures';
 
 let ctx: BrowserContext;
 let page: Page;
@@ -129,4 +129,44 @@ test('Clear empties the Recent list (after a second click)', async () => {
   await page.reload();
   await expect(page.locator('#start-recent')).toBeHidden();
   await expect(page.locator('#open-recent')).toBeHidden();
+});
+
+test('once saved, Save writes to the same file again; Save as and another scan ask for a new one', async () => {
+  // the save dialog gives a new file each time it is shown
+  await page.addInitScript(() => {
+    const w = window as unknown as { picks: number; showSaveFilePicker: () => Promise<FileSystemFileHandle> };
+    w.picks = 0;
+    w.showSaveFilePicker = async () => (await navigator.storage.getDirectory()).getFileHandle(`plan-${++w.picks}.qdp`, { create: true });
+  });
+  const picks = () => page.evaluate(() => (window as unknown as { picks: number }).picks);
+  const size = (name: string) =>
+    page.evaluate(async (name) => (await (await (await navigator.storage.getDirectory()).getFileHandle(name)).getFile()).size, name);
+  await openDemo(page);
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#status-msg')).toContainText('Project saved as plan-1.qdp');
+  expect(await picks()).toBe(1);
+  const size1 = await size('plan-1.qdp');
+  // a change, then Save: the same file, no dialog
+  await page.evaluate(() => {
+    const a = window.app;
+    a.placing = 'lower';
+    a.placeImplantAt(a.vol.center);
+  });
+  await page.click('#btn-save-project');
+  await expect(page.locator('#status-msg')).toContainText('Project saved to plan-1.qdp');
+  expect(await picks()).toBe(1);
+  expect(await size('plan-1.qdp')).not.toBe(size1);
+  expect(await page.evaluate(() => window.app.implants.length)).toBe(1);
+  // Save as: a new file, which the next Save writes to
+  await page.keyboard.press('Control+Shift+S');
+  await expect(page.locator('#status-msg')).toContainText('Project saved as plan-2.qdp');
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#status-msg')).toContainText('Project saved to plan-2.qdp');
+  expect(await picks()).toBe(2);
+  // another scan: a new file
+  await page.click('#btn-open-menu');
+  await page.click('#btn-demo');
+  await page.waitForFunction(() => window.app.implants.length === 0);
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#status-msg')).toContainText('Project saved as plan-3.qdp');
 });

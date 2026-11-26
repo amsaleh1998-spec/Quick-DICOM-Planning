@@ -18,7 +18,7 @@ import { $, app, cancellableWait, escapeHtml, hideLoading, setStatus, showLoadin
 import { rail, setMode } from './layout';
 import type { PanelId } from './rail';
 import { HELPER_LOG, OS_MAC, showHelperHelp } from './install';
-import { PROJECT_MIME, deliverFile, exportHooks } from './save';
+import { PROJECT_MIME, canWrite, deliverFile, exportHooks, writeFile } from './save';
 import { showExportStl } from '../exportStl';
 import { importScans } from './scansPanel';
 
@@ -300,6 +300,9 @@ export async function openProject(file: File): Promise<string | null> {
       if (!app.drawing) app.startDrawing();
     }
     setStatus(`Project "${file.name}" restored (saved ${new Date(pf.savedAt).toLocaleString()})`);
+    // opened from a .qdp file (double-click, Open, Recent): Save writes to it again
+    const h = pendingRecent?.kind === 'project' ? pendingRecent.handles[0] : null;
+    if (h?.kind === 'file' && /\.qdp$/i.test(h.name)) app.projectFile = h as FileSystemFileHandle;
     noteRecent();
     return null;
   } catch (e) {
@@ -311,22 +314,42 @@ export async function openProject(file: File): Promise<string | null> {
   }
 }
 
-export async function saveProject(): Promise<boolean> {
+/**
+ * Save the project: to its file again once it has one (saved through the save dialog, or opened
+ * from a .qdp file – Chrome / Edge), else – and with `saveAs` – to a file chosen in the save dialog.
+ */
+export async function saveProject(saveAs = false): Promise<boolean> {
   if (!app.vol) {
     setStatus('Nothing to save – open a CBCT first.', true);
     return false;
   }
   try {
+    // permission first, while the click still counts (the browser may ask once for an opened file)
+    const file = !saveAs && app.projectFile && (await canWrite(app.projectFile)) ? app.projectFile : null;
     showLoading('Packing project…', 0);
     const blob = await buildProject(app, (f) => showLoading('Compressing volume…', f));
     hideLoading();
+    const size = `${(blob.size / 1e6).toFixed(1)} MB`;
+    if (file) {
+      try {
+        await writeFile(file, blob);
+        app.markSaved();
+        setStatus(`Project saved to ${file.name} (${size})`);
+        return true;
+      } catch (e) {
+        console.warn('[save] could not write the project file again – asking where to save', e);
+      }
+    }
     const name = projectFileName(app);
-    // saved through the browser's save dialog: listed under Recent right away, like an opened project
+    // saved through the browser's save dialog: Save writes there again; listed under Recent right away
+    let saved: FileSystemFileHandle | null = null;
     const ok = await deliverFile(blob, name, undefined, (h) => {
+      saved = h;
+      app.projectFile = h;
       void addRecent({ kind: 'project', handles: [h], depth: 0 }, ...recentLabel('project', h.name)).then(() => renderRecent());
     });
     if (ok) app.markSaved();
-    setStatus(ok ? `Project saved as ${name} (${(blob.size / 1e6).toFixed(1)} MB)` : 'Save cancelled');
+    setStatus(ok ? `Project saved as ${(saved as FileSystemFileHandle | null)?.name ?? name} (${size})` : 'Save cancelled');
     return ok;
   } catch (e) {
     console.error(e);
@@ -339,6 +362,10 @@ export async function saveProject(): Promise<boolean> {
 
 const projectInput = $<HTMLInputElement>('project-input');
 $('btn-save-project').onclick = () => saveProject();
+$('btn-export-save-as').onclick = () => {
+  closePopovers();
+  void saveProject(true);
+};
 $('btn-export-stl').onclick = () => showExportStl(app, exportHooks);
 $('btn-export-dicom').onclick = () => {
   closePopovers();

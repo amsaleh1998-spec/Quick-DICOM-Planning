@@ -269,6 +269,7 @@ export class App {
 
   setVolume(vol: Volume) {
     this.vol = vol;
+    this.projectFile = null; // another scan: saved to a new file
     this.O = vol.center;
     this.frame = identityFrame();
     this.psi = [0, 0, 0];
@@ -473,7 +474,9 @@ export class App {
     const ai: AiLayer | null = oldAi && { ...oldAi, toWorld: composeAffine(oldToNew, oldAi.toWorld ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]) };
     const { activeSegId, activeNerveId, showUnsegmented, show3dSegments, showSegOverlay, cutDepth } = this;
 
+    const projectFile = this.projectFile; // the same plan: still saved to its file
     this.setVolume(nv);
+    this.projectFile = projectFile;
     this.X = X2;
     this.implants = implants;
     this.measurements = measurements;
@@ -923,6 +926,8 @@ export class App {
 
   /** the plan as it was last saved or opened; null = changed in a way the plan text does not show */
   private savedKey: string | null = null;
+  /** The project file the plan was saved to or opened from (Chrome / Edge): Save writes to it again. */
+  projectFile: FileSystemFileHandle | null = null;
 
   /** The current plan is what is in the project file (just saved or opened). */
   markSaved() {

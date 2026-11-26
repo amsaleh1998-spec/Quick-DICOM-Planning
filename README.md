@@ -180,7 +180,8 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   being changed is shown live on the implant for 5 seconds – click it to type an exact value. The selected implant has two rotation handles placed beyond its ends:
   **C** (coronal) rotates around the apex, **A** (apical) rotates around the platform. With the prosthetic axis shown,
   its top (pink ring) is a handle too: drag it to move the coronal part (the implant tilts around its apex) – in any
-  view, also for an implant that is not selected.
+  view, also for an implant that is not selected. In the 3D view, dragging the prosthetic axis itself moves the
+  implant, like dragging its body.
 - *Show prosthetic axis* (per implant): a Ø3 × 15 mm guide from the MUA top, or from the implant platform along the
   implant axis when there is no MUA. Shown as soon as an implant is placed (a parallel one takes its reference's
   setting); it can be turned off here or with the *Prosthetic axes* eye in the objects list.
@@ -241,8 +242,11 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 - *Open ▾ → Project* (or drag the file onto the page, or pick it under *Recent*) restores everything exactly as it was,
   with the side panel that was open and the implant that was selected (a plan with a curve opens without starting to
   draw one).
-- Saved through the browser's save dialog (Chrome / Edge), the project is listed under **Recent** right away; saving it
-  again to the same file keeps one entry. (Browsers that save as a download do not give the app the saved file.)
+- Saved through the browser's save dialog (Chrome / Edge), the project is listed under **Recent** right away, and the
+  next *Save* writes to **the same file again** without asking (likewise for a project opened from a `.qdp` file – the
+  browser may ask once for permission to change it). *Export ▾ → Project as…* (**Ctrl+Shift+S**) saves to a new file.
+  Opening another scan starts a new file. (Browsers that save as a download do not give the app the saved file: there,
+  each save is a new download.)
 - Inside, a `.qdp` file is a normal ZIP (like `.docx`): `project.json` (plan + view state) and `volume.raw` (int16,
   little endian, x fastest; dimensions/spacing in `project.json`). Projects saved before as `.qdp.zip` open just the
   same.

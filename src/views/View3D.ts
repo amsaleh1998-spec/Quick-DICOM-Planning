@@ -985,13 +985,12 @@ export class View3D extends View {
     return app.mode === 'plan' && app.wax.model.teeth.length > 0 && !this.editor.hoverCursor(p);
   }
 
-  /** Nearest implant (body or abutment) under a screen point. */
+  /** Nearest implant under a screen point: body, abutment or prosthetic axis (dragging it moves the implant). */
   private implantAt(p: Pt): Implant | null {
     let best: Implant | null = null;
     let bestT = Infinity;
     for (const imp of this.app.implants) {
       for (const part of implantParts(imp, this.app.abutmentDir(imp))) {
-        if (part.kind === 'prosthetic') continue;
         const r = this.rayAxis(p, part.center, part.axis);
         if (Math.abs(r.h) > part.half || r.t <= 0) continue;
         const f = (r.h + part.half) / (2 * part.half);
