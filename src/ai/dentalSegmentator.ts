@@ -10,6 +10,7 @@ import { DS_CREDIT, DS_MODEL, contextBox, modelAxes, modelGrid, occlusalSplit, p
 import { nonzeroBox } from './dsEngine';
 import { dedicatedGpuHelp, findGpu, gpuBuffersTooSmall, inEdge } from './gpu';
 import type { StartMsg, WorkerMsg } from './dsWorker';
+import { ServiceProgress, ServiceStatus, probeService, regionToLabels, segmentOnService } from './desktopAi';
 
 export interface AiHooks {
   setStatus(text: string, error?: boolean): void;
@@ -107,9 +108,13 @@ const TILE_MM = DS_MODEL.patch.map((p, k) => Math.round(p * DS_MODEL.spacing[k])
 
 const fmtTime = (s: number) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
 
+type AiEngine = 'browser' | 'desktop';
+const escapeHtml = (t: string) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const ENGINE_KEY = 'qdp.aiEngine';
+
 let modal: HTMLDivElement | null = null;
 let pill: HTMLDivElement | null = null;
-let running: { worker: Worker; cancel: () => void } | null = null;
+let running: { cancel: () => void } | null = null;
 
 export function showDentalSegmentator(app: App, hooks: AiHooks) {
   if (running) {
@@ -132,6 +137,12 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
     return c;
   };
   const hasAi = app.seg.segments.some((g) => g.ai);
+  let engine: AiEngine = 'browser';
+  try {
+    if (localStorage.getItem(ENGINE_KEY) === 'desktop') engine = 'desktop';
+  } catch {
+    /* default */
+  }
   modal?.remove();
   const m = document.createElement('div');
   modal = m;
@@ -144,8 +155,12 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
       </header>
       <div class="ai-setup">
         <p class="intro">Segments the <b>maxilla &amp; upper skull</b>, the <b>mandible</b>, the <b>upper</b> and <b>lower teeth</b> and the
-          <b>mandibular canals</b> with <b>DentalSegmentator</b>, a deep-learning model for CBCT and CT. It runs entirely in this browser – the
-          scan never leaves your computer.</p>
+          <b>mandibular canals</b> with <b>DentalSegmentator</b>, a deep-learning model for CBCT and CT. It runs on this computer – the
+          scan never leaves it.</p>
+        <h4>Runs on</h4>
+        <label class="check"><input type="radio" name="ai-engine" value="browser" ${engine === 'browser' ? 'checked' : ''} /> This browser – the web version of the model (62 MB, half-precision weights)</label>
+        <label class="check"><input type="radio" name="ai-engine" value="desktop" ${engine === 'desktop' ? 'checked' : ''} /> Desktop AI service – the full model in the official nnU-Net, with mirrored passes (Windows, fastest with an NVIDIA card)</label>
+        <div class="ai-desktop small hidden" id="ai-desktop"></div>
         <h4>Region</h4>
         <label class="check"><input type="radio" name="ai-region" value="all" ${cropped ? '' : 'checked'} /> Whole scan</label>
         <label class="check ${cropped ? '' : 'disabled'}"><input type="radio" name="ai-region" value="crop" ${cropped ? 'checked' : 'disabled'} /> Inside the crop box ${cropped ? '(faster)' : '(no crop box set)'}</label>
@@ -155,13 +170,15 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
         <label class="check"><input type="radio" name="ai-jaw" value="lower" /> Mandible only – mandible, lower teeth &amp; canals</label>
         <p class="muted small">One jaw: the scan is split at the occlusal plane (found automatically) and only that side is computed – faster.
           ${hasAi ? 'The other jaw’s automatic segments are kept.' : 'The other jaw can be added later.'}</p>
-        <h4>Quality</h4>
-        <label class="check"><input type="radio" name="ai-step" value="0.5" checked /> Standard – overlapping tiles, as the original model</label>
-        <label class="check"><input type="radio" name="ai-step" value="1" /> Fast – about 4× quicker, slightly less accurate at the tile borders</label>
+        <div class="ai-browser-only">
+          <h4>Quality</h4>
+          <label class="check"><input type="radio" name="ai-step" value="0.5" checked /> Standard – overlapping tiles, as the original model</label>
+          <label class="check"><input type="radio" name="ai-step" value="1" /> Fast – about 4× quicker, slightly less accurate at the tile borders</label>
+        </div>
         <p class="muted small" id="ai-est"></p>
-        <div class="ai-gpu small" id="ai-gpu">Checking the graphics card…</div>
+        <div class="ai-gpu small ai-browser-only" id="ai-gpu">Checking the graphics card…</div>
         ${hasAi ? '<p class="muted small">The automatic segments from the previous run are replaced (for one jaw: only that jaw’s).</p>' : ''}
-        <p class="muted small">The first run downloads the model (62 MB), later runs use the saved copy. A graphics card (WebGPU, Chrome / Edge) makes it many times faster than the CPU.</p>
+        <p class="muted small ai-browser-only">The first run downloads the model (62 MB), later runs use the saved copy. A graphics card (WebGPU, Chrome / Edge) makes it many times faster than the CPU.</p>
       </div>
       <div class="ai-run hidden">
         <div class="ai-phase" id="ai-phase">Starting…</div>
@@ -173,9 +190,9 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
         <b>DentalSegmentator</b> by Gauthier Dot et al. – Dot G, et al. <i>DentalSegmentator: robust open source deep learning-based CT and CBCT image segmentation.</i>
         Journal of Dentistry (2024), <a href="${DS_CREDIT.paperDoi}" target="_blank" rel="noopener">doi:10.1016/j.jdent.2024.105130</a>.
         Model weights: Dot G, Zenodo (2024), <a href="${DS_CREDIT.weightsDoi}" target="_blank" rel="noopener">doi:10.5281/zenodo.10829675</a>, licensed
-        <a href="${DS_CREDIT.license}" target="_blank" rel="noopener">CC BY 4.0</a> – converted here to ONNX with half-precision weights for the browser.
+        <a href="${DS_CREDIT.license}" target="_blank" rel="noopener">CC BY 4.0</a> – converted here to ONNX with half-precision weights for the browser; the desktop AI service runs the original weights in nnU-Net.
         Built on <b>nnU-Net</b> (Isensee F, et al. Nat Methods 2021;18(2):203-211, <a href="${DS_CREDIT.nnunetDoi}" target="_blank" rel="noopener">doi:10.1038/s41592-020-01008-z</a>),
-        runs with ONNX Runtime Web. Also available for 3D Slicer as <a href="${DS_CREDIT.slicer}" target="_blank" rel="noopener">SlicerDentalSegmentator</a>.
+        runs in the browser with ONNX Runtime Web. Also available for 3D Slicer as <a href="${DS_CREDIT.slicer}" target="_blank" rel="noopener">SlicerDentalSegmentator</a>.
         <br />Research software – check every segment before using it for treatment planning.
       </div>
       <footer>
@@ -190,20 +207,69 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
   document.body.append(m);
   const $ = <T extends HTMLElement>(sel: string) => m.querySelector<T>(sel)!;
   const opt = () => ({
+    engine: (m.querySelector<HTMLInputElement>('input[name="ai-engine"]:checked')?.value ?? 'browser') as AiEngine,
     region: (m.querySelector<HTMLInputElement>('input[name="ai-region"]:checked')?.value ?? 'all') as 'all' | 'crop',
     step: Number(m.querySelector<HTMLInputElement>('input[name="ai-step"]:checked')?.value ?? 0.5),
     jaw: (m.querySelector<HTMLInputElement>('input[name="ai-jaw"]:checked')?.value ?? 'both') as AiJaw,
   });
+  // the desktop AI service: looked for only when chosen (the browser may ask once to let the page
+  // reach this computer's own service)
+  let service: ServiceStatus | null = null;
+  let probing = false;
+  const desk = $<HTMLDivElement>('#ai-desktop');
+  const checkService = async () => {
+    probing = true;
+    service = null;
+    desk.className = 'ai-desktop small';
+    desk.textContent = 'Looking for the desktop AI service…';
+    updateEst();
+    service = await probeService();
+    probing = false;
+    if (!service) {
+      desk.className = 'ai-desktop small warn';
+      desk.innerHTML = `<b>The desktop AI service is not running.</b> Install it once (Windows, about 1–3 GB):
+        <a href="${new URL('windows/Install-QDP-AI.cmd', document.baseURI).href}" download>Install-QDP-AI.cmd</a> – run it, and the service starts
+        (afterwards with Windows; Start menu → <b>QDP AI service</b>). <button class="ai-recheck">Check again</button>`;
+    } else if (!service.modelFound) {
+      desk.className = 'ai-desktop small warn';
+      desk.innerHTML = `The desktop AI service ${service.version} is running, but its model is missing – run the installer again. <button class="ai-recheck">Check again</button>`;
+    } else {
+      desk.className = `ai-desktop small ${service.device === 'cuda' ? 'ok' : 'warn'}`;
+      desk.innerHTML =
+        service.device === 'cuda'
+          ? `Connected – desktop AI service ${service.version} on <b>${escapeHtml(service.gpu ?? 'the graphics card')}</b> (CUDA)${service.busy ? ' · busy with another scan' : ''}`
+          : `Connected – desktop AI service ${service.version}, but on the <b>CPU</b> (no NVIDIA card found): the full model with mirrored passes takes long there – the browser on a graphics card is faster.`;
+    }
+    m.querySelector<HTMLButtonElement>('.ai-recheck')?.addEventListener('click', () => void checkService());
+    updateEst();
+  };
   const updateEst = () => {
     const o = opt();
-    const n = countsFor(o.region, o.jaw)[o.step === 1 ? 1 : 0];
-    $('#ai-est').textContent = `${n} tile${n === 1 ? '' : 's'} of ${TILE_MM} mm to compute – roughly ${fmtTime(n * 1)}–${fmtTime(n * 5)} with a graphics card, ${fmtTime(
-      n * 10,
-    )}–${fmtTime(n * 40)} on the CPU.`;
+    const desktop = o.engine === 'desktop';
+    m.querySelectorAll<HTMLElement>('.ai-browser-only').forEach((el) => el.classList.toggle('hidden', desktop));
+    desk.classList.toggle('hidden', !desktop);
+    $<HTMLButtonElement>('#ai-go').disabled = desktop && (probing || !service?.modelFound);
+    const n = countsFor(o.region, o.jaw)[desktop || o.step !== 1 ? 0 : 1];
+    $('#ai-est').textContent = desktop
+      ? `${n} tile${n === 1 ? '' : 's'} of ${TILE_MM} mm, each computed 8 times (mirrored) – with an NVIDIA card typically ${fmtTime(n * 1.5)}–${fmtTime(n * 6)}${service && service.device !== 'cuda' ? `, on the CPU ${fmtTime(n * 60)} or more` : ''}.`
+      : `${n} tile${n === 1 ? '' : 's'} of ${TILE_MM} mm to compute – roughly ${fmtTime(n * 1)}–${fmtTime(n * 5)} with a graphics card, ${fmtTime(n * 10)}–${fmtTime(n * 40)} on the CPU.`;
   };
-  m.addEventListener('change', updateEst);
+  m.addEventListener('change', (e) => {
+    const t = e.target as HTMLInputElement;
+    if (t.name === 'ai-engine') {
+      try {
+        localStorage.setItem(ENGINE_KEY, t.value);
+      } catch {
+        /* not remembered */
+      }
+      if (t.value === 'desktop' && !service && !probing) void checkService();
+    }
+    updateEst();
+  });
   updateEst();
-  showGpu(m.querySelector<HTMLDivElement>('#ai-gpu')!);
+  if (engine === 'desktop') void checkService();
+  // (its result replaces the box's classes: shown or hidden again for the engine chosen)
+  void showGpu(m.querySelector<HTMLDivElement>('#ai-gpu')!).then(updateEst);
 
   const close = () => {
     if (running) {
@@ -237,23 +303,23 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
 async function showGpu(el: HTMLDivElement) {
   const g = await findGpu();
   if (typeof g === 'string') {
-    el.className = 'ai-gpu small warn';
+    el.className = 'ai-gpu ai-browser-only small warn';
     el.innerHTML = `<b>No usable graphics card</b> (${g}) – the model runs on the CPU, which is much slower. Use a current Chrome or Edge.`;
   } else if (gpuBuffersTooSmall(g)) {
-    el.className = 'ai-gpu small warn';
+    el.className = 'ai-gpu ai-browser-only small warn';
     el.innerHTML = `Graphics card: <b>${g.label}</b> – too little memory for the model, it runs on the CPU (much slower).`;
   } else if (g.integrated) {
-    el.className = 'ai-gpu small warn';
+    el.className = 'ai-gpu ai-browser-only small warn';
     el.innerHTML = `Graphics card: <b>${g.label}</b> (integrated – slow). If this computer also has an <b>NVIDIA</b> or AMD
       graphics card, ${inEdge() ? 'Edge' : 'Chrome'} is not using it: on Windows the browser uses the card Windows assigns to it, whatever the page asks for.
       <details><summary>Run only this app on the NVIDIA card (many times faster)</summary>${dedicatedGpuHelp(new URL('./', document.baseURI).href)}</details>`;
   } else {
-    el.className = 'ai-gpu small ok';
+    el.className = 'ai-gpu ai-browser-only small ok';
     el.innerHTML = `Graphics card: <b>${g.label}</b>`;
   }
 }
 
-function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' | 'crop'; step: number; jaw: AiJaw }, onEnd: () => void) {
+function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { engine: AiEngine; region: 'all' | 'crop'; step: number; jaw: AiJaw }, onEnd: () => void) {
   const vol = app.vol!;
   const seg = app.seg;
   const $ = <T extends HTMLElement>(sel: string) => m.querySelector<T>(sel)!;
@@ -296,31 +362,12 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' |
   }
   const spacing = vol.spacing.map((s) => s * f) as Vec3;
   const origin = [0, 1, 2].map((a) => (i0[a] + (f - 1) / 2) * vol.spacing[a]) as Vec3;
-  const msg: StartMsg = {
-    type: 'start',
-    modelBase: new URL('models/dentalsegmentator/', document.baseURI).href,
-    ortBase: new URL('ort/', document.baseURI).href,
-    prefer: new URLSearchParams(location.search).get('ai') === 'cpu' ? 'wasm' : 'auto',
-    input: {
-      data,
-      dims,
-      spacing,
-      origin,
-      roiLo: r.lo,
-      roiHi: r.hi,
-      ...(r.out ? { outLo: r.out.lo, outHi: r.out.hi } : {}),
-      patientAffine: vol.info.patientAffine,
-      step: o.step,
-      label: { nx: seg.nx, ny: seg.ny, nz: seg.nz, gs: [...seg.gs] as Vec3 },
-      ...(new URLSearchParams(location.search).has('aidebug') ? { debug: true } : {}),
-    },
-  };
   const gridKey = JSON.stringify([seg.nx, seg.ny, seg.nz, seg.gs]);
-  const worker = new Worker(new URL('./dsWorker.ts', import.meta.url), { type: 'module' });
   const t0 = performance.now();
   let tilesStart = 0;
+  let stop = () => {};
   const end = () => {
-    worker.terminate();
+    stop();
     running = null;
     pill?.remove();
     pill = null;
@@ -333,7 +380,6 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' |
     hooks.setStatus(text, error);
   };
   running = {
-    worker,
     cancel: () => finish('Automatic segmentation cancelled.'),
   };
   $('#ai-cancel').onclick = () => running?.cancel();
@@ -355,6 +401,90 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' |
   };
   setProgress(0, 'Loading the model…', '');
 
+  /** The labels on the app's grid: segments, nerve paths along the canals, the status. */
+  const applyResult = (d: { cls: Uint8Array; margin: Uint8Array; counts: number[] }, where: string) => {
+      if (app.vol !== vol || JSON.stringify([app.seg.nx, app.seg.ny, app.seg.nz, app.seg.gs]) !== gridKey) {
+        finish('The scan changed while the automatic segmentation was running – please run it again.', true);
+        return;
+      }
+      const secs = (performance.now() - t0) / 1000;
+      // (the mandibular canals become nerve paths, and their segment is removed)
+      const added = app.applyAiSegmentation({ cls: d.cls, margin: d.margin, counts: d.counts }, 'DentalSegmentator', o.jaw === 'both' ? null : JAW_CLASSES[o.jaw], (nerves) => {
+        const segs = added.filter((g) => !(nerves.length && g.ai?.cls === 5)).map((g) => g.name.toLowerCase());
+        const traced = nerves.length
+          ? ` Nerve path${nerves.length > 1 ? 's' : ''} traced along the mandibular canal${nerves.length > 1 ? 's' : ''} (${nerves.join(' and ')}) – check ${nerves.length > 1 ? 'them' : 'it'} on the cross-sections.`
+          : '';
+        hooks.setStatus(
+          added.length
+            ? `DentalSegmentator: ${segs.join(', ')} segmented in ${fmtTime(secs)} (${where}).${traced} Check them before planning.`
+            : 'DentalSegmentator found no jaw or teeth in this region.',
+          !added.length,
+        );
+      });
+      finish('Showing the automatic segmentation…');
+  };
+
+  if (o.engine === 'desktop') {
+    // the full model on the desktop AI service
+    const ac = new AbortController();
+    stop = () => ac.abort();
+    setProgress(0, 'Sending the scan to the desktop AI service…', `${(data.byteLength / 1e6).toFixed(0)} MB`);
+    let tiles0 = 0, t1 = 0;
+    segmentOnService(
+      data,
+      dims,
+      spacing,
+      vol.info.patientAffine,
+      (s: ServiceProgress) => {
+        if (s.total && s.done) {
+          if (!t1) {
+            t1 = performance.now();
+            tiles0 = s.done;
+          }
+          const el = (performance.now() - t1) / 1000;
+          const per = s.done > tiles0 ? el / (s.done - tiles0) : 0;
+          const left = per * (s.total - s.done);
+          setProgress(0.1 + (0.85 * s.done) / s.total, `Segmenting… ${Math.round((100 * s.done) / s.total)} %${per && s.done < s.total ? ` · about ${fmtTime(left)} left` : ''}`, `tile ${s.done} of ${s.total} · full model, 8 mirrored passes · desktop AI service`);
+        } else setProgress(s.phase.startsWith('Finishing') ? 0.96 : 0.05, s.phase || 'Working…', 'desktop AI service');
+      },
+      ac.signal,
+    )
+      .then((res) => {
+        if (!running) return; // cancelled meanwhile
+        setProgress(0.98, 'Finishing…', '');
+        const lab = regionToLabels(res.cls, res.margin, dims, spacing, origin, { nx: seg.nx, ny: seg.ny, nz: seg.nz, gs: [...seg.gs] as Vec3 }, r.out ?? undefined);
+        applyResult(lab, 'full model, desktop AI service');
+      })
+      .catch((e: Error) => {
+        if (!running || e.name === 'AbortError') return;
+        finish(`Automatic segmentation failed: ${e.message.includes('fetch') ? 'the desktop AI service stopped answering' : e.message}`, true);
+      });
+    foot.textContent = '';
+    return;
+  }
+
+  // in this browser: a background worker with the web version of the model
+  const worker = new Worker(new URL('./dsWorker.ts', import.meta.url), { type: 'module' });
+  stop = () => worker.terminate();
+  const msg: StartMsg = {
+    type: 'start',
+    modelBase: new URL('models/dentalsegmentator/', document.baseURI).href,
+    ortBase: new URL('ort/', document.baseURI).href,
+    prefer: new URLSearchParams(location.search).get('ai') === 'cpu' ? 'wasm' : 'auto',
+    input: {
+      data,
+      dims,
+      spacing,
+      origin,
+      roiLo: r.lo,
+      roiHi: r.hi,
+      ...(r.out ? { outLo: r.out.lo, outHi: r.out.hi } : {}),
+      patientAffine: vol.info.patientAffine,
+      step: o.step,
+      label: { nx: seg.nx, ny: seg.ny, nz: seg.nz, gs: [...seg.gs] as Vec3 },
+      ...(new URLSearchParams(location.search).has('aidebug') ? { debug: true } : {}),
+    },
+  };
   worker.onmessage = (e: MessageEvent<WorkerMsg>) => {
     const d = e.data;
     if (d.type === 'note') {
@@ -375,25 +505,7 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { region: 'all' |
         );
       } else if (d.phase === 'finish') setProgress(0.99, 'Finishing…', '');
     } else if (d.type === 'done') {
-      if (app.vol !== vol || JSON.stringify([app.seg.nx, app.seg.ny, app.seg.nz, app.seg.gs]) !== gridKey) {
-        finish('The scan changed while the automatic segmentation was running – please run it again.', true);
-        return;
-      }
-      const secs = (performance.now() - t0) / 1000;
-      // (the mandibular canals become nerve paths, and their segment is removed)
-      const added = app.applyAiSegmentation({ cls: d.cls, margin: d.margin, counts: d.counts }, 'DentalSegmentator', o.jaw === 'both' ? null : JAW_CLASSES[o.jaw], (nerves) => {
-        const segs = added.filter((g) => !(nerves.length && g.ai?.cls === 5)).map((g) => g.name.toLowerCase());
-        const traced = nerves.length
-          ? ` Nerve path${nerves.length > 1 ? 's' : ''} traced along the mandibular canal${nerves.length > 1 ? 's' : ''} (${nerves.join(' and ')}) – check ${nerves.length > 1 ? 'them' : 'it'} on the cross-sections.`
-          : '';
-        hooks.setStatus(
-          added.length
-            ? `DentalSegmentator: ${segs.join(', ')} segmented in ${fmtTime(secs)} (${d.device === 'webgpu' ? 'graphics card' : 'CPU'}).${traced} Check them before planning.`
-            : 'DentalSegmentator found no jaw or teeth in this region.',
-          !added.length,
-        );
-      });
-      finish('Showing the automatic segmentation…');
+      applyResult(d, d.device === 'webgpu' ? 'graphics card' : 'CPU');
     } else if (d.type === 'error') {
       finish(`Automatic segmentation failed: ${d.message}`, true);
     }

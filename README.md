@@ -313,6 +313,34 @@ runs work offline.
   CBCT back), so only the segmented structures remain (the jaws slightly see-through); the segments are not tinted in
   the slices (switch them on with *Slices*), where the nerves are drawn.
 
+### Desktop AI service (the full model, Windows)
+
+The dialog's **Runs on** choice offers, next to *This browser*, the **Desktop AI service**: the original DentalSegmentator
+weights in the **official nnU-Net v2** on this computer – full precision and mirrored passes (each tile is also computed
+flipped, up to 8 times, and averaged), so the result is the same as the model's 3D Slicer extension – on an **NVIDIA
+graphics card** (CUDA) when there is one. The web version in the browser stays as it is; on a test CBCT it agrees with
+the official prediction on 99.92 % of the voxels, so the desktop service is mainly for the exact official result and
+for speed on an NVIDIA card (also on laptops where the browser is held to the integrated graphics).
+
+- **Install once**: download [`Install-QDP-AI.cmd`](public/windows/Install-QDP-AI.cmd) (linked in the dialog) and run
+  it. For the current user only, no admin rights: it installs Python (with [uv](https://github.com/astral-sh/uv)),
+  PyTorch – with CUDA when an NVIDIA card is found – and nnU-Net into `%LOCALAPPDATA%\QuickDICOMPlanning-AI` (about
+  3 GB with NVIDIA support, 1 GB without), downloads the model from Zenodo (230 MB, checked against the checksum Zenodo
+  publishes) and starts the service. It starts with Windows; Start menu → *Quick DICOM Planning* → *QDP AI service* /
+  *Stop QDP AI service*. Running the installer again updates it; `uninstall.cmd` in that folder removes it.
+- **Private**: the service listens on `127.0.0.1` only and answers only this app's pages; the scan region goes there
+  and the labels come back – nothing leaves the computer. The browser may ask once to let the page reach the
+  computer's own service (*local network access*): allow it.
+- **Use**: choose *Desktop AI service* (remembered); the dialog shows the graphics card it runs on. Region and jaws work
+  as in the browser; the quality is always nnU-Net's own (overlapping tiles, mirrored passes). Progress, *Cancel* and
+  *Run in background* as before; the result becomes the same AI segments (and nerve paths along the canals).
+- How it works: the region goes to nnU-Net in SimpleITK's axis order with its spacing; nnU-Net does its own
+  preprocessing, sliding window and resampling, and returns per voxel the class and the margin between the best two
+  classes (from its probabilities), which the app puts on its label grid like the browser engine's result. The service
+  is one Python file, [`public/windows/ai/qdp_ai_server.py`](public/windows/ai/qdp_ai_server.py) (`GET /status`,
+  `POST /segment`, `GET /jobs/<id>`, `GET /jobs/<id>/result`, `DELETE /jobs/<id>`); without an NVIDIA card it runs
+  on the CPU – correct, but slow.
+
 Fidelity: the pre- and post-processing of nnU-Net is re-implemented (crop to the non-zero region, resampling to the
 model's 0.43 × 0.31 × 0.43 mm grid, CT normalisation, sliding window with Gaussian weighting, logits resampled back
 before the argmax). On a public test CBCT (3D Slicer's *PreDentalSurgery* sample) the browser version agreed with
