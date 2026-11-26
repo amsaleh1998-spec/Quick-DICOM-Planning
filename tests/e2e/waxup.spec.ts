@@ -40,6 +40,26 @@ const inPano = (page: Page, fdi: number) =>
     const r = a.pano.el.getBoundingClientRect();
     return [r.x + pr.x, r.y + pr.y] as [number, number];
   }, fdi);
+/**
+ * The mouse on a tooth, once the app has it under the mouse too (in CI the views render in software
+ * and can still be settling – a press right away would miss the tooth and turn the view instead).
+ */
+async function onTooth(page: Page, fdi: number, where: (page: Page, fdi: number) => Promise<[number, number]>) {
+  let q: [number, number] = [0, 0];
+  let i = 0;
+  await expect
+    .poll(
+      async () => {
+        q = await where(page, fdi);
+        // (a slightly different point each time, so that the browser sends a move)
+        await page.mouse.move(q[0] + (i++ % 2) * 0.5, q[1]);
+        return page.evaluate(() => window.app.wax.hover);
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(fdi);
+  return q;
+}
 const center = (page: Page, fdi: number) => page.evaluate((fdi) => window.app.wax.model.center(window.app.wax.model.tooth(fdi)), fdi);
 const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 /** 3D view enlarged (true) or all views shown (false) */
@@ -65,9 +85,8 @@ test('teeth are set up on the arch and edited like in a dental CAD', async ({ pa
   await topView(page);
 
   // drag = move
-  let q = await in3d(page, 36);
   const c0 = await center(page, 36);
-  await page.mouse.move(q[0], q[1]);
+  let q = await onTooth(page, 36, in3d);
   await page.mouse.down();
   await page.mouse.move(q[0] + 30, q[1], { steps: 5 });
   await page.mouse.up();
@@ -140,9 +159,8 @@ test('teeth are moved in the panoramic, deleted, and moved as a whole jaw', asyn
   // panoramic: drag 43 upwards
   await maximize3d(page, false);
   await page.waitForTimeout(400);
-  const p43 = await inPano(page, 43);
   const z0 = (await center(page, 43))[2];
-  await page.mouse.move(p43[0], p43[1]);
+  const p43 = await onTooth(page, 43, inPano);
   await page.mouse.down();
   await page.mouse.move(p43[0], p43[1] - 25, { steps: 5 });
   await page.mouse.up();
@@ -155,8 +173,7 @@ test('teeth are moved in the panoramic, deleted, and moved as a whole jaw', asyn
   // whole jaw
   await page.check('#wax-move-all');
   const j0 = await center(page, 31);
-  const p44 = await inPano(page, 44);
-  await page.mouse.move(p44[0], p44[1]);
+  const p44 = await onTooth(page, 44, inPano);
   await page.mouse.down();
   await page.mouse.move(p44[0], p44[1] + 20, { steps: 5 });
   await page.mouse.up();
@@ -203,9 +220,8 @@ test('in 3D a tooth is grabbed from any panel; leaving the panel restores the la
   await topView(page);
   await page.click('[data-wtab="advanced"]');
   await page.click('[data-wv="cusps"]');
-  q = await in3d(page, 46);
   const m0 = await center(page, 46);
-  await page.mouse.move(q[0], q[1]);
+  q = await onTooth(page, 46, in3d);
   await page.mouse.down();
   await page.mouse.move(q[0] + 25, q[1], { steps: 4 });
   await page.mouse.up();
