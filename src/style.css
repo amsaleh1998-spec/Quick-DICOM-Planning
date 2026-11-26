@@ -381,7 +381,9 @@ button.open {
 
 #main {
   display: grid;
-  grid-template-columns: 64px auto 1fr auto;
+  /* the views take exactly the space left – never as wide as some content in them (a wider column
+     would push past the window and shift every view whenever that content changes) */
+  grid-template-columns: 64px auto minmax(0, 1fr) auto;
   min-height: 0;
 }
 
