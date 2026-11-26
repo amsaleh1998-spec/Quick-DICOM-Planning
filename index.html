@@ -289,7 +289,7 @@
                 <label class="grow">Name <input id="imp-name" type="text" maxlength="40" placeholder="the tooth number, or e.g. Zygoma left" title="Set by choosing the tooth above; type another name when needed" /></label>
               </div>
               <div class="imp-model">
-                <label class="small">Implant <select id="imp-brand" title="Generic (any size) or a manufacturer's implant"></select></label>
+                <label class="small">Implant <select id="imp-brand" title="Generic (any size), or an implant model from an imported library (open-source or generic models)"></select></label>
                 <div class="row imp-lib-row" id="imp-lib-row">
                   <select id="imp-system" title="System"></select>
                   <select id="imp-size" title="Size (diameter × length)"></select>
@@ -347,7 +347,7 @@
             <details class="sub">
               <summary>Defaults for new implants</summary>
               <div class="imp-model">
-                <label class="small">Implant <select id="def-brand" title="New implants: generic or this manufacturer's implant (choosing a model for an implant makes it the default)"></select></label>
+                <label class="small">Implant <select id="def-brand" title="New implants: generic, or this library model (choosing a model for an implant makes it the default)"></select></label>
                 <div class="row imp-lib-row" id="def-lib-row">
                   <select id="def-system" title="System"></select>
                   <select id="def-size" title="Size (diameter × length)"></select>
@@ -528,6 +528,8 @@
               </div>
             </div>
             <p class="start-note"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Scans are opened from your computer and stay there – nothing is uploaded.</p>
+            <p class="start-disclaimer" role="note"><b>For demonstration and educational purposes only.</b> Not a medical device – not for diagnosis,
+              treatment planning or any clinical use. It works with open-source or generic libraries only (implants, teeth, AI model).</p>
           </div>
           <div id="drop-overlay" class="hidden">Drop DICOM files or a folder</div>
           <div id="launch-banner" class="launch-banner hidden" role="dialog" aria-live="polite">
@@ -548,7 +550,7 @@
           <div id="obj-groups" class="obj-groups"></div>
         </aside>
       </div>
-      <footer id="status"><span id="status-hint"></span><span id="status-msg"></span><span id="status-cursor"></span></footer>
+      <footer id="status"><span id="status-hint"></span><span id="status-msg"></span><span id="status-cursor"></span><span id="status-demo" title="Quick DICOM Planning is for demonstration and educational purposes only – not a medical device, not for diagnosis, treatment planning or any clinical use. It works with open-source or generic libraries only.">Demonstration &amp; education only – not for clinical use</span></footer>
     </div>
 
     <!-- menus and popovers (placed under their buttons by src/ui/popover.ts) -->

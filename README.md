@@ -3,6 +3,13 @@
 A lightweight, browser-only viewer for quick dental implant planning on CBCT scans.
 Everything runs locally in the browser – no data is uploaded anywhere.
 
+> **For demonstration and educational purposes only.** Quick DICOM Planning is not a medical device and must not be
+> used for diagnosis, treatment planning or any other clinical purpose. It works with **open-source or generic
+> libraries only** – generic implants (or implant models from an open-source or generic library file you import),
+> open-source tooth shapes (BodyParts3D) and the open-source DentalSegmentator model. No manufacturer implant library
+> is included or provided. The app shows the same notice on its start screen, in its status bar, in the help and in
+> the planning report.
+
 ## Interface
 
 - **Start screen**: drop a CBCT (files, folder, ZIP or project), use the buttons, or reopen a scan from **Recent**
@@ -368,10 +375,10 @@ Like any automatic method it can be wrong (metal artefacts, unusual anatomy, low
 
 ## Implant libraries (② Plan → Implants panel)
 
-Besides the generic implant (any diameter, length and taper), the *Implant* selector offers the manufacturer implants
-of an **implant library** – once one is imported. No implant library is on the website or in this repository: a
-library is a file (`.qdplib`) handed to the people who use it. Choose the brand, the system and the size: the implant
-keeps its platform where it is and takes the model's shape.
+Besides the generic implant (any diameter, length and taper), the *Implant* selector can offer the implant models of an
+**implant library file** (`.qdplib`) that you import – for example open-source or generic implant models. None is
+included: neither the website nor this repository provides an implant library. Choose the library's range, the system
+and the size: the implant keeps its platform where it is and takes the model's shape.
 
 - **Importing a library** (*Implant library* at the bottom of the Implants panel → *Import library file…*, the
   *Import an implant library…* entry of the *Implant* selector, or drop the `.qdplib` file on the viewer): it is
@@ -382,9 +389,9 @@ keeps its platform where it is and takes the model's shape.
   (the new version is stored next to the old one, which is dropped once the import is complete); importing an older
   version, or the same one again, asks first.
 
-- **Drawn as the real implant**: the 3D view shows its mesh (threads, collar, connection); where bone, a segment, a
-  scan or the waxup covers it, it is shown through them as before. The slices show the cut through the mesh, the
-  panoramic its outline across the arch.
+- **Drawn as the model**: the 3D view shows its mesh (threads, collar, connection); where bone, a segment, a scan or
+  the waxup covers it, it is shown through them as before. The slices show the cut through the mesh, the panoramic its
+  outline across the arch.
 - **Sizes**: dragging the side or the apical end of the outline steps through the sizes of the same system (diameter
   or length, keeping the other as close as possible).
 - **New implants** get the model chosen last (or the one set under *Defaults for new implants*); *Generic* goes back
@@ -393,18 +400,20 @@ keeps its platform where it is and takes the model's shape.
   collar).
 - Nerve distances, hit testing and the see-through view use a cone that encloses the implant's part in bone.
 - STL export writes the implant's mesh. Projects remember the model.
-- A library file is built from the manufacturers' implant STLs by `scripts/make-implant-library.py` (meshes decimated
-  to at most 5,000 triangles, platform / apex / connection measured on the mesh): a ZIP with `index.json` (the
-  catalogue and its version) and one compressed mesh file per system. Each build is the next version (one more than
-  `--previous` or the output file, or `--library-version N`). `.gitignore` keeps `*.qdplib` out of the repository.
-- The tests use a small made-up library (brand *Testco*, `scripts/make-test-implant-library.mjs`).
+- A library file is built from implant STL files (open-source or generic models you may use) by
+  `scripts/make-implant-library.py` (meshes decimated to at most 5,000 triangles, platform / apex / connection measured
+  on the mesh): a ZIP with `index.json` (the catalogue and its version) and one compressed mesh file per system. Each
+  build is the next version (one more than `--previous` or the output file, or `--library-version N`). `.gitignore`
+  keeps `*.qdplib` out of the repository.
+- The tests use a small made-up library (*Testco*, `scripts/make-test-implant-library.mjs`).
 
 ## Planning report (Export → Planning report (PDF))
 
-A PDF for the patient file or the surgeon, A4 landscape, with the patient data and the scan in every header:
+A PDF summary of the plan (for demonstration and teaching – every page carries the notice that it is not for clinical use),
+A4 landscape, with the patient data and the scan in every header:
 
 - **Overview**: the planning layout as it is on screen (axial, panoramic, cross-sections, tangential, 3D).
-- **Implant list**: position, manufacturer, system / model, size, length, diameters, abutment and inclination of
+- **Implant list**: position, library range, system / model, size, length, diameters, abutment and inclination of
   every implant.
 - **One page per implant**: its details (implant, measured length / diameters for library models, abutment, jaw,
   inclination, abutment axis, angles to its neighbours, distance to the nerves with a warning under 2 mm) next to

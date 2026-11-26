@@ -34,7 +34,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['Tangential', 'Wheel = rotate 360° around the selected implant'],
       ['Implant body', 'Drag = move'],
       ['Implant outline', 'Drag side = diameter · drag apical end = length (click the live value to type it); a library implant steps through its system’s sizes'],
-      ['Implant library', 'Implants panel → Implant: Generic or a brand, then system and size · the model chosen last is used for new implants'],
+      ['Implant library', 'Implants panel → Implant: Generic, or a model of an imported library (open-source or generic models): range, system and size · the model chosen last is used for new implants'],
       ['C / A handles', 'C rotates around the apex, A around the platform'],
       ['Top of the prosthetic axis', 'Drag it to move the coronal part (tilts around the apex)'],
       ['Del', 'Delete the selected implant'],
@@ -98,6 +98,8 @@ export function showHelp(extra: { trackpadGuide: () => void }) {
   el.innerHTML = `
     <div class="modal help-sheet" role="dialog" aria-modal="true" aria-labelledby="help-title">
       <header><h2 id="help-title">Shortcuts and help</h2><button class="modal-close" title="Close (Esc)">×</button></header>
+      <p class="help-disclaimer"><b>For demonstration and educational purposes only</b> – not a medical device, not for diagnosis, treatment planning or any
+        clinical use. Quick DICOM Planning works with open-source or generic libraries only.</p>
       <div class="help-cols">
         ${SECTIONS.map(
           (s) => `<section><h4>${esc(s.title)}</h4><dl>${s.rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></section>`,

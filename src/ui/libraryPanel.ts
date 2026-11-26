@@ -36,10 +36,10 @@ function render() {
     text = 'Importing the implant library …';
   } else if (lib) {
     const brands = ix?.brands.length;
-    text = `<b>Version ${lib.library}</b> · imported ${day(lib.date)} · ${brands ? `${brands} brands, ` : ''}${lib.systems} systems, ${mb(lib.bytes)}. Kept in this browser: implants load instantly, also offline. Import a newer library file to update it.`;
+    text = `<b>Version ${lib.library}</b> · imported ${day(lib.date)} · ${brands ? `${brands} range${brands === 1 ? '' : 's'}, ` : ''}${lib.systems} systems, ${mb(lib.bytes)}. Kept in this browser: implants load instantly, also offline. Import a newer library file to update it.`;
   } else
     text =
-      'No implant library in this browser – generic implants only. Import a library file (<b>.qdplib</b>) from your computer to plan with manufacturer implants; it stays in this browser.';
+      'No implant library in this browser – generic implants only. Import a library file (<b>.qdplib</b>) of open-source or generic implant models from your computer; it stays in this browser.';
   if (error) text += `<br><span class="error-text">${error}</span>`;
   status.innerHTML = text;
 }

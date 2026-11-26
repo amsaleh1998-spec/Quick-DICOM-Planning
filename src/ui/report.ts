@@ -37,7 +37,7 @@ export function implantSections(imp: Implant): { title: string; rows: [string, s
     out.push({
       title: 'Implant',
       rows: [
-        ['Manufacturer', model.brand.name],
+        ['Library range', model.brand.name],
         ['System', model.system.name],
         ['Size', model.size.label],
         ['Length', mm(model.size.L)],
@@ -294,8 +294,8 @@ export async function makeReport(progress: (f: number, text: string) => void): P
     pdf.setFontSize(6.2);
     pdf.setFont('helvetica', 'normal');
     const disclaimer =
-      'This report shows the plan as entered in Quick DICOM Planning, research software for implant planning on CBCT. It does not replace the ' +
-      'assessment of the case by a qualified dental professional, who is responsible for checking every value, image and position before treatment. ' +
+      'For demonstration and educational purposes only - not for clinical use. This report shows a plan made in Quick DICOM Planning, a demonstration ' +
+      'and teaching tool using open-source or generic libraries only; it is not a medical device and must not be used for diagnosis or treatment planning. ' +
       'Images are not for diagnostic use.';
     pdf.text(pdf.splitTextToSize(disclaimer, 190), PAGE.m + 3, y + 3.6);
     pdf.setTextColor(255, 255, 255);
@@ -323,7 +323,7 @@ export async function makeReport(progress: (f: number, text: string) => void): P
   function implantTable(pdf: JsPdf) {
     const cols: [string, number, 'left' | 'right'][] = [
       ['Position', 30, 'left'],
-      ['Manufacturer', 30, 'left'],
+      ['Library range', 30, 'left'],
       ['System / model', 58, 'left'],
       ['Size', 32, 'left'],
       ['Length', 20, 'right'],

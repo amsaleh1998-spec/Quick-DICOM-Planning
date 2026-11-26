@@ -37,4 +37,4 @@ The pre- and post-processing of nnU-Net (non-zero crop, resampling to 0.43 × 0.
 normalisation, sliding window with Gaussian weighting) is re-implemented in `src/ai/` of this app.
 The conversion scripts are in `tools/dentalsegmentator/`.
 
-Research software: check every segment before using it for treatment planning.
+Used in Quick DICOM Planning for demonstration and educational purposes only – not for clinical use.

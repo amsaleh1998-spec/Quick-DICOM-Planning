@@ -1,6 +1,7 @@
-// Implant libraries: manufacturer implants, in a library file (.qdplib, built by
-// scripts/make-implant-library.py) that people import from their computer – no library is on the
-// website. The catalogue (brands -> systems -> sizes with their measured dimensions) is loaded at
+// Implant libraries: implant models (open-source or generic) in a library file (.qdplib, built by
+// scripts/make-implant-library.py) that people import from their computer – no library is included
+// with the app. The catalogue (ranges, "brands" in the file format -> systems -> sizes with their
+// measured dimensions) is loaded at
 // start from what was imported; the meshes of a system when one of its implants is used.
 //
 // Mesh coordinates: the implant platform at the origin, the axis along z, coronal = +z, the apex at
@@ -12,7 +13,7 @@ import { isZip, readZip } from './zip';
 export interface LibSize {
   label: string;
   prefix: string;
-  /** nominal diameter / length (from the manufacturer's name) */
+  /** nominal diameter / length (from the model's file name) */
   d: number;
   L: number;
   /** measured: platform level in the file, length platform -> apex, widest diameter in bone, apex diameter, connection height */
@@ -346,7 +347,7 @@ export function meshWorld(owner: object, m: LibMesh, platform: Vec3, axis: Vec3)
 // ---- sizes -----------------------------------------------------------------------------------
 
 /**
- * The size of a system nearest to a nominal diameter and length (as the manufacturer names them).
+ * The size of a system nearest to a nominal diameter and length (as the model's name gives them).
  * `change`: the dimension being chosen, `from`: the current size. Changing the length keeps the
  * diameter and platform line (NC / RC …) when the system has that length for them; changing the
  * diameter keeps the length when it can.

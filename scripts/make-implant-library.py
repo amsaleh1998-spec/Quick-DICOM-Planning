@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Build the implant library (public/implants/) from manufacturer implant STLs laid out as
+Build an implant library file from implant STL files - open-source or generic implant models you
+may use (none is included with Quick DICOM Planning) - laid out as
 
-    <root>/<Brand>/Implants/<System>/<[prefix ]diameter x length mm>.stl
+    <root>/<Range>/Implants/<System>/<[prefix ]diameter x length mm>.stl
 
 in the usual CAD library frame: the implant axis along z, the coronal end up (+z), the apex at
 negative z and the origin at the implant's reference level (platform / shoulder).
@@ -11,16 +12,16 @@ negative z and the origin at the implant's reference level (platform / shoulder)
     python3 scripts/make-implant-library.py "<root>" quick-dicom-implant-library-vN.qdplib \
         [--library-version N] [--previous quick-dicom-implant-library-vM.qdplib]
 
-The library is private: the .qdplib file is handed to the people who use it, who import it in the
-app (Implants panel -> Implant library). It is never put in the repository or on the website
-(.gitignore keeps *.qdplib out).
+The .qdplib file is imported in the app (Implants panel -> Implant library). Library files are never
+put in the repository or on the website (.gitignore keeps *.qdplib out). Quick DICOM Planning is for
+demonstration and educational purposes only.
 
 Library version: every build is a new version of the library (`library` in index.json). Importing
 a newer version replaces the older one in the app. Without --library-version the version is one
 more than the one in --previous (or in the output file, if it exists), else 1.
 
 What it writes: one library file (a ZIP) with
-  - index.json: format, the library version, then brands -> systems (file, size in bytes) -> sizes, with the nominal diameter / length from the file name
+  - index.json: format, the library version, then ranges ("brands" in the file format) -> systems (file, size in bytes) -> sizes, with the nominal diameter / length from the file name
     and what was measured on the mesh: the platform level (`zp`, the origin or the top of the mesh
     when that lies below it), the length from the platform to the apex (`len`), the widest
     diameter of the part in bone (`dia`), the diameter near the apex (`apex`), the height of the

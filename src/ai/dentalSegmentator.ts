@@ -193,7 +193,7 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
         <a href="${DS_CREDIT.license}" target="_blank" rel="noopener">CC BY 4.0</a> – converted here to ONNX with half-precision weights for the browser; the desktop AI service runs the original weights in nnU-Net.
         Built on <b>nnU-Net</b> (Isensee F, et al. Nat Methods 2021;18(2):203-211, <a href="${DS_CREDIT.nnunetDoi}" target="_blank" rel="noopener">doi:10.1038/s41592-020-01008-z</a>),
         runs in the browser with ONNX Runtime Web. Also available for 3D Slicer as <a href="${DS_CREDIT.slicer}" target="_blank" rel="noopener">SlicerDentalSegmentator</a>.
-        <br />Research software – check every segment before using it for treatment planning.
+        <br />For demonstration and educational purposes only – not for clinical use, diagnosis or treatment planning.
       </div>
       <footer>
         <span class="muted small" id="ai-foot"></span>

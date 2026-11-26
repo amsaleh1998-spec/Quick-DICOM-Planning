@@ -41,7 +41,7 @@ export interface Implant {
   hidden: boolean;
   /** hide only the abutment (MUA) */
   abutmentHidden: boolean;
-  /** manufacturer implant from the library (its measured dimensions are the ones above); null = generic */
+  /** implant model from the imported library (its measured dimensions are the ones above); null = generic */
   lib?: ImplantModel | null;
 }
 

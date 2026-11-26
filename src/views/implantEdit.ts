@@ -279,7 +279,7 @@ export class ImplantEditor {
   private renderBadgeText() {
     const st = this.badgeState;
     if (!st || !this.badge || st.editing) return;
-    // a library implant: its size as the manufacturer names it (diameter × length from the file name)
+    // a library implant: its size as the model names it (diameter × length from the file name)
     const m = st.imp.lib ? findModel(st.imp.lib.id) : null;
     if (m) {
       this.badge.textContent = `${m.system.name} ${m.size.label}`;

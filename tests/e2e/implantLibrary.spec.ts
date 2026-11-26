@@ -1,4 +1,4 @@
-// Implant libraries (the made-up test library, imported): a manufacturer's implant for the selected
+// Implant libraries (the made-up test library, imported): a library implant for the selected
 // implant and for new ones, generic again, undo, and the project round trip.
 import { type Page } from '@playwright/test';
 import { clickView, expect, importTestLibrary, openDemo, test } from './fixtures';

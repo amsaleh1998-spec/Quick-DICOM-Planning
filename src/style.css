@@ -3814,3 +3814,33 @@ details.sub[open] > summary::before {
 .recent-hd .recent-clear.danger {
   color: #ff8a5c;
 }
+
+/* ---- demonstration & education notice ---- */
+.start-disclaimer {
+  max-width: 560px;
+  margin: 10px auto 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(232, 197, 71, 0.45);
+  border-radius: 8px;
+  background: rgba(232, 197, 71, 0.08);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+.start-disclaimer b {
+  color: #e8c547;
+}
+#status-demo {
+  margin-left: auto;
+  flex: none;
+  color: #c9a93a;
+  white-space: nowrap;
+}
+.help-disclaimer {
+  margin: 8px 0 12px;
+  padding: 6px 10px;
+  border-left: 3px solid #e8c547;
+  background: rgba(232, 197, 71, 0.08);
+  font-size: 12.5px;
+}
