@@ -75,6 +75,31 @@ async function onToothBody(page: Page, fdi: number) {
   }
   throw new Error(`no point on tooth ${fdi} away from its cusp dots`);
 }
+
+/** (CI diagnostics) pointer events and the app's drag state, printed when a drag did not move */
+async function recordPointer(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __pl: unknown[] };
+    w.__pl = [];
+    const a = window.app;
+    const views = { v3: a.view3d, pano: a.pano } as Record<string, any>;
+    const rec = (e: PointerEvent) => {
+      const st: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(views)) {
+        const r = v.el.getBoundingClientRect();
+        st[k] = { drag: v.drag, wd: v.waxEditor?.drag?.kind ?? null, moved: v.waxEditor?.drag?.moved, w: v.w, h: v.h, r: [r.x, r.y, r.width, r.height].map(Math.round) };
+      }
+      const t = e.target as HTMLElement;
+      w.__pl.push({ t: e.type, x: Math.round(e.clientX), y: Math.round(e.clientY), b: e.buttons, id: e.pointerId, tg: t?.tagName + '.' + (t?.className?.toString?.() ?? '').slice(0, 30), cap: t?.hasPointerCapture?.(e.pointerId), hov: a.wax.hover, sel: a.wax.selected, ed: a.wax.editing, ms: Math.round(performance.now()), ...st });
+    };
+    for (const ty of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture']) {
+      window.addEventListener(ty, rec as EventListener, true);
+      window.addEventListener(ty, (e) => w.__pl.push({ after: e.type, v3: views.v3.drag, wd3: views.v3.waxEditor?.drag?.kind ?? null, pano: views.pano.drag, wdp: views.pano.waxEditor?.drag?.kind ?? null }), false);
+    }
+  });
+}
+const dumpPointer = async (page: Page, what: string) =>
+  console.log(`[diag ${what}]`, JSON.stringify(await page.evaluate(() => (window as unknown as { __pl: unknown[] }).__pl)));
 const center = (page: Page, fdi: number) => page.evaluate((fdi) => window.app.wax.model.center(window.app.wax.model.tooth(fdi)), fdi);
 const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 /** 3D view enlarged (true) or all views shown (false) */
@@ -102,9 +127,11 @@ test('teeth are set up on the arch and edited like in a dental CAD', async ({ pa
   // drag = move
   const c0 = await center(page, 36);
   let q = await onTooth(page, 36, in3d);
+  await recordPointer(page);
   await page.mouse.down();
   await page.mouse.move(q[0] + 30, q[1], { steps: 5 });
   await page.mouse.up();
+  if (dist(await center(page, 36), c0) <= 1) await dumpPointer(page, '3d-cad');
   expect(dist(await center(page, 36), c0)).toBeGreaterThan(1);
   expect(await page.evaluate(() => window.app.wax.selected)).toBe(36);
   await expect(page.locator('#wax-sel-name')).toHaveText('Tooth 36');
@@ -176,9 +203,11 @@ test('teeth are moved in the panoramic, deleted, and moved as a whole jaw', asyn
   await page.waitForTimeout(400);
   const z0 = (await center(page, 43))[2];
   const p43 = await onTooth(page, 43, inPano);
+  await recordPointer(page);
   await page.mouse.down();
   await page.mouse.move(p43[0], p43[1] - 25, { steps: 5 });
   await page.mouse.up();
+  if ((await center(page, 43))[2] - z0 <= 1) await dumpPointer(page, 'pano');
   expect((await center(page, 43))[2] - z0).toBeGreaterThan(1);
   // Del removes the selected tooth
   await page.keyboard.press('Delete');
@@ -212,9 +241,11 @@ test('in 3D a tooth is grabbed from any panel; leaving the panel restores the la
   const c0 = await center(page, 36);
   await page.mouse.move(q[0], q[1]);
   await expect(page.locator('#status-msg')).toContainText('Tooth 36');
+  await recordPointer(page);
   await page.mouse.down();
   await page.mouse.move(q[0] + 30, q[1], { steps: 5 });
   await page.mouse.up();
+  if (dist(await center(page, 36), c0) <= 1) await dumpPointer(page, '3d-any-panel');
   expect(dist(await center(page, 36), c0)).toBeGreaterThan(1);
   await expect(page.locator('#panel-waxup')).toBeVisible();
   expect(await page.evaluate(() => [window.app.wax.editing, window.app.wax.selected])).toEqual([true, 36]);
