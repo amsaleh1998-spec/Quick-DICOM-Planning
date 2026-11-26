@@ -123,6 +123,34 @@ test('teeth are set up on the arch and edited like in a dental CAD', async ({ pa
 
   await maximize3d(page, true);
   await topView(page);
+  // (CI diagnostics) does the camera / the scene still change?
+  const samples: unknown[] = [];
+  for (let i = 0; i < 12; i++) {
+    samples.push(
+      await page.evaluate(() => {
+        const a = window.app as any;
+        const v = a.view3d;
+        const t = a.wax.model.tooth(36);
+        const s = v.projectPoint(a.wax.model.center(t));
+        const r = v.el.getBoundingClientRect();
+        return {
+          ms: Math.round(performance.now()),
+          wh: [v.w, v.h, Math.round(r.width), Math.round(r.height), Math.round(r.y)],
+          sc: +v.vs.scale.toFixed(5),
+          pan: [+v.vs.panU.toFixed(3), +v.vs.panV.toFixed(3)],
+          tg: v.target.map((x: number) => +x.toFixed(2)),
+          fwd: v.fwd.map((x: number) => +x.toFixed(3)),
+          c36: a.wax.model.center(t).map((x: number) => +x.toFixed(2)),
+          q36: s.map((x: number) => Math.round(x)),
+          pick: v.toothAt(s)?.fdi ?? null,
+          max: v.el.classList.contains('max'),
+          anim: document.getAnimations().length,
+        };
+      }),
+    );
+    await page.waitForTimeout(500);
+  }
+  console.log('[diag samples]', JSON.stringify(samples));
 
   // drag = move
   const c0 = await center(page, 36);
