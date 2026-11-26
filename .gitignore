@@ -9,3 +9,4 @@ playwright-report
 # implant libraries are private: imported by people from their computer, never published
 *.qdplib
 public/implants/
+__pycache__/
