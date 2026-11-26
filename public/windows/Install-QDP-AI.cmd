@@ -89,17 +89,83 @@ if (-not (Test-Path (Join-Path $venv 'Scripts\python.exe'))) {
 $py = Join-Path $venv 'Scripts\python.exe'
 $pyw = Join-Path $venv 'Scripts\pythonw.exe'
 
-# --- 2. PyTorch (with CUDA for an NVIDIA card) and nnU-Net ----------------------------
-$nvidia = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'NVIDIA' })
-if ($nvidia.Count -gt 0) {
-  Step ("PyTorch for the NVIDIA card (" + $nvidia[0].Name + ") - about 2.5 GB, this takes a while")
-  $index = 'https://download.pytorch.org/whl/cu126'
+# --- 2. PyTorch: a build that really runs on this computer's NVIDIA card, else the CPU ---
+# PyTorch's CUDA builds each cover a range of card generations (compute capability): the newest
+# cards (RTX 50 series, 12.x) need CUDA 12.8 or later, the oldest (GTX 900 / 1000, 5.x - 6.x) 12.6
+# or earlier. Each candidate is checked by running a small 3D network on the card.
+$check = Join-Path $Root 'gpu_check.py'
+[IO.File]::WriteAllText($check, @'
+import sys
+try:
+    import torch
+    assert torch.cuda.is_available(), 'PyTorch ' + torch.__version__ + ' sees no CUDA card'
+    d = torch.device('cuda')
+    F = torch.nn.functional
+    x = torch.randn(1, 1, 24, 24, 24, device=d)
+    y = F.leaky_relu(F.instance_norm(F.conv3d(x, torch.randn(4, 1, 3, 3, 3, device=d), padding=1)))
+    y = F.conv_transpose3d(y, torch.randn(4, 2, 2, 2, 2, device=d), stride=2)
+    with torch.autocast('cuda'):
+        z = F.conv3d(x, torch.randn(4, 1, 3, 3, 3, device=d), padding=1)
+    float(y.sum()) + float(z.float().sum())
+    torch.cuda.synchronize()
+    print('OK - PyTorch', torch.__version__, 'runs on', torch.cuda.get_device_name(0))
+except Exception as e:
+    print('FAIL -', type(e).__name__ + ':', (str(e).splitlines() or [''])[0][:200])
+    sys.exit(1)
+'@, [Text.Encoding]::ASCII)
+function Gpu-Ok {
+  $ErrorActionPreference = 'Continue'
+  $out = & $py $check
+  $ok = ($LASTEXITCODE -eq 0)
+  Write-Host ('    ' + ($out | Select-Object -Last 1)) -ForegroundColor $(if ($ok) { 'Green' } else { 'Yellow' })
+  return $ok
+}
+$gpuName = ''; $cc = 0.0; $driver = ''
+try {
+  $ErrorActionPreference = 'Continue'
+  $smi = & nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader | Select-Object -First 1
+  if ($smi) {
+    $f = $smi -split ',\s*'
+    $gpuName = $f[0]
+    if ($f.Count -ge 2) { [double]::TryParse($f[1], [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$cc) | Out-Null }
+    if ($f.Count -ge 3) { $driver = $f[2] }
+  }
+} catch { } finally { $ErrorActionPreference = 'Stop' }
+if (-not $gpuName) {
+  $nvidia = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'NVIDIA' })
+  if ($nvidia.Count -gt 0) { $gpuName = $nvidia[0].Name }
+}
+$cudaOk = $false
+if ($gpuName) {
+  if ($cc -ge 12) { $builds = @('cu130', 'cu129', 'cu128', 'cu132') }
+  elseif ($cc -ge 7.5) { $builds = @('cu128', 'cu126', 'cu129', 'cu130') }
+  elseif ($cc -ge 5) { $builds = @('cu126', 'cu118') }
+  else { $builds = @('cu128', 'cu126', 'cu130', 'cu118') }
+  $about = ''
+  if ($cc -gt 0) { $about = " (compute capability $cc" + $(if ($driver) { ", driver $driver" } else { '' }) + ')' }
+  Step ("PyTorch for the NVIDIA card $gpuName$about - about 2.5 GB, this takes a while")
+  # the PyTorch installed before may already run on it
+  if (Test-Path (Join-Path $venv 'Lib\site-packages\torch')) {
+    Write-Host '  checking the PyTorch already installed...'
+    if (Gpu-Ok) { $cudaOk = $true }
+  }
+  foreach ($b in $builds) {
+    if ($cudaOk) { break }
+    Write-Host "  PyTorch build $b..."
+    & $uv pip install --python $py --reinstall-package torch torch --index-url "https://download.pytorch.org/whl/$b"
+    if ($LASTEXITCODE -ne 0) { Write-Host "    ($b is not available)"; continue }
+    if (Gpu-Ok) { $cudaOk = $true }
+  }
+  if (-not $cudaOk) {
+    Write-Host '  No PyTorch build runs on this card - the service will use the CPU (slow). Updating the NVIDIA driver and running this again may help.' -ForegroundColor Yellow
+  }
 } else {
   Step 'PyTorch (no NVIDIA card found: the service will run on the CPU, which is slow)'
-  $index = 'https://download.pytorch.org/whl/cpu'
 }
-& $uv pip install --python $py --upgrade torch --index-url $index
-if ($LASTEXITCODE -ne 0) { Fail 'PyTorch could not be installed.' }
+if (-not $cudaOk) {
+  & $uv pip install --python $py --reinstall-package torch torch --index-url 'https://download.pytorch.org/whl/cpu'
+  if ($LASTEXITCODE -ne 0) { Fail 'PyTorch could not be installed.' }
+}
 Step 'nnU-Net v2'
 # (only nnU-Net itself is upgraded: --upgrade would swap the CUDA PyTorch for the plain one)
 & $uv pip install --python $py --upgrade-package nnunetv2 'nnunetv2>=2.6,<2.9'
@@ -128,15 +194,9 @@ if (-not (Test-Path $fold)) {
 Step 'The service'
 $server = Join-Path $Root 'qdp_ai_server.py'
 Download "$Site/windows/ai/qdp_ai_server.py" $server
-# a launcher without a console window
-$vbs = Join-Path $Root 'start-service.vbs'
-$launcher = @"
-Set sh = CreateObject("WScript.Shell")
-sh.CurrentDirectory = "$Root"
-sh.Run """$pyw"" ""$server"" --model ""$(Join-Path $modelDir 'Dataset112_DentalSegmentator_v100\nnUNetTrainer__nnUNetPlans__3d_fullres')""", 0, False
-"@
-# (Unicode: user folders with accents or other scripts)
-[IO.File]::WriteAllText($vbs, $launcher, [Text.Encoding]::Unicode)
+# started directly with pythonw.exe (Python without a console window) - no launcher script between
+$serviceArgs = '"' + $server + '" --model "' + (Join-Path $modelDir 'Dataset112_DentalSegmentator_v100\nnUNetTrainer__nnUNetPlans__3d_fullres') + '"'
+Remove-Item (Join-Path $Root 'start-service.vbs') -Force -ErrorAction SilentlyContinue
 $stop = Join-Path $Root 'stop-service.cmd'
 [IO.File]::WriteAllText($stop, "@echo off`r`npowershell.exe -NoProfile -Command `"try { Invoke-RestMethod -Method Post -Uri http://127.0.0.1:$Port/quit -TimeoutSec 3 | Out-Null; 'QDP AI service stopped.' } catch { 'QDP AI service was not running.' }`"`r`ntimeout /t 3 >nul`r`n", [Text.Encoding]::ASCII)
 
@@ -152,9 +212,9 @@ function Shortcut([string]$Path, [string]$Target, [string]$Arguments, [string]$D
   $l.Description = $Description
   $l.Save()
 }
-Shortcut (Join-Path $programs "$Name.lnk") 'wscript.exe' ('"' + $vbs + '"') 'Start the QDP AI service (automatic segmentation with the full model)'
+Shortcut (Join-Path $programs "$Name.lnk") $pyw $serviceArgs 'Start the QDP AI service (automatic segmentation with the full model)'
 Shortcut (Join-Path $programs "Stop $Name.lnk") $stop '' 'Stop the QDP AI service'
-Shortcut (Join-Path ([Environment]::GetFolderPath('Startup')) "$Name.lnk") 'wscript.exe' ('"' + $vbs + '"') 'Start the QDP AI service with Windows'
+Shortcut (Join-Path ([Environment]::GetFolderPath('Startup')) "$Name.lnk") $pyw $serviceArgs 'Start the QDP AI service with Windows'
 
 # uninstall
 $uninstall = @"
@@ -175,11 +235,11 @@ pause
 
 # --- 5. start it and check it answers ---------------------------------------------------
 Step 'Starting the service'
-Start-Process -FilePath 'wscript.exe' -ArgumentList ('"' + $vbs + '"')
+Start-Process -FilePath $pyw -ArgumentList $serviceArgs -WorkingDirectory $Root
 $status = $null
-for ($i = 0; $i -lt 60 -and -not $status; $i++) {
+for ($i = 0; $i -lt 90 -and (-not $status -or $status.device -eq 'starting'); $i++) {
   Start-Sleep -Seconds 2
-  try { $status = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/status" -TimeoutSec 3 } catch { }
+  try { $status = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/status" -TimeoutSec 5 } catch { }
 }
 Stop-Transcript | Out-Null
 Write-Host ''
@@ -190,6 +250,8 @@ if (-not $status) {
 }
 if ($status.device -eq 'cuda') {
   Write-Host ("Done - the QDP AI service runs on " + $status.gpu + ".") -ForegroundColor Green
+} elseif ($status.gpuError) {
+  Write-Host ("Done - but the graphics card " + $status.gpu + " cannot run the model (" + $status.gpuError + "): the service runs on the CPU, slowly. Updating the NVIDIA driver and running this again may help.") -ForegroundColor Yellow
 } else {
   Write-Host 'Done - the QDP AI service runs on the CPU (no NVIDIA card was found): it works, but slowly.' -ForegroundColor Yellow
 }

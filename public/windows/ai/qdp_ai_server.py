@@ -35,7 +35,7 @@ import traceback
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = '1.0.0'
+VERSION = '1.2.0'
 DEFAULT_PORT = 47423
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_MODEL = os.path.join(HERE, 'model', 'Dataset112_DentalSegmentator_v100', 'nnUNetTrainer__nnUNetPlans__3d_fullres')
@@ -49,6 +49,30 @@ log = logging.getLogger('qdp-ai')
 
 class Cancelled(Exception):
     pass
+
+
+def gpu_check():
+    """Run a small 3D network on the CUDA card (the layers nnU-Net uses): None when it works, else
+    why not - e.g. a PyTorch build without kernels for this card's generation."""
+    import torch
+    try:
+        d = torch.device('cuda')
+        F = torch.nn.functional
+        x = torch.randn(1, 1, 24, 24, 24, device=d)
+        y = F.leaky_relu(F.instance_norm(F.conv3d(x, torch.randn(4, 1, 3, 3, 3, device=d), padding=1)))
+        y = F.conv_transpose3d(y, torch.randn(4, 2, 2, 2, 2, device=d), stride=2)
+        with torch.autocast('cuda'):
+            z = F.conv3d(x, torch.randn(4, 1, 3, 3, 3, device=d), padding=1)
+        float(y.sum()) + float(z.float().sum())
+        torch.cuda.synchronize()
+        return None
+    except Exception as e:  # noqa: BLE001
+        return f'{type(e).__name__}: ' + ((str(e).splitlines() or [''])[0])[:300]
+
+
+def is_cuda_error(e):
+    t = f'{type(e).__name__}: {e}'
+    return 'CUDA' in t or 'cuDNN' in t or 'AcceleratorError' in t
 
 
 class Job:
@@ -81,31 +105,58 @@ class Service:
         self.lock = threading.Condition()
         self.predictor = None
         self.device_name = None
+        self.gpu = None
+        self.gpu_error = None
         self.load_error = None
+        self.device_lock = threading.Lock()
         threading.Thread(target=self.worker, daemon=True).start()
+        # PyTorch and the card check take a while on a fresh start (e.g. at login): in the background,
+        # so the service answers at once ('starting')
+        threading.Thread(target=self.device, daemon=True).start()
 
     # ---- device -----------------------------------------------------------------------------
     def device(self):
+        with self.device_lock:
+            return self._device()
+
+    def _device(self):
         if self.device_name is None:
             import torch
+            dev = 'cpu'
             if not self.force_cpu and torch.cuda.is_available():
-                self.device_name = 'cuda'
                 self.gpu = torch.cuda.get_device_name(0)
-            else:
-                self.device_name = 'cpu'
-                self.gpu = None
+                err = gpu_check()
+                if err is None:
+                    dev = 'cuda'
+                else:
+                    # e.g. a PyTorch build without kernels for this card: the CPU (slow) rather than nothing
+                    self.gpu_error = err
+                    log.warning('the graphics card %s cannot run the model (%s) - using the CPU', self.gpu, err)
+            self.device_name = dev  # (only now: until then the status says 'starting')
+            log.info('device: %s%s', dev, f' ({self.gpu})' if self.gpu else '')
         return self.device_name
 
+    def fall_back_to_cpu(self, err):
+        log.warning('CUDA failed during a run (%s) - continuing on the CPU', err)
+        self.gpu_error = err
+        self.device_name = 'cpu'
+        self.predictor = None
+
     def status(self):
-        dev = self.device()
+        # not waiting for PyTorch here: while it loads, the app is told the service is starting
+        dev = self.device_name or 'starting'
         folds = sorted(d for d in os.listdir(self.model_dir) if d.startswith('fold_')) if os.path.isdir(self.model_dir) else []
         return {
             'service': 'qdp-ai', 'version': VERSION,
             'model': 'DentalSegmentator 1.0.0 (nnU-Net v2, 3d_fullres, ' + (', '.join(folds) or 'no model found') + ')',
             'modelFound': bool(folds),
-            'device': dev, 'gpu': self.gpu, 'busy': any(j.state in ('queued', 'running') for j in self.jobs.values()),
+            'device': dev, 'gpu': self.gpu, 'gpuError': self.gpu_error, 'torch': self.torch_version(), 'busy': any(j.state in ('queued', 'running') for j in self.jobs.values()),
             'loadError': self.load_error,
         }
+
+    def torch_version(self):
+        t = sys.modules.get('torch')
+        return getattr(t, '__version__', None) if t else None
 
     # ---- the model --------------------------------------------------------------------------
     def get_predictor(self):
@@ -199,7 +250,16 @@ class Service:
             t0 = time.time()
             try:
                 job.phase = 'Loading the model…' if self.predictor is None else 'Preparing the scan…'
-                job.result = self.predict(job)
+                try:
+                    job.result = self.predict(job)
+                except Exception as e:  # noqa: BLE001
+                    if self.device_name != 'cuda' or not is_cuda_error(e) or job.cancel:
+                        raise
+                    # the card failed (e.g. no kernels for it in this PyTorch): the same run on the CPU
+                    self.fall_back_to_cpu(f'{type(e).__name__}: ' + ((str(e).splitlines() or [''])[0])[:300])
+                    job.phase = 'The graphics card failed – on the CPU (slow)…'
+                    job.done = 0
+                    job.result = self.predict(job)
                 job.state = 'done'
                 log.info('job %s: %s voxels in %.1f s (%d tiles, mirroring %s)', job.id, job.data.size, time.time() - t0, job.total, job.mirroring)
             except Cancelled:

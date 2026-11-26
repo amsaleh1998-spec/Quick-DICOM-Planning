@@ -7,7 +7,8 @@ import { dicomFiles, expect, test } from './fixtures';
 let server: Server | null = null;
 const seen: { dims?: number[]; spacing?: number[]; origin?: string } = {};
 
-function startService() {
+function startService(status: Record<string, unknown> = {}, startingCalls = 0) {
+  let calls = 0;
   const jobs = new Map<string, Buffer>();
   server = createServer((req, res) => {
     const origin = req.headers.origin ?? '';
@@ -20,7 +21,8 @@ function startService() {
       res.writeHead(204, cors);
       return res.end();
     }
-    if (req.url === '/status') return json({ service: 'qdp-ai', version: '1.0.0', model: 'test', modelFound: true, device: 'cuda', gpu: 'Test GPU', busy: false, loadError: null });
+    if (req.url === '/status')
+      return json({ service: 'qdp-ai', version: '1.0.0', model: 'test', modelFound: true, device: 'cuda', gpu: 'Test GPU', busy: false, loadError: null, ...status, ...(calls++ < startingCalls ? { device: 'starting' } : {}) });
     if (req.url === '/segment' && req.method === 'POST') {
       const dims = String(req.headers['x-qdp-dims']).split(',').map(Number);
       seen.dims = dims;
@@ -91,4 +93,34 @@ test('desktop AI service: not running, then found, then it segments', async ({ p
   expect(segs).toContain('Mandible');
   // the choice is remembered
   expect(await page.evaluate(() => localStorage.getItem('qdp.aiEngine'))).toBe('desktop');
+});
+
+test('desktop AI service: a graphics card PyTorch cannot run on is reported, with the fix', async ({ page }) => {
+  await startService({ device: 'cpu', gpu: 'NVIDIA GeForce RTX 5070', gpuError: 'AcceleratorError: CUDA error: no kernel image is available for execution on the device' });
+  await page.goto('./');
+  await page.setInputFiles('#file-input', dicomFiles());
+  await page.waitForFunction(() => !!window.app.vol);
+  await page.evaluate(() => document.getElementById('btn-ai-seg')!.click());
+  const dlg = page.locator('.ai-seg');
+  await dlg.locator('input[name="ai-engine"][value="desktop"]').check();
+  const desk = dlg.locator('#ai-desktop');
+  await expect(desk).toContainText('the graphics card NVIDIA GeForce RTX 5070 cannot run the model');
+  await expect(desk).toContainText('no kernel image');
+  await expect(desk).toContainText('Run the installer again');
+  await expect(desk.locator('a')).toHaveAttribute('href', /Install-QDP-AI\.cmd$/);
+  await expect(dlg.locator('#ai-go')).toBeEnabled(); // it still works, on the CPU
+});
+
+test('desktop AI service: just started (after logging in), the dialog waits for it', async ({ page }) => {
+  await startService({}, 2); // the first two answers: still loading PyTorch
+  await page.goto('./');
+  await page.setInputFiles('#file-input', dicomFiles());
+  await page.waitForFunction(() => !!window.app.vol);
+  await page.evaluate(() => document.getElementById('btn-ai-seg')!.click());
+  const dlg = page.locator('.ai-seg');
+  await dlg.locator('input[name="ai-engine"][value="desktop"]').check();
+  await expect(dlg.locator('#ai-desktop')).toContainText('is starting');
+  await expect(dlg.locator('#ai-go')).toBeDisabled();
+  await expect(dlg.locator('#ai-desktop')).toContainText('Connected – desktop AI service 1.0.0 on Test GPU', { timeout: 15_000 });
+  await expect(dlg.locator('#ai-go')).toBeEnabled();
 });

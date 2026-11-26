@@ -15,14 +15,18 @@ export interface ServiceStatus {
   version: string;
   model: string;
   modelFound: boolean;
-  device: 'cuda' | 'cpu' | string;
+  /** 'starting' while the service loads PyTorch and checks the card (e.g. just after login) */
+  device: 'cuda' | 'cpu' | 'starting' | string;
   gpu: string | null;
+  /** why the graphics card is not used (e.g. a PyTorch build without kernels for it) – then device is 'cpu' */
+  gpuError?: string | null;
+  torch?: string | null;
   busy: boolean;
   loadError: string | null;
 }
 
 /** The service's status, or null when it does not answer (not installed / not running). */
-export async function probeService(timeoutMs = 2000): Promise<ServiceStatus | null> {
+export async function probeService(timeoutMs = 4000): Promise<ServiceStatus | null> {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
   try {

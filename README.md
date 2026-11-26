@@ -324,9 +324,12 @@ for speed on an NVIDIA card (also on laptops where the browser is held to the in
 
 - **Install once**: download [`Install-QDP-AI.cmd`](public/windows/Install-QDP-AI.cmd) (linked in the dialog) and run
   it. For the current user only, no admin rights: it installs Python (with [uv](https://github.com/astral-sh/uv)),
-  PyTorch – with CUDA when an NVIDIA card is found – and nnU-Net into `%LOCALAPPDATA%\QuickDICOMPlanning-AI` (about
+  PyTorch – with CUDA when an NVIDIA card is found: the build is chosen by the card's generation (the newest cards,
+  e.g. RTX 50, need CUDA 12.8 or later, the oldest 12.6 or earlier) and **checked by running a small 3D network on the
+  card**, trying the next build when one does not run – and nnU-Net into `%LOCALAPPDATA%\QuickDICOMPlanning-AI` (about
   3 GB with NVIDIA support, 1 GB without), downloads the model from Zenodo (230 MB, checked against the checksum Zenodo
-  publishes) and starts the service. It starts with Windows; Start menu → *Quick DICOM Planning* → *QDP AI service* /
+  publishes) and starts the service. It starts with Windows (it answers at once and loads PyTorch in the background –
+  the dialog waits while it says it is starting); Start menu → *Quick DICOM Planning* → *QDP AI service* /
   *Stop QDP AI service*. Running the installer again updates it; `uninstall.cmd` in that folder removes it.
 - **Private**: the service listens on `127.0.0.1` only and answers only this app's pages; the scan region goes there
   and the labels come back – nothing leaves the computer. The browser may ask once to let the page reach the
@@ -339,7 +342,9 @@ for speed on an NVIDIA card (also on laptops where the browser is held to the in
   classes (from its probabilities), which the app puts on its label grid like the browser engine's result. The service
   is one Python file, [`public/windows/ai/qdp_ai_server.py`](public/windows/ai/qdp_ai_server.py) (`GET /status`,
   `POST /segment`, `GET /jobs/<id>`, `GET /jobs/<id>/result`, `DELETE /jobs/<id>`); without an NVIDIA card it runs
-  on the CPU – correct, but slow.
+  on the CPU – correct, but slow. If the card cannot run the model with the installed PyTorch (*no kernel image is
+  available for execution on the device*), the service says so – the dialog shows it, with the advice to run the
+  installer again – and runs on the CPU instead; a CUDA error during a run repeats that run on the CPU.
 
 Fidelity: the pre- and post-processing of nnU-Net is re-implemented (crop to the non-zero region, resampling to the
 model's 0.43 × 0.31 × 0.43 mm grid, CT normalisation, sliding window with Gaussian weighting, logits resampled back

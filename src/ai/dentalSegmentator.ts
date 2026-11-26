@@ -224,21 +224,37 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
     desk.textContent = 'Looking for the desktop AI service…';
     updateEst();
     service = await probeService();
+    // just started (e.g. after logging in): it loads PyTorch and checks the card first – wait for it
+    for (let i = 0; service?.device === 'starting' && i < 60 && m.isConnected; i++) {
+      desk.textContent = 'The desktop AI service is starting (loading PyTorch, checking the graphics card)…';
+      await new Promise((r) => setTimeout(r, 2000));
+      service = await probeService();
+    }
     probing = false;
-    if (!service) {
+    if (service?.device === 'starting') {
       desk.className = 'ai-desktop small warn';
-      desk.innerHTML = `<b>The desktop AI service is not running.</b> Install it once (Windows, about 1–3 GB):
+      desk.innerHTML = `The desktop AI service is still starting. <button class="ai-recheck">Check again</button>`;
+      service = null;
+    } else if (!service) {
+      desk.className = 'ai-desktop small warn';
+      desk.innerHTML = `<b>The desktop AI service is not running.</b> Installed already? Start it: Start menu → <b>QDP AI service</b>, wait a few
+        seconds, then check again. Not yet: install it once (Windows, about 1–3 GB):
         <a href="${new URL('windows/Install-QDP-AI.cmd', document.baseURI).href}" download>Install-QDP-AI.cmd</a> – run it, and the service starts
-        (afterwards with Windows; Start menu → <b>QDP AI service</b>). <button class="ai-recheck">Check again</button>`;
+        (afterwards with Windows). <button class="ai-recheck">Check again</button>`;
     } else if (!service.modelFound) {
       desk.className = 'ai-desktop small warn';
       desk.innerHTML = `The desktop AI service ${service.version} is running, but its model is missing – run the installer again. <button class="ai-recheck">Check again</button>`;
     } else {
       desk.className = `ai-desktop small ${service.device === 'cuda' ? 'ok' : 'warn'}`;
+      const installer = `<a href="${new URL('windows/Install-QDP-AI.cmd', document.baseURI).href}" download>Install-QDP-AI.cmd</a>`;
       desk.innerHTML =
         service.device === 'cuda'
           ? `Connected – desktop AI service ${service.version} on <b>${escapeHtml(service.gpu ?? 'the graphics card')}</b> (CUDA)${service.busy ? ' · busy with another scan' : ''}`
-          : `Connected – desktop AI service ${service.version}, but on the <b>CPU</b> (no NVIDIA card found): the full model with mirrored passes takes long there – the browser on a graphics card is faster.`;
+          : service.gpuError
+            ? `Connected – desktop AI service ${service.version}, but the graphics card <b>${escapeHtml(service.gpu ?? '')}</b> cannot run the model with the PyTorch installed
+              (<span class="muted">${escapeHtml(service.gpuError)}</span>), so it runs on the <b>CPU</b> – slowly. Run the installer again (${installer}): it now installs a PyTorch build that runs on this card.
+              <button class="ai-recheck">Check again</button>`
+            : `Connected – desktop AI service ${service.version}, but on the <b>CPU</b> (no NVIDIA card found): the full model with mirrored passes takes long there – the browser on a graphics card is faster.`;
     }
     m.querySelector<HTMLButtonElement>('.ai-recheck')?.addEventListener('click', () => void checkService());
     updateEst();
