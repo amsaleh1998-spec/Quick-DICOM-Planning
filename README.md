@@ -222,7 +222,7 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   *Undo point*, *Done*; drag a curve point to adjust it, *Clear curve* to start over.
 - **3D** tab: the 3D view full screen.
 - **Ruler** (MPR and Plan toolbars): drag from the start to the end point, or tap the start, then the end – in any slice
-  or the panoramic. Drag a ruler end to adjust it, double-tap a ruler to delete it (with a mouse: right-click it, or click it and press
+  or the panoramic. Drag a ruler end to adjust it, or its line to move the whole ruler; double-tap a ruler to delete it (with a mouse: right-click it, or click it and press
   Backspace / Delete), *Clear rulers* removes all.
   Measurements are shared with the desktop version through project files.
 - Touch: swipe to scroll slices (panoramic: left/right along the arch, up/down buccal/lingual; cross-sections: along the
@@ -256,7 +256,8 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
 **Measurements**
 - *Ruler* (top bar or **R**): click the first point, then the second point on any slice – MPR, axial, cross-sections,
   tangential, or the panoramic (distances on the developed panoramic surface). The tool then switches off; ruler ends can
-  be dragged at any time to adjust them. To remove a ruler: **right-click it**, or **click it** (it is highlighted) and
+  be dragged at any time to adjust them, and **dragging a ruler's line moves the whole ruler** (same length, one undo
+  step; a plain click only selects it). To remove a ruler: **right-click it**, or **click it** (it is highlighted) and
   press **Backspace / Delete** – also once the mouse has moved on; hovering it and pressing Delete, or double-clicking it,
   works too. Esc or a click elsewhere lets a selected ruler go; a right-drag that starts on a ruler still zooms.
   *Clear* removes all, Esc cancels a ruler in progress. A ruler shows on the slice it was drawn on.

@@ -63,3 +63,32 @@ test('a ruler is deleted by a right click, or by a click and Backspace / Delete'
   await page.keyboard.press('Control+z');
   expect(await count(page)).toBe(1);
 });
+
+test('a ruler is moved as a whole by dragging its line (one undo step); a click does not move it', async ({ page }) => {
+  await openDemo(page);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await ruler(page);
+  const before = await page.evaluate(() => ({ a: [...window.app.measurements[0].a], b: [...window.app.measurements[0].b] }));
+  const len = (r: { a: number[]; b: number[] }) => Math.hypot(...r.a.map((v, k) => v - r.b[k]));
+  const [mx, my] = await inView(page, 'mprViews.0', 0.5, 0.45);
+  // a click on the line selects it, nothing moves
+  await page.mouse.click(mx, my);
+  expect(await page.evaluate(() => window.app.selectedMeasurementId)).not.toBeNull();
+  expect(await page.evaluate(() => [...window.app.measurements[0].a])).toEqual(before.a);
+  // drag the middle of the line: both ends move by the same amount, the length stays
+  await page.mouse.move(mx, my);
+  await page.mouse.down();
+  await page.mouse.move(mx + 30, my + 40, { steps: 5 });
+  await page.mouse.up();
+  const after = await page.evaluate(() => ({ a: [...window.app.measurements[0].a], b: [...window.app.measurements[0].b] }));
+  const da = after.a.map((v: number, k: number) => v - before.a[k]);
+  const db = after.b.map((v: number, k: number) => v - before.b[k]);
+  expect(Math.hypot(...da)).toBeGreaterThan(3);
+  da.forEach((v: number, k: number) => expect(v).toBeCloseTo(db[k], 3));
+  expect(len(after)).toBeCloseTo(len(before), 3);
+  expect(await count(page)).toBe(1);
+  // one undo step brings it back
+  await page.keyboard.press('Control+z');
+  const undone = await page.evaluate(() => [...window.app.measurements[0].a]);
+  undone.forEach((v: number, k: number) => expect(v).toBeCloseTo(before.a[k], 6));
+});

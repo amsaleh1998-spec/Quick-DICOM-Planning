@@ -11,7 +11,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['Alt / middle drag', 'Pan'],
       ['F', 'Fit all views'],
       ['M or ⤢', 'Maximize / restore the view'],
-      ['R', 'Ruler: click start, click end · drag an end to adjust'],
+      ['R', 'Ruler: click start, click end · drag an end to adjust it, drag its line to move the whole ruler'],
       ['Right-click a ruler', 'Delete it (or click it, then Backspace / Delete)'],
       ['1 / 2', '① Reorient / ② Plan'],
     ],

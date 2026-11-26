@@ -133,7 +133,11 @@ export abstract class View {
   protected measureKind: 'plane' | 'pano' | null = null;
   /** ruler under a right-button press (deleted on release when the mouse did not move) */
   private rightOnRuler: number | null = null;
-  private rulerDrag: { m: Measurement; end: 'a' | 'b'; created: boolean } | null = null;
+  /** a ruler being drawn or edited: one end, or the whole ruler (grabbed by its line) */
+  private rulerDrag:
+    | { m: Measurement; end: 'a' | 'b'; created: boolean }
+    | { m: Measurement; end: 'both'; created: false; p0: Pt; sa: Pt; sb: Pt; moved: boolean }
+    | null = null;
   /** time the last ruler was completed (ignore the dblclick of a fast double click) */
   private rulerDoneAt = 0;
   /** nerve control point being dragged */
@@ -600,6 +604,35 @@ export abstract class View {
     app.setRuler(false);
   }
 
+  /** Grab a whole ruler by its line: both ends follow the pointer (it keeps its length on the slice). */
+  private grabRuler(m: Measurement, p: Pt): boolean {
+    const sa = this.measureScreen(m.a), sb = this.measureScreen(m.b);
+    if (!sa || !sb) return false;
+    this.rulerDrag = { m, end: 'both', created: false, p0: p, sa, sb, moved: false };
+    return true;
+  }
+
+  /** The ruler being dragged follows the pointer. */
+  private moveRuler(p: Pt) {
+    const r = this.rulerDrag;
+    if (!r) return;
+    if (r.end === 'both') {
+      const dx = p[0] - r.p0[0], dy = p[1] - r.p0[1];
+      if (!r.moved && Math.hypot(dx, dy) < 3) return; // (a click selects it, it does not move)
+      r.moved = true;
+      const a = this.measureAt([r.sa[0] + dx, r.sa[1] + dy]);
+      const b = this.measureAt([r.sb[0] + dx, r.sb[1] + dy]);
+      if (!a || !b) return;
+      r.m.a = a;
+      r.m.b = b;
+    } else {
+      const w = this.measureAt(p);
+      if (!w) return;
+      r.m[r.end] = w;
+    }
+    this.app.requestRender();
+  }
+
   private deleteMeasurementAt(p: Pt): boolean {
     const m = this.hitMeasureLine(p);
     if (!m) return false;
@@ -807,8 +840,9 @@ export abstract class View {
         this.rulerDrag = { ...this.hitMeasureEnd(p)!, created: false };
         this.drag = 'ruler';
       } else if (button === 0 && onRuler) {
-        // (selected above – the click does not also move the crosshair or pick what lies under it)
-        this.drag = 'none';
+        // (selected above – the click does not also move the crosshair or pick what lies under it);
+        // dragging its line moves the whole ruler
+        this.drag = this.grabRuler(onRuler, p) ? 'ruler' : 'none';
         e.preventDefault();
       } else if (button === 0) this.drag = this.onLeftDown(p, e) ? 'left' : 'none';
       if (this.drag !== 'none') {
@@ -836,15 +870,9 @@ export abstract class View {
           }
           break;
         }
-        case 'ruler': {
-          const r = this.rulerDrag;
-          const w = r && this.measureAt(p);
-          if (r && w) {
-            r.m[r.end] = w;
-            this.app.requestRender();
-          }
+        case 'ruler':
+          this.moveRuler(p);
           break;
-        }
         case 'nerve': {
           const d = this.nerveDrag;
           const w = d && this.nervePointAt(p, d.nerve.pts[d.idx]);
@@ -891,7 +919,11 @@ export abstract class View {
           else {
             const wc = !this.waxEditor ? null : app.wax.editing ? this.waxEditor.hover(p) : this.waxAnyPanel(p) ? this.waxEditor.peek(p) : null;
             if (wc) this.el.style.cursor = wc;
-            else this.onHover(p, e);
+            else {
+              this.onHover(p, e);
+              // over a ruler's line: dragging it moves the whole ruler
+              if (this.measureKind && app.hoverMeasurementId !== null) this.el.style.cursor = 'grab';
+            }
           }
         }
       }
@@ -1031,11 +1063,14 @@ export abstract class View {
     this.app.activeView = this;
     if (this.touches.size === 1) {
       // ruler tool: drag from start to end (or tap start, then end); a ruler end can always be dragged
-      const ruler = !!this.measureKind && (this.app.ruler || !!this.hitMeasureEnd(p));
+      // (a finger on a ruler's line grabs the whole ruler; a tap on it still selects / a double tap deletes)
+      const line = !!this.measureKind && !this.app.ruler && !this.hitMeasureEnd(p) ? this.hitMeasureLine(p) : null;
+      const ruler = !!this.measureKind && (this.app.ruler || !!this.hitMeasureEnd(p) || !!line);
       if (ruler) {
         this.downPos = p;
         const end = this.app.ruler ? null : this.hitMeasureEnd(p);
         if (end) this.rulerDrag = { ...end, created: false };
+        else if (line) this.grabRuler(line, p);
         else if (!this.rulerClick(p)) this.rulerDrag = null; // second tap finished a ruler
       }
       const drag = !ruler && this.touchDragAt(p) && this.onLeftDown(p, e);
@@ -1075,12 +1110,8 @@ export abstract class View {
     const st = this.touchStart;
     if (!st) return;
     if (st.ruler) {
-      const r = this.rulerDrag;
-      const w = r && this.measureAt(p);
-      if (r && w) {
-        r.m[r.end] = w;
-        this.app.requestRender();
-      }
+      if (Math.hypot(p[0] - st.p[0], p[1] - st.p[1]) > 6) st.moved = true;
+      this.moveRuler(p);
       return;
     }
     if (st.drag) {
@@ -1122,7 +1153,10 @@ export abstract class View {
     this.touches.delete(e.pointerId);
     if (this.ovCanvas.hasPointerCapture(e.pointerId)) this.ovCanvas.releasePointerCapture(e.pointerId);
     if (this.touches.size === 0) {
-      if (st?.ruler) {
+      // a ruler grabbed by its line but not moved: a tap on it (below)
+      const grabbedOnly = st?.ruler && this.rulerDrag?.end === 'both' && !this.rulerDrag.moved;
+      if (grabbedOnly) this.rulerDrag = null;
+      if (st?.ruler && !grabbedOnly) {
         const r = this.rulerDrag;
         this.rulerDrag = null;
         const p = this.pos(e);
