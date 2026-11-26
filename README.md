@@ -340,9 +340,15 @@ for speed on an NVIDIA card (also on laptops where the browser is held to the in
   e.g. RTX 50, need CUDA 12.8 or later, the oldest 12.6 or earlier) and **checked by running a small 3D network on the
   card**, trying the next build when one does not run – and nnU-Net into `%LOCALAPPDATA%\QuickDICOMPlanning-AI` (about
   3 GB with NVIDIA support, 1 GB without), downloads the model from Zenodo (230 MB, checked against the checksum Zenodo
-  publishes) and starts the service. It starts with Windows (it answers at once and loads PyTorch in the background –
-  the dialog waits while it says it is starting); Start menu → *Quick DICOM Planning* → *QDP AI service* /
-  *Stop QDP AI service*. Running the installer again updates it; `uninstall.cmd` in that folder removes it.
+  publishes), checks the service once and registers a `qdp-ai:` link with Windows. Running the installer again updates
+  it; `uninstall.cmd` in that folder removes it.
+- **Runs only while it is needed**: the service is not running in the background (it does not start with Windows).
+  *Start* in the dialog starts it through the `qdp-ai:` link – the browser asks once whether the page may open it (it
+  may name it *Python*): allow it, and tick *Always allow*. It answers within seconds and loads PyTorch and checks the
+  card meanwhile (the dialog waits). It **closes itself about 20 s after the app has the result** – freeing the
+  graphics card – (a further region within that time uses it while it still runs), and 5 minutes after starting when
+  nothing is sent to it. Start menu → *Quick DICOM Planning* → *Stop QDP AI service* stops it at once. An installation
+  from before version 1.3 started with Windows and kept running: run the installer again to change it.
 - **Private**: the service listens on `127.0.0.1` only and answers only this app's pages; the scan region goes there
   and the labels come back – nothing leaves the computer. The browser may ask once to let the page reach the
   computer's own service (*local network access*): allow it.
@@ -353,7 +359,8 @@ for speed on an NVIDIA card (also on laptops where the browser is held to the in
   preprocessing, sliding window and resampling, and returns per voxel the class and the margin between the best two
   classes (from its probabilities), which the app puts on its label grid like the browser engine's result. The service
   is one Python file, [`public/windows/ai/qdp_ai_server.py`](public/windows/ai/qdp_ai_server.py) (`GET /status`,
-  `POST /segment`, `GET /jobs/<id>`, `GET /jobs/<id>/result`, `DELETE /jobs/<id>`); without an NVIDIA card it runs
+  `POST /segment`, `GET /jobs/<id>`, `GET /jobs/<id>/result`, `DELETE /jobs/<id>`, `POST /quit`; `--stay` keeps it
+  running); without an NVIDIA card it runs
   on the CPU – correct, but slow. If the card cannot run the model with the installed PyTorch (*no kernel image is
   available for execution on the device*), the service says so – the dialog shows it, with the advice to run the
   installer again – and runs on the CPU instead; a CUDA error during a run repeats that run on the CPU.

@@ -11,10 +11,14 @@ exit /b
 #  Quick DICOM Planning - desktop AI service (Windows)
 #
 #  Installs the full DentalSegmentator model in the official nnU-Net v2 on this
-#  computer, as a small background service that the Quick DICOM Planning web app
-#  uses for its automatic segmentation (Segments panel -> Automatic (AI) -> Run on:
-#  Desktop AI service). It listens on 127.0.0.1 only: the scan never leaves this
-#  computer. With an NVIDIA graphics card it runs on the card (CUDA).
+#  computer, as a small service that the Quick DICOM Planning web app uses for its
+#  automatic segmentation (Segments panel -> Automatic (AI) -> Run on: Desktop AI
+#  service). It listens on 127.0.0.1 only: the scan never leaves this computer.
+#  With an NVIDIA graphics card it runs on the card (CUDA).
+#
+#  It runs only while it is needed: the app starts it when you segment (through a
+#  qdp-ai: link registered here - the browser asks once whether it may open it),
+#  and it closes itself when the segmentation is done, freeing the graphics card.
 #
 #  For the current user only (no admin rights). Everything goes to
 #  %LOCALAPPDATA%\QuickDICOMPlanning-AI (Python, PyTorch, nnU-Net, the model:
@@ -197,10 +201,17 @@ Download "$Site/windows/ai/qdp_ai_server.py" $server
 # started directly with pythonw.exe (Python without a console window) - no launcher script between
 $serviceArgs = '"' + $server + '" --model "' + (Join-Path $modelDir 'Dataset112_DentalSegmentator_v100\nnUNetTrainer__nnUNetPlans__3d_fullres') + '"'
 Remove-Item (Join-Path $Root 'start-service.vbs') -Force -ErrorAction SilentlyContinue
+# the app starts it when it is needed: a qdp-ai: link (current user; the link's text is not passed on)
+$proto = 'HKCU:\Software\Classes\qdp-ai'
+New-Item -Path "$proto\shell\open\command" -Force | Out-Null
+Set-Item -Path $proto -Value 'URL:QDP AI service'
+New-ItemProperty -Path $proto -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
+Set-Item -Path "$proto\shell\open\command" -Value ('"' + $pyw + '" ' + $serviceArgs)
 $stop = Join-Path $Root 'stop-service.cmd'
 [IO.File]::WriteAllText($stop, "@echo off`r`npowershell.exe -NoProfile -Command `"try { Invoke-RestMethod -Method Post -Uri http://127.0.0.1:$Port/quit -TimeoutSec 3 | Out-Null; 'QDP AI service stopped.' } catch { 'QDP AI service was not running.' }`"`r`ntimeout /t 3 >nul`r`n", [Text.Encoding]::ASCII)
 
-# shortcuts: Start menu (start / stop) and starting with Windows
+# Start menu: stop it (it closes itself after a segmentation anyway). It no longer starts with
+# Windows, and is no longer started from the Start menu (the app starts it): older shortcuts go.
 $wsh = New-Object -ComObject WScript.Shell
 $programs = Join-Path ([Environment]::GetFolderPath('Programs')) 'Quick DICOM Planning'
 New-Item -ItemType Directory -Force -Path $programs | Out-Null
@@ -212,9 +223,9 @@ function Shortcut([string]$Path, [string]$Target, [string]$Arguments, [string]$D
   $l.Description = $Description
   $l.Save()
 }
-Shortcut (Join-Path $programs "$Name.lnk") $pyw $serviceArgs 'Start the QDP AI service (automatic segmentation with the full model)'
 Shortcut (Join-Path $programs "Stop $Name.lnk") $stop '' 'Stop the QDP AI service'
-Shortcut (Join-Path ([Environment]::GetFolderPath('Startup')) "$Name.lnk") $pyw $serviceArgs 'Start the QDP AI service with Windows'
+Remove-Item (Join-Path $programs "$Name.lnk") -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path ([Environment]::GetFolderPath('Startup')) "$Name.lnk") -Force -ErrorAction SilentlyContinue
 
 # uninstall
 $uninstall = @"
@@ -225,6 +236,7 @@ timeout /t 3 >nul
 del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\$Name.lnk" >nul 2>&1
 del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Quick DICOM Planning\$Name.lnk" >nul 2>&1
 del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Quick DICOM Planning\Stop $Name.lnk" >nul 2>&1
+reg delete "HKCU\Software\Classes\qdp-ai" /f >nul 2>&1
 rmdir "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Quick DICOM Planning" >nul 2>&1
 cd /d "%TEMP%"
 rmdir /s /q "%LOCALAPPDATA%\QuickDICOMPlanning-AI"
@@ -233,18 +245,19 @@ pause
 "@
 [IO.File]::WriteAllText((Join-Path $Root 'uninstall.cmd'), $uninstall.Replace("`r`n", "`n").Replace("`n", "`r`n"), [Text.Encoding]::ASCII)
 
-# --- 5. start it and check it answers ---------------------------------------------------
-Step 'Starting the service'
+# --- 5. start it once to check it, then stop it (the app starts it when it is needed) ----
+Step 'Checking the service'
 Start-Process -FilePath $pyw -ArgumentList $serviceArgs -WorkingDirectory $Root
 $status = $null
 for ($i = 0; $i -lt 90 -and (-not $status -or $status.device -eq 'starting'); $i++) {
   Start-Sleep -Seconds 2
   try { $status = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/status" -TimeoutSec 5 } catch { }
 }
+try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/quit" -TimeoutSec 3 | Out-Null } catch { }
 Stop-Transcript | Out-Null
 Write-Host ''
 if (-not $status) {
-  Write-Host 'The service was installed but did not answer yet. See log.txt in:' -ForegroundColor Yellow
+  Write-Host 'The service was installed but did not answer. See log.txt in:' -ForegroundColor Yellow
   Write-Host "  $Root"
   exit 1
 }
@@ -257,5 +270,6 @@ if ($status.device -eq 'cuda') {
 }
 Write-Host ''
 Write-Host '  In Quick DICOM Planning: Segments panel -> Automatic (AI) -> Run on: Desktop AI service.'
-Write-Host '  The service starts with Windows; Start menu -> Quick DICOM Planning -> QDP AI service / Stop QDP AI service.'
+Write-Host '  It is not running now: the app starts it when you segment (the browser asks once whether it may'
+Write-Host '  open it - shown as Python: allow it), and it closes itself when the segmentation is done.'
 Write-Host "  To remove it: $Root\uninstall.cmd"

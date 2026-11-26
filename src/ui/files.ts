@@ -21,6 +21,7 @@ import { HELPER_LOG, OS_MAC, showHelperHelp } from './install';
 import { PROJECT_MIME, canWrite, deliverFile, exportHooks, writeFile } from './save';
 import { showExportStl } from '../exportStl';
 import { importScans } from './scansPanel';
+import { launchingService } from '../ai/desktopAi';
 
 /** Load DICOM files, a ZIP of them or a project. Resolves to an error message, or null on success. */
 export async function loadFiles(files: File[]): Promise<string | null> {
@@ -683,7 +684,8 @@ window.addEventListener('drop', async (e) => {
 // Closing the app (or the tab) with an unsaved plan: the browser asks whether to leave. Browsers
 // only offer their own Leave / Cancel question – Cancel keeps the app open to save (Ctrl+S).
 window.addEventListener('beforeunload', (e) => {
-  if (!app.unsaved) return;
+  // (opening the qdp-ai: link to start the desktop AI service does not leave the page)
+  if (!app.unsaved || launchingService()) return;
   e.preventDefault();
   e.returnValue = ''; // older browsers
 });

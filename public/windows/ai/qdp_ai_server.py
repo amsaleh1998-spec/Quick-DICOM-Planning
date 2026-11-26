@@ -6,7 +6,11 @@ on an NVIDIA graphics card when there is one. The Quick DICOM Planning web app s
 region over a local connection (127.0.0.1 only - the scan never leaves the computer) and gets the
 labels back.
 
-    python qdp_ai_server.py [--model DIR] [--port 47423] [--cpu]
+It runs only while it is needed: the app starts it (through the qdp-ai: link the installer
+registers) and it closes itself - freeing the graphics card - shortly after the app has the result
+of its last segmentation, or when nothing is sent to it within minutes of starting.
+
+    python qdp_ai_server.py [--model DIR] [--port 47423] [--cpu] [--stay]
 
 Endpoints (JSON unless noted; requests from other web sites are refused):
     GET    /status              service, version, model, device
@@ -28,6 +32,7 @@ import json
 import logging
 import os
 import re
+import socket
 import sys
 import threading
 import time
@@ -35,7 +40,7 @@ import traceback
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = '1.2.0'
+VERSION = '1.3.0'
 DEFAULT_PORT = 47423
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_MODEL = os.path.join(HERE, 'model', 'Dataset112_DentalSegmentator_v100', 'nnUNetTrainer__nnUNetPlans__3d_fullres')
@@ -43,6 +48,10 @@ DEFAULT_MODEL = os.path.join(HERE, 'model', 'Dataset112_DentalSegmentator_v100',
 ALLOWED_ORIGINS = [re.compile(r'^https://quickdicom\.app$'), re.compile(r'^http://(localhost|127\.0\.0\.1)(:\d+)?$')]
 MAX_VOXELS = 400_000_000
 JOB_KEEP_S = 600
+# closing by itself: this long after the app has the last result (a further region within it uses
+# the service still running), or after starting / a result never collected
+IDLE_AFTER_RESULT_S = 20
+IDLE_S = 300
 
 log = logging.getLogger('qdp-ai')
 
@@ -109,6 +118,7 @@ class Service:
         self.gpu_error = None
         self.load_error = None
         self.device_lock = threading.Lock()
+        self.last_activity = time.time()
         threading.Thread(target=self.worker, daemon=True).start()
         # PyTorch and the card check take a while on a fresh start (e.g. at login): in the background,
         # so the service answers at once ('starting')
@@ -153,6 +163,20 @@ class Service:
             'device': dev, 'gpu': self.gpu, 'gpuError': self.gpu_error, 'torch': self.torch_version(), 'busy': any(j.state in ('queued', 'running') for j in self.jobs.values()),
             'loadError': self.load_error,
         }
+
+    def touch(self):
+        self.last_activity = time.time()
+
+    def idle_for(self):
+        """Seconds it may still wait before closing itself (<= 0: close now), or None while working."""
+        jobs = list(self.jobs.values())
+        if any(j.state in ('queued', 'running') for j in jobs):
+            return None
+        idle = time.time() - self.last_activity
+        # every result collected (or the run failed / was cancelled): done
+        if jobs and not any(j.state == 'done' and j.result is not None for j in jobs):
+            return IDLE_AFTER_RESULT_S - idle
+        return IDLE_S - idle
 
     def torch_version(self):
         t = sys.modules.get('torch')
@@ -273,6 +297,7 @@ class Service:
             finally:
                 job.data = None
                 job.finished = time.time()
+                self.touch()
 
 
 def make_handler(service, server_ref):
@@ -332,8 +357,9 @@ def make_handler(service, server_ref):
         def do_GET(self):
             if not self.origin_ok():
                 return self.reply(403, {'error': 'origin not allowed'})
-            if self.path == '/status':
+            if self.path == '/status':  # (asking how it is does not keep it running)
                 return self.reply(200, service.status())
+            service.touch()
             job, result = self.job()
             if job is None:
                 return self.reply(404, {'error': 'not found'})
@@ -356,6 +382,7 @@ def make_handler(service, server_ref):
         def do_POST(self):
             if not self.origin_ok():
                 return self.reply(403, {'error': 'origin not allowed'})
+            service.touch()
             if self.path == '/quit':
                 self.reply(200, {'ok': True})
                 threading.Thread(target=server_ref[0].shutdown, daemon=True).start()
@@ -399,6 +426,7 @@ def main():
     ap.add_argument('--port', type=int, default=DEFAULT_PORT)
     ap.add_argument('--cpu', action='store_true', help='do not use the graphics card')
     ap.add_argument('--log', default=os.path.join(HERE, 'log.txt'))
+    ap.add_argument('--stay', action='store_true', help='keep running (do not close when idle)')
     a = ap.parse_args()
     handlers = [logging.StreamHandler(sys.stderr)] if sys.stderr else []
     try:
@@ -406,8 +434,19 @@ def main():
     except OSError:
         pass
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s', handlers=handlers)
+    # started again while it runs (e.g. a second click): the running one answers - nothing to do
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        probe.bind(('127.0.0.1', a.port))
+    except OSError:
+        log.info('port %s is in use - the service is running already', a.port)
+        sys.exit(0)
+    finally:
+        probe.close()
     service = Service(a.model, a.cpu)
     ref = [None]
+    # (on Windows, address reuse would let a second server take the same port)
+    ThreadingHTTPServer.allow_reuse_address = sys.platform != 'win32'
     try:
         server = ThreadingHTTPServer(('127.0.0.1', a.port), make_handler(service, ref))
     except OSError as e:
@@ -415,6 +454,19 @@ def main():
         sys.exit(1)
     ref[0] = server
     log.info('QDP AI service %s on http://127.0.0.1:%s (model %s)', VERSION, a.port, a.model)
+
+    def close_when_idle():
+        # the graphics card is held only while the service runs
+        while True:
+            time.sleep(2)
+            left = service.idle_for()
+            if left is not None and left <= 0:
+                log.info('nothing more to do - closing')
+                server.shutdown()
+                return
+
+    if not a.stay:
+        threading.Thread(target=close_when_idle, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

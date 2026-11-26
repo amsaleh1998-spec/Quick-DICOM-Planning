@@ -10,7 +10,7 @@ import { DS_CREDIT, DS_MODEL, contextBox, modelAxes, modelGrid, occlusalSplit, p
 import { nonzeroBox } from './dsEngine';
 import { dedicatedGpuHelp, findGpu, gpuBuffersTooSmall, inEdge } from './gpu';
 import type { StartMsg, WorkerMsg } from './dsWorker';
-import { ServiceProgress, ServiceStatus, probeService, regionToLabels, segmentOnService } from './desktopAi';
+import { ServiceProgress, ServiceStatus, launchService, probeService, regionToLabels, segmentOnService, waitForService } from './desktopAi';
 
 export interface AiHooks {
   setStatus(text: string, error?: boolean): void;
@@ -236,11 +236,11 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
       desk.innerHTML = `The desktop AI service is still starting. <button class="ai-recheck">Check again</button>`;
       service = null;
     } else if (!service) {
-      desk.className = 'ai-desktop small warn';
-      desk.innerHTML = `<b>The desktop AI service is not running.</b> Installed already? Start it: Start menu → <b>QDP AI service</b>, wait a few
-        seconds, then check again. Not yet: install it once (Windows, about 1–3 GB):
-        <a href="${new URL('windows/Install-QDP-AI.cmd', document.baseURI).href}" download>Install-QDP-AI.cmd</a> – run it, and the service starts
-        (afterwards with Windows). <button class="ai-recheck">Check again</button>`;
+      desk.className = 'ai-desktop small';
+      desk.innerHTML = `The desktop AI service is started when you press <b>Start</b>, and closes itself when the segmentation is done – the
+        graphics card is used only meanwhile. The browser asks once whether this page may open it (it may name it <i>Python</i>): allow it
+        (tick <i>Always allow</i>). Not installed yet – or installed before it started this way: run the installer once (Windows, about 1–3 GB):
+        <a href="${new URL('windows/Install-QDP-AI.cmd', document.baseURI).href}" download>Install-QDP-AI.cmd</a>. <button class="ai-recheck">Check again</button>`;
     } else if (!service.modelFound) {
       desk.className = 'ai-desktop small warn';
       desk.innerHTML = `The desktop AI service ${service.version} is running, but its model is missing – run the installer again. <button class="ai-recheck">Check again</button>`;
@@ -264,7 +264,8 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
     const desktop = o.engine === 'desktop';
     m.querySelectorAll<HTMLElement>('.ai-browser-only').forEach((el) => el.classList.toggle('hidden', desktop));
     desk.classList.toggle('hidden', !desktop);
-    $<HTMLButtonElement>('#ai-go').disabled = desktop && (probing || !service?.modelFound);
+    // (not running: Start starts it)
+    $<HTMLButtonElement>('#ai-go').disabled = desktop && (probing || (!!service && !service.modelFound));
     const n = countsFor(o.region, o.jaw)[desktop || o.step !== 1 ? 0 : 1];
     $('#ai-est').textContent = desktop
       ? `${n} tile${n === 1 ? '' : 's'} of ${TILE_MM} mm, each computed 8 times (mirrored) – with an NVIDIA card typically ${fmtTime(n * 1.5)}–${fmtTime(n * 6)}${service && service.device !== 'cuda' ? `, on the CPU ${fmtTime(n * 60)} or more` : ''}.`
@@ -310,9 +311,18 @@ export function showDentalSegmentator(app: App, hooks: AiHooks) {
   });
   $('.modal-close').onclick = close;
   $('#ai-hide').onclick = close;
-  $<HTMLButtonElement>('#ai-go').onclick = () => start(app, hooks, m, opt(), () => {
-    window.removeEventListener('keydown', onKey, true);
-  });
+  $<HTMLButtonElement>('#ai-go').onclick = () => {
+    const o = opt();
+    // not running: Windows starts it (from this click – the browser allows opening it only from one);
+    // found before, it may have closed itself since (after a segmentation): checked quickly
+    if (o.engine === 'desktop') {
+      if (!service) launchService();
+      else void probeService(1500).then((s) => s || launchService());
+    }
+    start(app, hooks, m, o, () => {
+      window.removeEventListener('keydown', onKey, true);
+    });
+  };
 }
 
 /** Which graphics card will run the model – with help when it is the slow integrated one. */
@@ -444,27 +454,43 @@ function start(app: App, hooks: AiHooks, m: HTMLDivElement, o: { engine: AiEngin
     // the full model on the desktop AI service
     const ac = new AbortController();
     stop = () => ac.abort();
-    setProgress(0, 'Sending the scan to the desktop AI service…', `${(data.byteLength / 1e6).toFixed(0)} MB`);
     let tiles0 = 0, t1 = 0;
-    segmentOnService(
-      data,
-      dims,
-      spacing,
-      vol.info.patientAffine,
-      (s: ServiceProgress) => {
-        if (s.total && s.done) {
-          if (!t1) {
-            t1 = performance.now();
-            tiles0 = s.done;
-          }
-          const el = (performance.now() - t1) / 1000;
-          const per = s.done > tiles0 ? el / (s.done - tiles0) : 0;
-          const left = per * (s.total - s.done);
-          setProgress(0.1 + (0.85 * s.done) / s.total, `Segmenting… ${Math.round((100 * s.done) / s.total)} %${per && s.done < s.total ? ` · about ${fmtTime(left)} left` : ''}`, `tile ${s.done} of ${s.total} · full model, 8 mirrored passes · desktop AI service`);
-        } else setProgress(s.phase.startsWith('Finishing') ? 0.96 : 0.05, s.phase || 'Working…', 'desktop AI service');
-      },
+    // started by the Start click when it was not running: it answers within seconds, then loads
+    // PyTorch and checks the graphics card
+    setProgress(0, 'Starting the desktop AI service…', '');
+    waitForService(
+      (s) => setProgress(0, 'Starting the desktop AI service…', s ? 'loading PyTorch, checking the graphics card' : 'waiting for Windows to start it'),
       ac.signal,
     )
+      .then((s) => {
+        if (!s) {
+          const installer = new URL('windows/Install-QDP-AI.cmd', document.baseURI).href;
+          throw new Error(
+            `the desktop AI service did not start. If the browser asked whether to open it (it may name it Python), allow it and try again. Otherwise install it, or update an older installation (which the app cannot start): run ${installer}`,
+          );
+        }
+        if (!s.modelFound) throw new Error('the desktop AI service has no model – run the installer again');
+        setProgress(0, 'Sending the scan to the desktop AI service…', `${(data.byteLength / 1e6).toFixed(0)} MB`);
+        return segmentOnService(
+          data,
+          dims,
+          spacing,
+          vol.info.patientAffine,
+          (p: ServiceProgress) => {
+            if (p.total && p.done) {
+              if (!t1) {
+                t1 = performance.now();
+                tiles0 = p.done;
+              }
+              const el = (performance.now() - t1) / 1000;
+              const per = p.done > tiles0 ? el / (p.done - tiles0) : 0;
+              const left = per * (p.total - p.done);
+              setProgress(0.1 + (0.85 * p.done) / p.total, `Segmenting… ${Math.round((100 * p.done) / p.total)} %${per && p.done < p.total ? ` · about ${fmtTime(left)} left` : ''}`, `tile ${p.done} of ${p.total} · full model, 8 mirrored passes · desktop AI service`);
+            } else setProgress(p.phase.startsWith('Finishing') ? 0.96 : 0.05, p.phase || 'Working…', 'desktop AI service');
+          },
+          ac.signal,
+        );
+      })
       .then((res) => {
         if (!running) return; // cancelled meanwhile
         setProgress(0.98, 'Finishing…', '');

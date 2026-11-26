@@ -25,6 +25,45 @@ export interface ServiceStatus {
   loadError: string | null;
 }
 
+/**
+ * The link the installer registers with Windows: opening it starts the service. It runs only while
+ * it is needed – it closes itself after the segmentation (and when nothing comes within minutes).
+ */
+export const LAUNCH_URL = 'qdp-ai://start';
+let launchedAt = 0;
+
+/**
+ * Ask Windows to start the service – from the click that asked for it (the browser asks once whether
+ * this page may open it). Nothing happens where it is not installed (or an older version is, which
+ * the app cannot start).
+ */
+export function launchService() {
+  launchedAt = Date.now();
+  // (the browser tests have no Windows to start it: they stand in for it here)
+  const standIn = (window as unknown as { qdpLaunchAiService?: () => void }).qdpLaunchAiService;
+  if (standIn) return standIn();
+  window.location.href = LAUNCH_URL;
+}
+
+/** Just asked Windows to start the service: the page is not being left (no "Leave site?" question). */
+export const launchingService = () => Date.now() - launchedAt < 3000;
+
+/**
+ * The service ready to segment (answering, done starting), polled until `timeoutMs`; null when it
+ * does not come. `onWait` gets each answer meanwhile (null: not answering yet).
+ */
+export async function waitForService(onWait: (s: ServiceStatus | null) => void, signal: AbortSignal, timeoutMs = 120_000): Promise<ServiceStatus | null> {
+  const t0 = Date.now();
+  for (;;) {
+    const s = await probeService(2500);
+    if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+    if (s && s.device !== 'starting') return s;
+    onWait(s);
+    if (Date.now() - t0 > timeoutMs) return null;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+
 /** The service's status, or null when it does not answer (not installed / not running). */
 export async function probeService(timeoutMs = 4000): Promise<ServiceStatus | null> {
   const ac = new AbortController();

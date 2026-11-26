@@ -61,8 +61,14 @@ test.afterEach(async () => {
   server = null;
 });
 
-test('desktop AI service: not running, then found, then it segments', async ({ page }) => {
+test('desktop AI service: not running – Start starts it (Windows, through its link), and it segments', async ({ page }) => {
   test.setTimeout(120_000);
+  // what Windows does when the app opens the qdp-ai: link: the service starts (a few seconds later)
+  let launches = 0;
+  await page.exposeFunction('qdpLaunchAiService', () => {
+    launches++;
+    setTimeout(() => void startService({}, 2), 1500);
+  });
   await page.goto('./');
   await page.setInputFiles('#file-input', dicomFiles());
   await page.waitForFunction(() => !!window.app.vol);
@@ -72,18 +78,18 @@ test('desktop AI service: not running, then found, then it segments', async ({ p
   // the browser is the default; the desktop service when chosen – not running yet
   await expect(dlg.locator('input[name="ai-engine"][value="browser"]')).toBeChecked();
   await dlg.locator('input[name="ai-engine"][value="desktop"]').check();
-  await expect(dlg.locator('#ai-desktop')).toContainText('not running', { timeout: 10_000 });
+  await expect(dlg.locator('#ai-desktop')).toContainText('started when you press Start', { timeout: 10_000 });
+  await expect(dlg.locator('#ai-desktop')).toContainText('closes itself when the segmentation is done');
   await expect(dlg.locator('#ai-desktop a')).toHaveAttribute('href', /windows\/Install-QDP-AI\.cmd$/);
-  await expect(dlg.locator('#ai-go')).toBeDisabled();
   await expect(dlg.locator('.ai-browser-only').first()).toBeHidden(); // no quality choice: always the official settings
   await expect(dlg.locator('#ai-gpu')).toBeHidden(); // the browser's graphics card does not matter here
-  // started: found
-  await startService();
-  await dlg.locator('.ai-recheck').click();
-  await expect(dlg.locator('#ai-desktop')).toContainText('Connected – desktop AI service 1.0.0 on Test GPU');
+  expect(launches).toBe(0); // not started by looking
+  // Start: started, waited for (answering, then done loading PyTorch), then it segments
   await expect(dlg.locator('#ai-go')).toBeEnabled();
   await dlg.locator('#ai-go').click();
+  await expect(dlg).toContainText('Starting the desktop AI service');
   await expect(page.locator('#status-msg')).toContainText('full model, desktop AI service', { timeout: 60_000 });
+  expect(launches).toBe(1);
   // the scan went in SimpleITK order (z, y, x) from the app's page
   const vol = await page.evaluate(() => [window.app.vol!.nx, window.app.vol!.ny, window.app.vol!.nz]);
   expect(seen.origin).toMatch(/^http:\/\/(localhost|127\.0\.0\.1):\d+$/);
