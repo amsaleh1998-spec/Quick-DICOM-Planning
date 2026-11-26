@@ -208,8 +208,19 @@ input[type='number'] {
   padding: 6px 10px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
+  /* one row: a second row would shift every view whenever the bar's content changes width (e.g. the
+     unsaved dot) – the patient's name gives way instead; only narrow windows wrap (below) */
+  flex-wrap: nowrap;
   row-gap: 6px;
+  min-width: 0; /* (as a grid item it would otherwise stay as wide as its content) */
+}
+#toolbar > * {
+  flex-shrink: 0;
+}
+@media (max-width: 1180px) {
+  #toolbar {
+    flex-wrap: wrap;
+  }
 }
 .tb-sep {
   width: 1px;
@@ -236,11 +247,17 @@ button.open {
   padding: 4px 11px;
   max-width: 340px;
 }
+#toolbar > .patient-chip {
+  flex: 0 1 auto;
+  min-width: 90px;
+  overflow: hidden;
+}
 .patient-chip .pc-name {
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 .patient-chip .pc-date {
   color: var(--muted);
@@ -2093,16 +2110,19 @@ a.btn-link {
   min-width: 0;
 }
 
-/* unsaved plan */
+/* unsaved plan: a dot in the corner (the button keeps its width, so the bar does not reflow) */
+#btn-save-project {
+  position: relative;
+}
 #btn-save-project.dirty::after {
   content: '';
-  display: inline-block;
+  position: absolute;
+  top: 3px;
+  right: 3px;
   width: 7px;
   height: 7px;
-  margin-left: 6px;
   border-radius: 50%;
   background: var(--accent);
-  vertical-align: 1px;
 }
 
 /* "Save the plan first?" */
