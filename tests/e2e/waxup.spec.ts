@@ -60,6 +60,21 @@ async function onTooth(page: Page, fdi: number, where: (page: Page, fdi: number)
     .toBe(fdi);
   return q;
 }
+/** The mouse on a tooth's body, away from its cusp dots (cusps tool: a dot under the mouse is reshaped instead). */
+async function onToothBody(page: Page, fdi: number) {
+  const offsets = [[0, 0], [0, 7], [0, -7], [7, 0], [-7, 0], [6, 6], [-6, 6], [6, -6], [-6, -6], [0, 11], [0, -11], [11, 0], [-11, 0]];
+  for (const [dx, dy] of offsets) {
+    const q = await in3d(page, fdi);
+    const at: [number, number] = [q[0] + dx, q[1] + dy];
+    await page.mouse.move(at[0] + 0.5, at[1]);
+    await page.mouse.move(at[0], at[1]);
+    const ok = await page
+      .waitForFunction((fdi) => window.app.wax.hover === fdi && window.app.wax.hoverPart === null, fdi, { timeout: 3000 })
+      .then(() => true, () => false);
+    if (ok) return at;
+  }
+  throw new Error(`no point on tooth ${fdi} away from its cusp dots`);
+}
 const center = (page: Page, fdi: number) => page.evaluate((fdi) => window.app.wax.model.center(window.app.wax.model.tooth(fdi)), fdi);
 const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 /** 3D view enlarged (true) or all views shown (false) */
@@ -221,7 +236,7 @@ test('in 3D a tooth is grabbed from any panel; leaving the panel restores the la
   await page.click('[data-wtab="advanced"]');
   await page.click('[data-wv="cusps"]');
   const m0 = await center(page, 46);
-  q = await onTooth(page, 46, in3d);
+  q = await onToothBody(page, 46);
   await page.mouse.down();
   await page.mouse.move(q[0] + 25, q[1], { steps: 4 });
   await page.mouse.up();

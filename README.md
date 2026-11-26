@@ -182,7 +182,8 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   its top (pink ring) is a handle too: drag it to move the coronal part (the implant tilts around its apex) – in any
   view, also for an implant that is not selected.
 - *Show prosthetic axis* (per implant): a Ø3 × 15 mm guide from the MUA top, or from the implant platform along the
-  implant axis when there is no MUA. Adding an MUA switches it on; it can be turned off.
+  implant axis when there is no MUA. Shown as soon as an implant is placed (a parallel one takes its reference's
+  setting); it can be turned off here or with the *Prosthetic axes* eye in the objects list.
 - Implants are tapered by default (apex 1 mm narrower than the platform; untick *New implants tapered* for cylinders).
   Per implant: tick *Tapered* and set the apex diameter (default 1 mm narrower than the platform), or drag the
   apical half of the side outline; the coronal half still sets the platform diameter. The apex is never wider than the

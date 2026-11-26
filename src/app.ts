@@ -837,7 +837,8 @@ export class App {
     // named after the tooth it replaces (from where it sits on the arch); changed in the panel's chart
     imp.name = nameForTooth(this, imp);
     if (sameJaw && ref?.abutment) imp.abutment = { ...ref.abutment };
-    if (sameJaw && ref) imp.showProstheticAxis = ref.showProstheticAxis;
+    // the prosthetic axis is shown from the start (a parallel implant takes its reference's choice)
+    imp.showProstheticAxis = sameJaw && ref ? ref.showProstheticAxis : true;
     this.implants.push(imp);
     this.placing = null;
     this.tangAngle = 0;

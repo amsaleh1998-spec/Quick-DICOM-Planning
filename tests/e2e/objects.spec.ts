@@ -56,7 +56,10 @@ test('objects list: every surface with an eye, group eyes, collapse, resize', as
   expect(await page.evaluate(() => window.app.implants[0].hidden)).toBe(true);
   await page.click('#obj-groups [data-g="implants"]');
   expect(await page.evaluate(() => window.app.implants[0].hidden)).toBe(false);
-  // prosthetic axes on their own eye
+  // prosthetic axes: shown from the placement, on their own eye
+  expect(await page.evaluate(() => window.app.implants[0].showProstheticAxis)).toBe(true);
+  await page.click('#obj-groups [data-k="axes"]');
+  expect(await page.evaluate(() => window.app.implants[0].showProstheticAxis)).toBe(false);
   await page.click('#obj-groups [data-k="axes"]');
   expect(await page.evaluate(() => window.app.implants[0].showProstheticAxis)).toBe(true);
   // resize by dragging the left edge, collapse, and both are remembered
