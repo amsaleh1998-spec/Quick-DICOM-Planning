@@ -90,7 +90,7 @@ async function recordPointer(page: Page) {
         st[k] = { drag: v.drag, wd: v.waxEditor?.drag?.kind ?? null, moved: v.waxEditor?.drag?.moved, w: v.w, h: v.h, r: [r.x, r.y, r.width, r.height].map(Math.round) };
       }
       const t = e.target as HTMLElement;
-      w.__pl.push({ t: e.type, x: Math.round(e.clientX), y: Math.round(e.clientY), b: e.buttons, id: e.pointerId, tg: t?.tagName + '.' + (t?.className?.toString?.() ?? '').slice(0, 30), cap: t?.hasPointerCapture?.(e.pointerId), hov: a.wax.hover, sel: a.wax.selected, ed: a.wax.editing, ms: Math.round(performance.now()), ...st });
+      w.__pl.push({ cols: getComputedStyle(document.getElementById('main')!).gridTemplateColumns, t: e.type, x: Math.round(e.clientX), y: Math.round(e.clientY), b: e.buttons, id: e.pointerId, tg: t?.tagName + '.' + (t?.className?.toString?.() ?? '').slice(0, 30), cap: t?.hasPointerCapture?.(e.pointerId), hov: a.wax.hover, sel: a.wax.selected, ed: a.wax.editing, ms: Math.round(performance.now()), ...st });
     };
     for (const ty of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture']) {
       window.addEventListener(ty, rec as EventListener, true);
@@ -145,6 +145,10 @@ test('teeth are set up on the arch and edited like in a dental CAD', async ({ pa
           pick: v.toothAt(s)?.fdi ?? null,
           max: v.el.classList.contains('max'),
           anim: document.getAnimations().length,
+          cols: getComputedStyle(document.getElementById('main')!).gridTemplateColumns,
+          kids: [...document.getElementById('main')!.children].map((c) => `${c.id}:${getComputedStyle(c).display}:${Math.round(c.getBoundingClientRect().width)}`).join(' '),
+          vpSW: document.getElementById('viewport')!.scrollWidth,
+          docW: document.documentElement.scrollWidth,
         };
       }),
     );
