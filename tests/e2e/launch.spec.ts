@@ -96,3 +96,57 @@ test('a double-clicked .qdp project opens the plan', async ({ page }) => {
   await expect(page.locator('#status-msg')).toContainText('Project "Loader_plan.qdp" restored');
   await expect(page.locator('#launch-banner')).toBeHidden(); // no scans folder needed for a project
 });
+
+test('a .qdp handed over at once (as Edge / Chrome do while the app loads): listed under Recent, Save writes back to it', async ({ page }) => {
+  test.setTimeout(90_000);
+  // a project file (the test series, saved as a download)
+  await page.evaluate(() => ((window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = undefined));
+  await page.setInputFiles('#file-input', dicomFiles());
+  await page.waitForFunction(() => !!window.app.vol);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#btn-save-project')]);
+  const bytes = readFileSync((await dl.path())!).toString('base64');
+  // a new window of the app, started by the double-click: the browser has the file queued and hands it
+  // to the consumer the moment it is set
+  const p2 = await page.context().newPage();
+  await p2.addInitScript((b64) => {
+    const w = window as unknown as { written: number[] };
+    w.written = [];
+    const file = new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], 'Loader_plan.qdp');
+    // (a stand-in handle: its methods on the class, so Recent can store it in IndexedDB)
+    class Handle {
+      kind = 'file';
+      name = file.name;
+      async getFile() {
+        return file;
+      }
+      async requestPermission() {
+        return 'granted';
+      }
+      async createWritable() {
+        return { write: async (b: Blob) => void w.written.push(b.size), close: async () => {} };
+      }
+    }
+    Object.defineProperty(window, 'launchQueue', {
+      configurable: true,
+      value: { setConsumer: (cb: (p: unknown) => void) => cb({ files: [new Handle()] }) },
+    });
+  }, bytes);
+  await p2.goto('./');
+  await p2.waitForFunction(() => !!window.app.vol, null, { timeout: 60_000 });
+  await expect(p2.locator('#status-msg')).toContainText('Project "Loader_plan.qdp" restored');
+  // listed under Recent
+  await p2.click('#btn-open-menu');
+  await expect(p2.locator('#open-recent .recent-item').first()).toContainText('project');
+  await p2.keyboard.press('Escape');
+  // changed, saved: back into the same file, without a dialog
+  expect(await p2.evaluate(() => window.app.projectFile?.name)).toBe('Loader_plan.qdp');
+  await p2.evaluate(() => {
+    const a = window.app;
+    a.placing = 'lower';
+    a.placeImplantAt(a.vol.center);
+  });
+  await p2.keyboard.press('Control+s');
+  await expect(p2.locator('#status-msg')).toContainText('Project saved to Loader_plan.qdp');
+  expect((await p2.evaluate(() => (window as unknown as { written: number[] }).written)).length).toBe(1);
+  await p2.close();
+});

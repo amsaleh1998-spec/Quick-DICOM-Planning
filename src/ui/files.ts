@@ -99,6 +99,8 @@ function filesFromDirectory(dir: DirHandle, maxDepth = 4): Promise<File[]> {
   return folderFiles(dir as unknown as DirLike, maxDepth, showLoading);
 }
 
+/** What is being opened, to list under Recent once it has opened (and, for a project, Save's file). */
+let pendingRecent: RecentSource | null = null;
 let launchHandle: FileSystemFileHandle | null = null;
 let launchFile: File | null = null;
 let pendingHit: FolderHit | null = null;
@@ -203,7 +205,12 @@ const launchQueue = (window as unknown as { launchQueue?: LaunchQueue }).launchQ
 /** Counts the openings (double-click, Recent): one that was cancelled or overtaken is dropped. */
 let openGen = 0;
 
-launchQueue?.setConsumer(async (params) => {
+// Registered once the whole app has loaded: the browser hands a double-clicked file over at once
+// when the consumer is set (during loading) – state set up further down must not be initialised
+// after that (it would forget the opened file: no Recent entry, Save not knowing its file).
+queueMicrotask(() => launchQueue?.setConsumer(onLaunch));
+
+async function onLaunch(params: { files?: FileSystemFileHandle[] }) {
   const handles = params.files ?? [];
   if (!handles.length) return; // ordinary start, no file
   hideLaunchBanner();
@@ -273,7 +280,7 @@ launchQueue?.setConsumer(async (params) => {
   } finally {
     if (!stale()) hideLoading();
   }
-});
+}
 
 // ---- projects ----------------------------------------------------------------------
 export async function openProject(file: File): Promise<string | null> {
@@ -445,7 +452,6 @@ setOpenPlan.onchange = () => {
 type OpenPicker = (o: unknown) => Promise<FileSystemFileHandle[]>;
 type DirPicker = (o: unknown) => Promise<FileSystemDirectoryHandle>;
 const pickers = window as unknown as { showOpenFilePicker?: OpenPicker; showDirectoryPicker?: DirPicker };
-let pendingRecent: RecentSource | null = null;
 
 /** The load that just succeeded becomes the first Recent entry. */
 function noteRecent() {
