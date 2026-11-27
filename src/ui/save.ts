@@ -21,6 +21,8 @@ export async function deliverFile(
   filename: string,
   fileType: FileTypeSpec = PROJECT_FILE_TYPE,
   onSaved?: (handle: FileSystemFileHandle) => void,
+  /** where the save dialog opens: e.g. the project's own file (its folder, to replace it) */
+  startIn?: FileSystemHandle,
 ): Promise<boolean> {
   const host = (window as unknown as { claude?: ClaudeHost }).claude;
   if (host?.use) {
@@ -53,6 +55,7 @@ export async function deliverFile(
       const handle = await picker({
         suggestedName: filename,
         types: [fileType],
+        ...(startIn ? { startIn } : {}),
       });
       const w = await (handle as unknown as { createWritable(): Promise<WritableStream & { write(b: Blob): Promise<void>; close(): Promise<void> }> }).createWritable();
       await w.write(blob);
@@ -81,19 +84,21 @@ type PermissionHandle = {
 };
 
 /**
- * Permission to write the file (asked while the click still counts as the person's – before the
- * project is packed). False when not given, or when the browser does not answer in time.
+ * Permission to write the file. Requested at once – call it straight from the click (before any
+ * await), while the click still counts as the person's: the browser then asks "allow editing?" for a
+ * file it only had read access to (an opened project), or answers at once when it may already. (Not
+ * asked first with queryPermission: on some Windows / Edge versions that never answers.) False when
+ * not given, or when the browser does not answer in time.
  */
-export async function canWrite(handle: FileSystemFileHandle, timeoutMs = 30_000): Promise<boolean> {
+export async function canWrite(handle: FileSystemFileHandle, timeoutMs = 60_000): Promise<boolean> {
   const h = handle as unknown as PermissionHandle;
-  const ask = async () => {
-    if ((await h.queryPermission?.({ mode: 'readwrite' })) === 'granted') return true;
-    return (await h.requestPermission?.({ mode: 'readwrite' })) === 'granted';
-  };
+  if (!h.requestPermission) return true; // no permission API: writing will tell
   let t: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([ask(), new Promise<boolean>((res) => (t = setTimeout(() => res(false), timeoutMs)))]);
-  } catch {
+    const asked = h.requestPermission({ mode: 'readwrite' }).then((s) => s === 'granted');
+    return await Promise.race([asked, new Promise<boolean>((res) => (t = setTimeout(() => res(false), timeoutMs)))]);
+  } catch (e) {
+    console.warn('[save] no permission to write', handle.name, e);
     return false;
   } finally {
     clearTimeout(t);

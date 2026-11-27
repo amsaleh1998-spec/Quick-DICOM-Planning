@@ -170,3 +170,54 @@ test('once saved, Save writes to the same file again; Save as and another scan a
   await page.keyboard.press('Control+s');
   await expect(page.locator('#status-msg')).toContainText('Project saved as plan-3.qdp');
 });
+
+test('a project opened from its .qdp file is saved back to that file – also where the browser never answers queryPermission', async () => {
+  await page.addInitScript(() => {
+    const w = window as unknown as Record<string, unknown> & { picks: number; perm: string; startIn: unknown; suggested: string };
+    w.picks = 0;
+    w.perm = 'granted';
+    // (some Windows / Edge versions: queryPermission never answers; requestPermission asks the person)
+    const H = FileSystemHandle.prototype as unknown as Record<string, unknown>;
+    H.queryPermission = () => new Promise(() => {});
+    H.requestPermission = async () => w.perm;
+    w.showOpenFilePicker = async () => [await (await navigator.storage.getDirectory()).getFileHandle('plan-2.qdp')];
+    w.showSaveFilePicker = async (o: { suggestedName: string; startIn?: unknown }) => {
+      w.picks++;
+      w.suggested = o.suggestedName;
+      w.startIn = (o.startIn as { name?: string } | undefined)?.name ?? null;
+      return (await navigator.storage.getDirectory()).getFileHandle(o.suggestedName, { create: true });
+    };
+  });
+  const state = () => page.evaluate(() => { const w = window as unknown as { picks: number; startIn: unknown; suggested: string }; return { picks: w.picks, startIn: w.startIn, suggested: w.suggested }; });
+  const implants = () =>
+    page.evaluate(async () => {
+      const f = await (await (await navigator.storage.getDirectory()).getFileHandle('plan-2.qdp')).getFile();
+      return f.size;
+    });
+  await page.goto('./');
+  // Open → Project: plan-2.qdp
+  await page.click('#btn-open-menu');
+  await page.click('#btn-open-project');
+  await page.waitForFunction(() => !!window.app.vol && window.app.projectFile?.name === 'plan-2.qdp');
+  const size0 = await implants();
+  // changed, then Save: written to plan-2.qdp, no dialog
+  await page.evaluate(() => {
+    const a = window.app;
+    a.placing = 'lower';
+    a.placeImplantAt(a.vol.center.map((v: number, k: number) => v + (k === 0 ? 8 : 0)));
+  });
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#status-msg')).toContainText('Project saved to plan-2.qdp');
+  expect((await state()).picks).toBe(0);
+  expect(await implants()).not.toBe(size0);
+  // permission refused: the save dialog opens on the file itself, with its name (Save replaces it)
+  await page.evaluate(() => ((window as unknown as { perm: string }).perm = 'denied'));
+  await page.evaluate(() => {
+    const a = window.app;
+    a.placing = 'lower';
+    a.placeImplantAt(a.vol.center.map((v: number, k: number) => v - (k === 0 ? 8 : 0)));
+  });
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#status-msg')).toContainText('Project saved as plan-2.qdp');
+  expect(await state()).toEqual({ picks: 1, startIn: 'plan-2.qdp', suggested: 'plan-2.qdp' });
+});

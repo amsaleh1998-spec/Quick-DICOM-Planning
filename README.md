@@ -244,7 +244,8 @@ lower teeth and mandibular canals in one go, with the DentalSegmentator model by
   draw one).
 - Saved through the browser's save dialog (Chrome / Edge), the project is listed under **Recent** right away, and the
   next *Save* writes to **the same file again** without asking (likewise for a project opened from a `.qdp` file – the
-  browser may ask once for permission to change it). *Export ▾ → Project as…* (**Ctrl+Shift+S**) saves to a new file.
+  browser may ask once for permission to change it: allow it; if it is not allowed, the save dialog opens on that file,
+  with its name, so *Save* replaces it). *Export ▾ → Project as…* (**Ctrl+Shift+S**) saves to a new file.
   Opening another scan starts a new file. (Browsers that save as a download do not give the app the saved file: there,
   each save is a new download.)
 - Inside, a `.qdp` file is a normal ZIP (like `.docx`): `project.json` (plan + view state) and `volume.raw` (int16,

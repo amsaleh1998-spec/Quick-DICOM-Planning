@@ -325,8 +325,11 @@ export async function saveProject(saveAs = false): Promise<boolean> {
     return false;
   }
   try {
-    // permission first, while the click still counts (the browser may ask once for an opened file)
-    const file = !saveAs && app.projectFile && (await canWrite(app.projectFile)) ? app.projectFile : null;
+    // permission first, while the click still counts (the browser may ask once for an opened file):
+    // requested before anything is awaited
+    const own = saveAs ? null : app.projectFile;
+    const allowed = own ? canWrite(own) : null;
+    const file = own && (await allowed) ? own : null;
     showLoading('Packing project…', 0);
     const blob = await buildProject(app, (f) => showLoading('Compressing volume…', f));
     hideLoading();
@@ -341,14 +344,23 @@ export async function saveProject(saveAs = false): Promise<boolean> {
         console.warn('[save] could not write the project file again – asking where to save', e);
       }
     }
-    const name = projectFileName(app);
+    // its own file could not be written (permission not given): the save dialog opens on it – the same
+    // name in its folder, so Save replaces it
+    if (own && !file) setStatus(`No permission to change ${own.name} – choose where to save (Save replaces it)`);
+    const name = own && !file ? own.name : projectFileName(app);
     // saved through the browser's save dialog: Save writes there again; listed under Recent right away
     let saved: FileSystemFileHandle | null = null;
-    const ok = await deliverFile(blob, name, undefined, (h) => {
-      saved = h;
-      app.projectFile = h;
-      void addRecent({ kind: 'project', handles: [h], depth: 0 }, ...recentLabel('project', h.name)).then(() => renderRecent());
-    });
+    const ok = await deliverFile(
+      blob,
+      name,
+      undefined,
+      (h) => {
+        saved = h;
+        app.projectFile = h;
+        void addRecent({ kind: 'project', handles: [h], depth: 0 }, ...recentLabel('project', h.name)).then(() => renderRecent());
+      },
+      own && !file ? own : undefined,
+    );
     if (ok) app.markSaved();
     setStatus(ok ? `Project saved as ${(saved as FileSystemFileHandle | null)?.name ?? name} (${size})` : 'Save cancelled');
     return ok;
