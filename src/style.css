@@ -253,6 +253,7 @@ button.open {
   overflow: hidden;
 }
 .patient-chip .pc-name {
+  unicode-bidi: plaintext; /* a name in Arabic / Hebrew: right-to-left on its own */
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -583,6 +584,10 @@ details.sub > summary:hover {
   border: 0;
   border-top: 1px solid var(--border);
   margin: 4px 2px;
+}
+.popover .recent-item .name,
+.recent-item .name {
+  unicode-bidi: plaintext;
 }
 .popover .recent-item .name {
   white-space: nowrap;

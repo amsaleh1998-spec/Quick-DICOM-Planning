@@ -77,6 +77,11 @@ Everything runs locally in the browser – no data is uploaded anywhere.
 - The patient's last and first name (from the DICOM Patient's Name, `LAST^FIRST`) are shown in the patient chip (top
   bar); click it for ID, birth date and sex. The names can be edited (e.g. for anonymised scans) and are saved with
   the project and used for the project file name.
+- **Names in any script**: text is read in the character set the file declares (*Specific Character Set*: UTF-8,
+  Cyrillic, Arabic, Greek, Hebrew, Latin 1–5/9, Thai, Japanese, Korean, Chinese), or as UTF-8 when the bytes are UTF-8
+  and nothing is declared – in the patient chip, Recent, the DICOM tags and the planning report (right-to-left names
+  such as Arabic shown right-to-left). A DICOM export declares UTF-8 when needed. Names read wrongly by earlier
+  versions (e.g. "ÐÐ¾Ñ…") are repaired in Recent and in saved projects.
 - *DICOM tags* opens every attribute of the series' first file – tag, name, VR, value – with search (also inside
   sequences), expandable sequences and *Copy all*.
 

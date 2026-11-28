@@ -1,4 +1,5 @@
 import type { DataSet, Element } from 'dicom-parser';
+import { charsetLabel, dicomText } from './dicomText';
 
 /** One DICOM attribute, flattened to text for display (and saving in projects). */
 export interface MetaEntry {
@@ -157,6 +158,7 @@ const D: Record<string, [string, string]> = {
 };
 
 const STRING_VRS = new Set(['AE', 'AS', 'CS', 'DA', 'DS', 'DT', 'IS', 'LO', 'LT', 'PN', 'SH', 'ST', 'TM', 'UC', 'UI', 'UR', 'UT']);
+const TEXT_VRS = new Set(['LO', 'LT', 'PN', 'SH', 'ST', 'UC', 'UT']);
 const BINARY_VRS = new Set(['OB', 'OW', 'OF', 'OD', 'OL', 'OV', 'UN']);
 const MAX_ITEMS = 40; // per sequence (per-frame sequences can have thousands)
 const MAX_TEXT = 1024;
@@ -176,11 +178,12 @@ export function tagName(tag: string): string {
   return 'Unknown';
 }
 
-function readValue(ds: DataSet, el: Element, vr: string): string {
+function readValue(ds: DataSet, el: Element, vr: string, charset: string | null): string {
   const t = el.tag;
   try {
     if (STRING_VRS.has(vr)) {
-      const s = ds.string(t) ?? '';
+      // free text in the file's character set; codes, dates and numbers are ASCII
+      const s = (TEXT_VRS.has(vr) ? dicomText(ds, t, charset) : ds.string(t)) ?? '';
       const txt = s.replace(/\0/g, '').trim();
       return txt.length > MAX_TEXT ? txt.slice(0, MAX_TEXT) + ' …' : txt;
     }
@@ -237,8 +240,16 @@ function binaryOrText(ds: DataSet, el: Element, vr: string): string {
 }
 
 /** Flatten a parsed data set into display entries (sequences nested). */
-export function extractMeta(ds: DataSet, depth = 0): MetaEntry[] {
+export function extractMeta(ds: DataSet, depth = 0, charset?: string | null): MetaEntry[] {
   const out: MetaEntry[] = [];
+  // the character set of the text (items of sequences inherit it unless they declare their own)
+  let own: string | undefined;
+  try {
+    own = ds.string('x00080005');
+  } catch {
+    own = undefined;
+  }
+  const label = own ? charsetLabel(own) : (charset ?? null);
   const keys = Object.keys(ds.elements).sort();
   for (const k of keys) {
     const el = ds.elements[k];
@@ -249,11 +260,11 @@ export function extractMeta(ds: DataSet, depth = 0): MetaEntry[] {
       const items = el.items;
       entry.value = `${items.length} item${items.length === 1 ? '' : 's'}`;
       if (depth < 4) {
-        entry.items = items.slice(0, MAX_ITEMS).map((it) => (it.dataSet ? extractMeta(it.dataSet, depth + 1) : []));
+        entry.items = items.slice(0, MAX_ITEMS).map((it) => (it.dataSet ? extractMeta(it.dataSet, depth + 1, label) : []));
         if (items.length > MAX_ITEMS) entry.value += ` (first ${MAX_ITEMS} shown)`;
       }
     } else {
-      entry.value = readValue(ds, el, vr);
+      entry.value = readValue(ds, el, vr, label);
     }
     out.push(entry);
   }

@@ -31,6 +31,9 @@ export function makeTestSeries({
   dz: sliceGap = 0.5,
   voxel = null,
   description = 'Synthetic test series',
+  // Specific Character Set (0008,0005), e.g. 'ISO_IR 192'; the patient name may then be given as
+  // bytes (a Buffer) in that set
+  charset = null,
 } = {}) {
   const pat = { name: 'Test^Loader', id: 'PAT-0042', birth: '19800615', sex: 'F', ...(patient ?? {}) };
   const files = [];
@@ -130,7 +133,9 @@ export function makeTestSeries({
     groupLen.write('UL', 4, 'latin1');
     groupLen.writeUInt16LE(4, 6);
     groupLen.writeUInt32LE(meta.length, 8);
+    const nameValue = typeof pat.name === 'string' ? pat.name : pat.name.length % 2 ? Buffer.concat([pat.name, Buffer.from(' ')]) : pat.name;
     const ds = Buffer.concat([
+      ...(charset ? [el(0x0008, 0x0005, 'CS', charset)] : []),
       el(0x0008, 0x0060, 'CS', 'CT'),
       el(0x0008, 0x103e, 'LO', description),
       el(0x0008, 0x0070, 'LO', 'Synthetic Imaging Inc.'),
@@ -140,7 +145,7 @@ export function makeTestSeries({
       seq(0x0008, 0x1140, [
         Buffer.concat([el(0x0008, 0x1150, 'UI', '1.2.840.10008.5.1.4.1.1.2'), el(0x0008, 0x1155, 'UI', `${seriesUid}.99`)]),
       ]),
-      el(0x0010, 0x0010, 'PN', pat.name),
+      el(0x0010, 0x0010, 'PN', nameValue),
       el(0x0010, 0x0020, 'LO', pat.id),
       el(0x0010, 0x0030, 'DA', pat.birth),
       el(0x0010, 0x0040, 'CS', pat.sex),

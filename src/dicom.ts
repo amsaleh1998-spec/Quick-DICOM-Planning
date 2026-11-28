@@ -1,5 +1,6 @@
 import * as dicomParser from 'dicom-parser';
 import type { DataSet } from 'dicom-parser';
+import { dicomText } from './dicomText';
 import { CODEC_NAMES, CodecKind, FrameMeta, TRANSFER_SYNTAX_CODECS, decodeFrame } from './codecs';
 import { DecodePool } from './decodePool';
 import { Vec3, cross, dot, normalize } from './math';
@@ -97,6 +98,15 @@ async function slicePreview(series: Slice[]): Promise<{ width: number; height: n
     return { width, height, data };
   } catch {
     return null;
+  }
+}
+
+/** Free text (names, descriptions): in the file's character set (Russian, Arabic, Chinese …). */
+function text(ds: DataSet, tag: string): string | undefined {
+  try {
+    return dicomText(ds, tag);
+  } catch {
+    return str(ds, tag);
   }
 }
 
@@ -239,16 +249,16 @@ function parseFile(name: string, buffer: ArrayBuffer): Slice[] {
 
   const info: VolumeInfo = {
     source: name,
-    patientName: str(ds, 'x00100010'),
-    patientId: str(ds, 'x00100020'),
+    patientName: text(ds, 'x00100010'),
+    patientId: text(ds, 'x00100020'),
     birthDate: str(ds, 'x00100030'),
     sex: str(ds, 'x00100040'),
-    seriesDescription: str(ds, 'x0008103e'),
+    seriesDescription: text(ds, 'x0008103e'),
     studyDate: str(ds, 'x00080020'),
     modality: str(ds, 'x00080060'),
-    institution: str(ds, 'x00080080'),
-    manufacturer: str(ds, 'x00080070'),
-    model: str(ds, 'x00081090'),
+    institution: text(ds, 'x00080080'),
+    manufacturer: text(ds, 'x00080070'),
+    model: text(ds, 'x00081090'),
     defaultWindow: wc !== undefined && ww !== undefined && ww > 1 ? { center: wc, width: ww } : undefined,
   };
 

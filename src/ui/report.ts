@@ -250,6 +250,37 @@ export async function makeReport(progress: (f: number, text: string) => void): P
 
   // ---- page parts -----------------------------------------------------------------
 
+  /**
+   * Text that may hold any script: the PDF's built-in Helvetica has Western characters only, so a
+   * name in Cyrillic, Arabic, Greek, Chinese … is drawn with the system's fonts (which also join
+   * Arabic letters and set right-to-left text in order) and placed as a sharp image.
+   */
+  function textAny(pdf: JsPdf, s: string, x: number, y: number, align: 'left' | 'right' | 'center' = 'left') {
+    if (/^[\x20-\x7e\xa0-\xff\u2013\u2014\u2018\u2019\u201c\u201d\u2022\u2026°·×]*$/.test(s)) {
+      pdf.text(s, x, y, align === 'left' ? undefined : { align });
+      return;
+    }
+    const pt = pdf.getFontSize();
+    const k = 10; // canvas px per pt (sharp when printed)
+    const bold = pdf.getFont().fontStyle === 'bold';
+    const font = `${bold ? '600 ' : ''}${pt * k}px Helvetica, Arial, 'Segoe UI', 'Noto Sans', 'Noto Sans Arabic', 'Noto Sans CJK SC', sans-serif`;
+    const c = document.createElement('canvas');
+    const g = c.getContext('2d')!;
+    g.font = font;
+    const m = g.measureText(s);
+    const asc = Math.ceil(m.actualBoundingBoxAscent || pt * k * 0.8) + 2;
+    const desc = Math.ceil(m.actualBoundingBoxDescent || pt * k * 0.25) + 2;
+    c.width = Math.max(1, Math.ceil(m.width) + 4);
+    c.height = asc + desc;
+    g.font = font;
+    g.fillStyle = pdf.getTextColor() || '#000';
+    g.fillText(s, 2, asc);
+    const mm = 25.4 / 72 / k; // mm per canvas px
+    const w = c.width * mm;
+    const x0 = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+    pdf.addImage(c.toDataURL('image/png'), 'PNG', x0 - 2 * mm, y - asc * mm, w, c.height * mm);
+  }
+
   function frame(pdf: JsPdf, title: string) {
     pdf.setDrawColor(...BAND_FILL);
     pdf.setLineWidth(0.3);
@@ -262,7 +293,7 @@ export async function makeReport(progress: (f: number, text: string) => void): P
     pdf.setFontSize(9);
     pdf.setTextColor(...MUTED);
     pdf.text('Implant planning report', PAGE.m + 4, PAGE.m + 14);
-    pdf.text(`Scan: ${info.seriesDescription?.trim() || 'CBCT'}`, PAGE.m + 4, PAGE.m + 19);
+    textAny(pdf, `Scan: ${info.seriesDescription?.trim() || 'CBCT'}`, PAGE.m + 4, PAGE.m + 19);
     pdf.setTextColor(...INK);
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(10);
@@ -270,11 +301,11 @@ export async function makeReport(progress: (f: number, text: string) => void): P
     pdf.text('Patient data', px, PAGE.m + 8);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
-    pdf.text(`Name: ${patient.name}`, px, PAGE.m + 14);
+    textAny(pdf, `Name: ${patient.name}`, px, PAGE.m + 14);
     pdf.text(`Date of birth: ${patient.birth}`, px, PAGE.m + 19);
-    pdf.text(`Patient ID: ${patient.id}`, px, PAGE.m + 24);
+    textAny(pdf, `Patient ID: ${patient.id}`, px, PAGE.m + 24);
     pdf.setTextColor(...MUTED);
-    pdf.text(`Implants: ${app.implants.filter((i) => !i.hidden).map((i) => i.name).join(', ') || 'none'}`, 180, PAGE.m + 14);
+    textAny(pdf, `Implants: ${app.implants.filter((i) => !i.hidden).map((i) => i.name).join(', ') || 'none'}`, 180, PAGE.m + 14);
     pdf.setFillColor(...BAND_FILL);
     pdf.rect(PAGE.m, BAND.y, PAGE.w - 2 * PAGE.m, BAND.h, 'F');
     pdf.setFont('helvetica', 'bold');

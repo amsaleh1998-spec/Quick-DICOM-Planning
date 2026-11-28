@@ -131,6 +131,9 @@ export async function volumeToDicom(vol: Volume, opts: DicomExportOptions = {}, 
   const orientation = [...rowDir, ...colDir].map(ds).join('\\');
   const pixelSpacing = `${ds(sp[1])}\\${ds(sp[0])}`; // row spacing (between rows = y), column spacing (x)
   const sliceBytes = nx * ny * 2;
+  // text is written as UTF-8: declared when there is any beyond ASCII (names in Cyrillic, Arabic …)
+  const texts = [description, info.patientName, info.patientId, info.manufacturer, info.institution, info.model];
+  const utf8 = texts.some((t) => !!t && /[^\x00-\x7f]/.test(t));
   const files: { name: string; data: Uint8Array }[] = [];
   for (let k = 0; k < nz; k++) {
     const sopUid = newUid();
@@ -140,6 +143,7 @@ export async function volumeToDicom(vol: Volume, opts: DicomExportOptions = {}, 
     const loc = pos[0] * n[0] + pos[1] * n[1] + pos[2] * n[2];
 
     const w = new Writer();
+    if (utf8) w.str(0x0008, 0x0005, 'CS', 'ISO_IR 192');
     w.str(0x0008, 0x0008, 'CS', 'DERIVED\\SECONDARY\\AXIAL');
     w.str(0x0008, 0x0012, 'DA', da);
     w.str(0x0008, 0x0013, 'TM', tm);

@@ -10,6 +10,7 @@ import type { Affine } from './register';
 import type { ViewState } from './views/View';
 import { WaxTooth, Waxup, newGeo } from './waxup/waxup';
 import { ensureLibrary, loadedLibrary, type ToothLibrary } from './waxup/library';
+import { repairMojibake } from './dicomText';
 
 /**
  * Project file = ZIP with
@@ -282,7 +283,10 @@ export async function readProject(buf: ArrayBuffer): Promise<LoadedProject> {
   const [nx, ny, nz] = file.volume.dims;
   if (raw.byteLength !== nx * ny * nz * 2) throw new Error('Project volume data is incomplete.');
   const data = new Int16Array(raw.buffer, raw.byteOffset, nx * ny * nz);
-  return { volume: new Volume([nx, ny, nz], file.volume.spacing, data, file.volume.info), file, entries };
+  // (projects saved before character sets were supported: their names back from "ÐÐ¾Ñ…")
+  const info = { ...file.volume.info };
+  for (const k of ['patientName', 'patientId', 'seriesDescription', 'institution', 'manufacturer', 'model'] as const) info[k] = repairMojibake(info[k]);
+  return { volume: new Volume([nx, ny, nz], file.volume.spacing, data, info), file, entries };
 }
 
 /**

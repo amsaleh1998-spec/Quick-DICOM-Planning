@@ -3,6 +3,7 @@
 // handles are kept in IndexedDB, and reopening asks for read access again if needed.
 
 import { DirLike, folderFiles, withLimit } from '../folderFiles';
+import { repairMojibake } from '../dicomText';
 
 type Perm = 'granted' | 'denied' | 'prompt';
 interface PermHandle extends FileSystemHandle {
@@ -45,7 +46,8 @@ export async function listRecent(): Promise<RecentEntry[]> {
     const db = await openDb();
     return await new Promise((resolve) => {
       const req = db.transaction(STORE).objectStore(STORE).get(KEY);
-      req.onsuccess = () => resolve((req.result as RecentEntry[] | undefined) ?? []);
+      // (names read before character sets were supported: "ÐÐ¾Ñ…" back to the name)
+      req.onsuccess = () => resolve(((req.result as RecentEntry[] | undefined) ?? []).map((e) => ({ ...e, label: repairMojibake(e.label) ?? e.label })));
       req.onerror = () => resolve([]);
     });
   } catch {
